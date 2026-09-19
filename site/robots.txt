@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://sideeffects69.github.io/NovelForge/sitemap.xml
