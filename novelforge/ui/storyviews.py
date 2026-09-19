@@ -24,7 +24,7 @@ from .. import storygraph
 from ..config import THEMES, open_in_default_app, settings
 from ..model import ENTITY_LABELS
 from .dialogs import Dialog
-from .widgets import ScrolledText, center_window
+from .widgets import AutoScrollbar, ScrolledText, center_window
 
 
 def _monospace(widget: ScrolledText) -> None:
@@ -195,9 +195,7 @@ class ReplaceWindow(tk.Toplevel):
         return [key for key, var in self.scopes.items() if var.get()]
 
     def _show(self, text: str) -> None:
-        self.results.set_readonly(False)
-        self.results.set_value(text)
-        self.results.set_readonly(True)
+        self.results.set_report(text)
 
     def cmd_preview(self) -> None:
         needle = self.find_entry.get()
@@ -582,9 +580,7 @@ class ChapterMapWindow(tk.Toplevel):
                       "",
                       "Link locations to scenes, or pin them on the map,",
                       "and this fills in."]
-        self.detail.set_readonly(False)
-        self.detail.set_value("\n".join(lines))
-        self.detail.set_readonly(True)
+        self.detail.set_report("\n".join(lines))
 
 
 def scrolled(parent, widget_factory, row: int = 0, column: int = 0):
@@ -601,7 +597,7 @@ def scrolled(parent, widget_factory, row: int = 0, column: int = 0):
     holder.columnconfigure(0, weight=1)
     widget = widget_factory(holder)
     widget.grid(row=0, column=0, sticky="nsew")
-    bar = ttk.Scrollbar(holder, orient="vertical", command=widget.yview)
+    bar = AutoScrollbar(holder, orient="vertical", command=widget.yview)
     bar.grid(row=0, column=1, sticky="ns")
     widget.configure(yscrollcommand=bar.set)
     return widget
@@ -722,9 +718,7 @@ class StoryGraphWindow(tk.Toplevel):
         if not question:
             return
         reply = storygraph.answer(self.project, self.graph, question)
-        self.answer_view.set_readonly(False)
-        self.answer_view.set_value(reply)
-        self.answer_view.set_readonly(True)
+        self.answer_view.set_report(reply)
 
     # -- the report tabs -------------------------------------------------
     def refresh(self) -> None:
@@ -738,9 +732,7 @@ class StoryGraphWindow(tk.Toplevel):
         }
         for key, body in bodies.items():
             view = self.views[key]
-            view.set_readonly(False)
-            view.set_value(body)
-            view.set_readonly(True)
+            view.set_report(body)
 
     def show_tab(self, key: str) -> None:
         order = ["overview", "continuity", "relationships", "ask"]

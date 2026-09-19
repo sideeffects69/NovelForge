@@ -604,10 +604,14 @@ opening it on the second one. Look for the green tick.
 | `Ctrl+K` | Corkboard | `F2` | Reload from Word |
 | `Ctrl+G` | Story graph | `F4` | Verify project |
 | `Ctrl+I` | Idea inbox | `F10` | Continuity check |
-| `Ctrl+=` / `Ctrl+-` | Text size | | |
+| `Ctrl+=` / `Ctrl+-` | Text size | `Ctrl+Shift+P` | Command palette |
 
 In the binder: right-click for a context menu, double-click to open in Word,
 or just start typing a name to jump to it.
+
+**Can't remember where something lives?** Press `Ctrl+Shift+P` and type what you
+want - "story graph", "backup", "theme" - then Enter. It searches every command
+in every menu, and shows the shortcut beside each one.
 
 ---
 
@@ -734,10 +738,12 @@ laptop it is quietly reduced to fit.
 Any list that can hold more rows than are visible needs a scrollbar — use
 `scrolled()` in `novelforge/ui/storyviews.py`.
 
-This rule is meant to be enforced by a test that opens every window at six
-resolutions from 1024×768 up to 3840×2160 and fails if anything overflows —
-but that test isn't actually in this repository yet. Treat this as a rule to
-check by hand until someone writes and commits it (see `CLAUDE.md`).
+A test guards this: `tests/test_gui_smoke.py` opens a dozen windows at
+1340×680, and the main window at its smallest size, and fails if any content is
+clipped, hidden or squeezed (run it with `python -m unittest discover -s tests
+-t .`). It checks one resolution rather than every one from 1024×768 up to
+3840×2160, so treat other sizes as a rule to check by hand (see `CLAUDE.md`).
+`python tools/uishots/run.py` photographs the real windows if you want to look.
 
 ---
 

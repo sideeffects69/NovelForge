@@ -53,10 +53,12 @@ from ..model import (
     now_iso,
 )
 from ..project import Project, ProjectError, list_projects
-from . import dialogs
+from . import dialogs, styling
 from .writing import WritingIntelligence
 from .widgets import (
+    AutoScrollbar,
     Form,
+    Gauge,
     ScrollFrame,
     ScrolledText,
     StatusBar,
@@ -133,8 +135,23 @@ class App(WritingIntelligence, tk.Tk):
             center_window(self, 1280, 800)
         # The floor is clamped too: a minsize bigger than the desktop is a
         # trap the user cannot get out of by resizing.
-        floor_w, floor_h = fit_size(self, 900, 560)
+        # Wide enough that the toolbar is never clipped, whatever the labels or
+        # fonts come to: measured, not guessed.
+        self.update_idletasks()
+        self._toolbar_full_width = self.toolbar.winfo_reqwidth()
+        self.toolbar.bind("<Configure>", self._fit_toolbar)
+        # With the icon font the toolbar can shrink to icons, so 900 is enough;
+        # without it the labels must stay, and the window must be wide enough.
+        needed = 0 if self.icons.available else self._toolbar_full_width + 16
+        floor_w, floor_h = fit_size(
+            self, max(int(900 * self.ui_scale), needed), int(560 * self.ui_scale))
         self.minsize(floor_w, floor_h)
+        self._app_icons = styling.app_icons(self, self.tokens)
+        if self._app_icons:
+            try:
+                self.iconphoto(True, *self._app_icons)
+            except tk.TclError:
+                pass
 
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.after(120, self._startup)
@@ -148,109 +165,39 @@ class App(WritingIntelligence, tk.Tk):
         self._apply_theme()
 
     def _apply_theme(self) -> None:
-        palette = theme()
-        is_dark = str(settings["theme"]) == "premium"
+        """
+        (Re)apply the palette to every ttk style and Tk default.
 
-        # "vista" draws buttons, entries and comboboxes with Windows' own
-        # uxtheme renderer, which silently ignores every ttk.Style colour
-        # override below for those specific widgets - fine for the warm/
-        # light themes, since native grey-on-white already blends in, but
-        # it leaves stray white boxes floating in a genuinely dark palette.
-        # "clam" is drawn entirely by Tk itself, so it actually obeys the
-        # colours set here. Scoped to Premium only - Classic keeps the
-        # native chrome it has always had.
-        try:
-            self.style.theme_use("clam" if is_dark else "vista")
-        except tk.TclError:
-            try:
-                self.style.theme_use("clam")
-            except tk.TclError:
-                pass
-
-        self.configure(background=palette["panel"])
-        self.style.configure("TFrame", background=palette["panel"])
-        self.style.configure("TLabel", background=palette["panel"],
-                             foreground=palette["panel_fg"])
-        self.style.configure("Section.TLabel", font=("Segoe UI", 9, "bold"),
-                             foreground=palette["accent"],
-                             background=palette["panel"])
-        self.style.configure("Field.TLabel", font=("Segoe UI", 9),
-                             background=palette["panel"],
-                             foreground=palette["panel_fg"])
-        self.style.configure("Hint.TLabel", font=("Segoe UI", 8),
-                             foreground=palette["dim"],
-                             background=palette["panel"])
-        self.style.configure("Value.TLabel", font=("Segoe UI", 9),
-                             background=palette["panel"],
-                             foreground=palette["panel_fg"])
-        self.style.configure("Status.TLabel", font=("Segoe UI", 9),
-                             background=palette["panel"],
-                             foreground=palette["dim"])
-        self.style.configure("Title.TLabel", font=("Segoe UI", 13, "bold"),
-                             background=palette["panel"],
-                             foreground=palette["panel_fg"])
-        self.style.configure("Treeview", background=palette["bg"],
-                             fieldbackground=palette["bg"],
-                             foreground=palette["fg"], borderwidth=0,
-                             rowheight=21)
-        self.style.configure("Treeview.Heading", font=("Segoe UI", 8, "bold"),
-                             foreground=palette["dim"])
-        self.style.map("Treeview", background=[("selected", palette["select"])],
-                       foreground=[("selected", palette["fg"])])
-        self.style.configure("Target.Horizontal.TProgressbar",
-                             troughcolor=palette["gutter"],
-                             background=palette["accent"],
-                             borderwidth=0, thickness=6)
-
-        # Buttons, entries, comboboxes, checkboxes and scrollbars: only
-        # reachable at all under "clam" (see above), so only worth setting
-        # for Premium - under "vista" these calls are silently ignored by
-        # Windows' own renderer, which is correct for Classic's native look.
-        if is_dark:
-            self.style.configure("TButton", background=palette["gutter"],
-                                 foreground=palette["fg"], borderwidth=1,
-                                 relief="flat", focuscolor=palette["accent"])
-            self.style.map("TButton",
-                           background=[("active", palette["select"]),
-                                       ("pressed", palette["select"])])
-            self.style.configure("TEntry", fieldbackground=palette["bg"],
-                                 foreground=palette["fg"],
-                                 insertcolor=palette["caret"],
-                                 borderwidth=1)
-            self.style.configure("TCombobox", fieldbackground=palette["bg"],
-                                 background=palette["gutter"],
-                                 foreground=palette["fg"],
-                                 arrowcolor=palette["fg"], borderwidth=1)
-            self.style.map("TCombobox",
-                           fieldbackground=[("readonly", palette["bg"])],
-                           foreground=[("readonly", palette["fg"])])
-            self.style.configure("TCheckbutton", background=palette["panel"],
-                                 foreground=palette["panel_fg"])
-            self.style.configure("TRadiobutton", background=palette["panel"],
-                                 foreground=palette["panel_fg"])
-            self.style.configure("TScrollbar", background=palette["gutter"],
-                                 troughcolor=palette["panel"],
-                                 arrowcolor=palette["fg"], borderwidth=0)
-            self.style.configure("TNotebook", background=palette["panel"],
-                                 borderwidth=0)
-            self.style.configure("TNotebook.Tab", background=palette["gutter"],
-                                 foreground=palette["fg"], padding=(10, 4))
-            self.style.map("TNotebook.Tab",
-                           background=[("selected", palette["select"])])
-            self.style.configure("TSeparator", background=palette["gutter"])
-            # A ttk Combobox's dropdown list is a plain Tk Listbox that
-            # ttk.Style cannot reach at all - it goes through Tk's classic
-            # option database instead, or it stays black-on-white no matter
-            # what the combobox itself looks like.
-            self.option_add("*TCombobox*Listbox.background", palette["bg"])
-            self.option_add("*TCombobox*Listbox.foreground", palette["fg"])
-            self.option_add("*TCombobox*Listbox.selectBackground",
-                            palette["select"])
-            self.option_add("*TCombobox*Listbox.selectForeground",
-                            palette["fg"])
-
+        The look itself lives in `styling.py`; this only calls it and then
+        refreshes the pieces of the main window that carry their own colours.
+        """
+        self.tokens = styling.apply(self, self.style, theme(), self.ui_scale)
+        styling.style_titlebar(self, self.tokens)
         if hasattr(self, "tree"):
             self._configure_tree_tags()
+        if hasattr(self, "_toolbar_buttons"):
+            self._refresh_toolbar_icons()
+        if hasattr(self, "status"):
+            self.status.refresh_theme()
+        if hasattr(self, "menu_strip"):
+            self._build_menu_strip()
+        if hasattr(self, "editor"):
+            # Everything already on screen, tool windows included; the editor
+            # is coloured by _style_editor (ghost mode hides its text).
+            styling.retheme(self, self.tokens, skip=(self.editor.text,))
+            # The placeholder "N" mark takes the accent colour (a real
+            # brand/icon.png does not change), for every window opened from now.
+            self._app_icons = styling.app_icons(self, self.tokens)
+            if self._app_icons:
+                try:
+                    self.iconphoto(True, *self._app_icons)
+                except tk.TclError:
+                    pass
+            welcome = getattr(self, "welcome", None)
+            if welcome is not None and welcome.winfo_ismapped():
+                welcome.destroy()                    # its card colours are baked in
+                self.welcome = None
+                self._show_welcome()
 
     def _configure_tree_tags(self) -> None:
         """
@@ -260,14 +207,22 @@ class App(WritingIntelligence, tk.Tk):
         Work' rows tells you where tomorrow goes without opening anything.
         """
         palette = theme()
+        # The status colours were picked against a cream page; on a dark or tan
+        # sidebar some of them nearly vanish, so each is nudged only as far as
+        # needed to stay readable on the binder's own background.
+        ground = self.tokens["panel"]
+
+        def legible(colour: str, target: float = 3.6) -> str:
+            return styling.ensure_contrast(colour, ground, target)
+
         for status, colour in STATUS_COLOURS.items():
-            self.tree.tag_configure(f"status:{status}", foreground=colour)
+            self.tree.tag_configure(f"status:{status}", foreground=legible(colour))
         self.tree.tag_configure("group", font=("Segoe UI", 9, "bold"),
-                                foreground=palette["accent"])
-        self.tree.tag_configure("muted", foreground=palette["dim"])
-        self.tree.tag_configure("excluded", foreground=palette["dim"])
-        self.tree.tag_configure("done", foreground=STATUS_COLOURS.get("Final",
-                                                                     "#4f8a5b"))
+                                foreground=legible(palette["accent"], 4.5))
+        self.tree.tag_configure("muted", foreground=legible(palette["dim"], 3.0))
+        self.tree.tag_configure("excluded", foreground=legible(palette["dim"], 3.0))
+        self.tree.tag_configure("done", foreground=legible(
+            STATUS_COLOURS.get("Final", "#4f8a5b")))
         self.tree.tag_configure("pov", font=("Segoe UI", 9, "bold"))
 
         if hasattr(self, "editor"):
@@ -302,6 +257,7 @@ class App(WritingIntelligence, tk.Tk):
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self)
+        self.menubar = menubar
 
         file_menu = tk.Menu(menubar, tearoff=0)
         file_menu.add_command(label="New Novel...", accelerator="Ctrl+Shift+N",
@@ -511,7 +467,7 @@ class App(WritingIntelligence, tk.Tk):
                               command=lambda: self.cmd_font_size(-1))
         view_menu.add_separator()
         self.theme_menu = tk.Menu(view_menu, tearoff=0)
-        for name in ("light", "dark", "warm"):
+        for name in THEMES:
             self.theme_menu.add_command(
                 label=name.title(), command=lambda n=name: self.cmd_theme(n)
             )
@@ -519,6 +475,9 @@ class App(WritingIntelligence, tk.Tk):
         menubar.add_cascade(label="View", menu=view_menu)
 
         help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu.add_command(label="Command Palette...",
+                              accelerator="Ctrl+Shift+P",
+                              command=self.cmd_palette)
         help_menu.add_command(label="How to Use This", command=self.cmd_readme)
         help_menu.add_command(label="Keyboard Shortcuts", command=self.cmd_shortcuts)
         help_menu.add_command(label="Dialogue Rules Reference",
@@ -529,7 +488,6 @@ class App(WritingIntelligence, tk.Tk):
         help_menu.add_command(label=f"About {APP_NAME}", command=self.cmd_about)
         menubar.add_cascade(label="Help", menu=help_menu)
 
-        self.configure(menu=menubar)
         self._refresh_recent()
 
     def _refresh_recent(self) -> None:
@@ -549,49 +507,64 @@ class App(WritingIntelligence, tk.Tk):
     # ==================================================================
 
     def _build_layout(self) -> None:
-        toolbar = ttk.Frame(self, padding=(8, 5))
-        toolbar.grid(row=0, column=0, sticky="ew")
+        toolbar = ttk.Frame(self, padding=(8, 6))
+        toolbar.grid(row=1, column=0, sticky="ew")
         self.toolbar = toolbar
+        self.icons = styling.IconSet(self, self.ui_scale)
+        self._toolbar_buttons: List[Tuple[ttk.Button, str, str]] = []
+        self._toolbar_compact = False
+        self._toolbar_fit_job: Optional[str] = None
+        self._toolbar_full_width = 0
 
-        buttons = [
-            ("New Scene", self.cmd_add_scene),
-            ("Save", lambda: self.cmd_save(explicit=True)),
-            ("Compile", self.cmd_compile),
-            ("Sprint", self.cmd_sprint),
-            ("Diagnose", lambda: self.cmd_diagnostics("scene")),
-            ("Stats", self.cmd_dashboard),
-            ("Find", self.cmd_search),
-            ("Open in Word", self.cmd_open_in_word),
+        # Grouped by what they are for - write, review, work - with a hairline
+        # between groups, and a tooltip on each that names the shortcut so the
+        # keyboard route is discoverable without opening the Help window.
+        groups = [
+            [("New Scene", "new", self.cmd_add_scene,
+              "Add a scene to the current chapter  (Ctrl+N)"),
+             ("Save", "save", lambda: self.cmd_save(explicit=True),
+              "Save now  (Ctrl+S)")],
+            [("Compile", "compile", self.cmd_compile,
+              "Build the whole manuscript as one Word document  (F5)"),
+             ("Diagnose", "diagnose", lambda: self.cmd_diagnostics("scene"),
+              "Check this scene for prose problems  (F7)"),
+             ("Stats", "stats", self.cmd_dashboard,
+              "Word counts, pace and deadline  (F9)")],
+            [("Sprint", "sprint", self.cmd_sprint,
+              "Start a timed writing sprint  (F6)"),
+             ("Find", "find", self.cmd_search,
+              "Search the whole novel  (Ctrl+F)"),
+             ("Open in Word", "word", self.cmd_open_in_word,
+              "Open the selected document in Word")],
         ]
-        # Wide enough for the longest label; a fixed 12 clipped "Open in Word".
-        button_width = max(len(label) for label, _ in buttons) + 2
-        for index, (label, command) in enumerate(buttons):
-            ttk.Button(toolbar, text=label, command=command,
-                       width=button_width).grid(
-                row=0, column=index, padx=(0, 4)
-            )
-        self.header_label = ttk.Label(toolbar, text="", style="Status.TLabel",
-                                      anchor="e")
-        self.header_label.grid(row=0, column=len(buttons), sticky="e", padx=(12, 6))
-        toolbar.columnconfigure(len(buttons), weight=1)
+        column = 0
+        for group_index, group in enumerate(groups):
+            if group_index:
+                ttk.Separator(toolbar, orient="vertical").grid(
+                    row=0, column=column, sticky="ns", padx=6, pady=4)
+                column += 1
+            for label, icon, command, tip in group:
+                self._add_toolbar_button(column, label, icon, command, tip)
+                column += 1
+        toolbar.columnconfigure(column, weight=1)      # spacer
+        column += 1
 
         # Two bars: the book overall, and today against the daily target.
         gauges = ttk.Frame(toolbar)
-        gauges.grid(row=0, column=len(buttons) + 1, sticky="e")
-        self.book_gauge = ttk.Progressbar(
-            gauges, style="Target.Horizontal.TProgressbar",
-            length=130, maximum=100,
-        )
-        self.book_gauge.grid(row=0, column=0, pady=(0, 2))
-        self.day_gauge = ttk.Progressbar(
-            gauges, style="Target.Horizontal.TProgressbar",
-            length=130, maximum=100,
-        )
-        self.day_gauge.grid(row=1, column=0)
+        gauges.grid(row=0, column=column, sticky="e", padx=(8, 8))
+        self.gauge_frame = gauges
+        self.book_gauge = Gauge(gauges, "Book")
+        self.book_gauge.grid(row=0, column=0, sticky="w")
+        self.day_gauge = Gauge(gauges, "Today")
+        self.day_gauge.grid(row=1, column=0, sticky="w", pady=(2, 0))
+        column += 1
+        self._add_toolbar_button(
+            column, "Commands", "commands", self.cmd_palette,
+            "Find any command by typing  (Ctrl+Shift+P)")
 
         self.panes = ttk.PanedWindow(self, orient="horizontal")
-        self.panes.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0, 4))
-        self.rowconfigure(1, weight=1)
+        self.panes.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 4))
+        self.rowconfigure(2, weight=1)
         self.columnconfigure(0, weight=1)
 
         # -- binder ------------------------------------------------------
@@ -600,18 +573,28 @@ class App(WritingIntelligence, tk.Tk):
         self.binder_frame.columnconfigure(0, weight=1)
 
         binder_head = ttk.Frame(self.binder_frame)
-        binder_head.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 3))
+        binder_head.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(2, 8))
+        binder_head.columnconfigure(0, weight=1)
         self.project_label = ttk.Label(binder_head, text="No novel open",
                                        style="Title.TLabel")
         self.project_label.grid(row=0, column=0, sticky="w")
+        # The pace line ("averaging ... finishing about ...") used to sit in the
+        # toolbar and was the first thing to be pushed off the edge on a small
+        # screen. Under the title it can wrap instead.
+        self.header_label = ttk.Label(binder_head, text="", style="Hint.TLabel",
+                                      justify="left", wraplength=300)
+        self.header_label.grid(row=1, column=0, sticky="w", pady=(2, 0))
+        binder_head.bind(
+            "<Configure>",
+            lambda e: self.header_label.configure(
+                wraplength=max(120, e.width - 6)))
 
-        self.tree = ttk.Treeview(self.binder_frame, columns=("meta",), height=28)
-        self.tree.heading("#0", text="Binder", anchor="w")
-        self.tree.heading("meta", text="", anchor="e")
+        self.tree = ttk.Treeview(self.binder_frame, columns=("meta",), height=28,
+                                 show="tree")
         self.tree.column("#0", width=250, anchor="w", stretch=True)
         self.tree.column("meta", width=78, anchor="e", stretch=False)
         self.tree.grid(row=1, column=0, sticky="nsew")
-        tree_scroll = ttk.Scrollbar(self.binder_frame, orient="vertical",
+        tree_scroll = AutoScrollbar(self.binder_frame, orient="vertical",
                                     command=self.tree.yview)
         self.tree.configure(yscrollcommand=tree_scroll.set)
         tree_scroll.grid(row=1, column=1, sticky="ns")
@@ -682,7 +665,114 @@ class App(WritingIntelligence, tk.Tk):
         self.panes.add(self.inspector_frame, weight=1)
 
         self.status = StatusBar(self)
-        self.status.grid(row=2, column=0, sticky="ew")
+        self.status.grid(row=3, column=0, sticky="ew")
+        self._build_menu_strip()
+
+
+    # ------------------------------------------------------------------
+    # The menu bar, drawn by the app
+    # ------------------------------------------------------------------
+
+    def _build_menu_strip(self) -> None:
+        """
+        A menu bar the theme can actually paint.
+
+        Windows owns the real menu bar and offers Tk no way to recolour it, so
+        it was a white strip across the top of every theme - the one thing left
+        that made a dark palette look unfinished. This is the same menus, shown
+        through flat menu buttons in the app's own chrome. The tk.Menu tree
+        built in _build_menu is still the single source of truth: each button
+        gets a `clone` (Tk's own mechanism, which tracks later changes to the
+        original, so "Undo Rename" and Open Recent stay live), and the command
+        palette still walks the original.
+        """
+        t = self.tokens
+        old = getattr(self, "menu_strip", None)
+        if old is not None:
+            old.destroy()
+        self.menu_strip = ttk.Frame(self, padding=(6, 2, 6, 0))
+        self.menu_strip.grid(row=0, column=0, sticky="ew")
+
+        bar = self.menubar
+        last = bar.index("end")
+        for index in range(last + 1 if last is not None else 0):
+            if bar.type(index) != "cascade":
+                continue
+            source = bar.nametowidget(bar.entrycget(index, "menu"))
+            self._theme_menu(source)
+            button = tk.Menubutton(
+                self.menu_strip, text=bar.entrycget(index, "label"),
+                background=t["panel"], foreground=t["panel_fg"],
+                activebackground=t["hover"], activeforeground=t["panel_fg"],
+                relief="flat", borderwidth=0, padx=10, pady=4,
+                font=(styling.UI_FONT, 9), takefocus=0,
+            )
+            clone = f"{button}.menu"
+            self.tk.call(str(source), "clone", clone, "normal")
+            button.configure(menu=clone)
+            button.grid(row=0, column=index, padx=(0, 1))
+
+    def _theme_menu(self, menu: tk.Menu) -> None:
+        """Colour a menu and every menu hanging off it (before it is cloned)."""
+        t = self.tokens
+        menu.configure(
+            background=t["raised"], foreground=t["panel_fg"],
+            activebackground=t["row_select"], activeforeground=t["fg"],
+            disabledforeground=t["dim"], selectcolor=t["accent"],
+            borderwidth=1, relief="flat", activeborderwidth=0,
+        )
+        last = menu.index("end")
+        for index in range(last + 1 if last is not None else 0):
+            if menu.type(index) == "cascade":
+                try:
+                    self._theme_menu(menu.nametowidget(menu.entrycget(index, "menu")))
+                except (tk.TclError, KeyError):
+                    pass
+
+    def _add_toolbar_button(self, column: int, label: str, icon: str,
+                            command: Callable[[], None], tip: str) -> None:
+        image = self.icons.get(icon, self.tokens["panel_fg"])
+        button = ttk.Button(
+            self.toolbar, text=label, command=command, style="Tool.TButton",
+            image=image or "", compound="left" if image else "none",
+        )
+        button.grid(row=0, column=column, padx=(0, 2))
+        styling.Tooltip(button, tip)
+        self._toolbar_buttons.append((button, icon, label))
+
+    def _refresh_toolbar_icons(self) -> None:
+        """Icons are baked in a colour, so a theme change has to redraw them."""
+        for button, icon, _label in self._toolbar_buttons:
+            image = self.icons.get(icon, self.tokens["panel_fg"])
+            if image:
+                button.configure(image=image)
+
+    def _fit_toolbar(self, _event=None) -> None:
+        """Debounced: the toolbar resizes continuously while a window is dragged."""
+        if self._toolbar_fit_job is None:
+            self._toolbar_fit_job = self.after(60, self._apply_toolbar_fit)
+
+    def _apply_toolbar_fit(self) -> None:
+        """
+        Icons only when the labels no longer fit.
+
+        Compared against the width the full toolbar needed when it was built,
+        not its current requested width, so switching modes cannot feed back
+        into the decision and flicker. Needs the icon font: without icons a
+        label-less button would be blank, so the labels stay.
+        """
+        self._toolbar_fit_job = None
+        if not self._toolbar_full_width or not self.icons.available:
+            return
+        compact = self.toolbar.winfo_width() < self._toolbar_full_width
+        if compact == self._toolbar_compact:
+            return
+        self._toolbar_compact = compact
+        for button, _icon, label in self._toolbar_buttons:
+            if compact:
+                button.configure(text="", compound="image")
+            else:
+                button.configure(text=label, compound="left")
 
     def _bind_keys(self) -> None:
         bindings = {
@@ -707,6 +797,7 @@ class App(WritingIntelligence, tk.Tk):
             # belongs to the text.
             "<Control-Alt-z>": lambda _e: self.cmd_undo(),
             "<Control-Alt-y>": lambda _e: self.cmd_redo(),
+            "<Control-Shift-P>": lambda _e: self.cmd_palette(),
             "<Control-k>": lambda _e: self.cmd_corkboard(),
             "<Control-g>": lambda _e: self.cmd_story_graph(),
             "<Control-i>": lambda _e: self.cmd_idea_inbox(),
@@ -725,6 +816,9 @@ class App(WritingIntelligence, tk.Tk):
             "<Control-plus>": lambda _e: self.cmd_font_size(1),
             "<Control-minus>": lambda _e: self.cmd_font_size(-1),
         }
+        # Kept so the tests can check every shortcut is wired to something that
+        # runs, without needing a keyboard focus that a test window may lack.
+        self.shortcuts = bindings
         for sequence, handler in bindings.items():
             self.bind_all(sequence, handler)
 
@@ -758,22 +852,13 @@ class App(WritingIntelligence, tk.Tk):
         self._sync_history_menu()
 
     def _show_welcome(self) -> None:
-        self._show_detail(
-            "Welcome",
-            f"{APP_NAME} {APP_VERSION}\n\n"
-            "Everything is stored as Word documents on your own machine.\n"
-            "Nothing is uploaded anywhere.\n\n"
-            "Start with  File > New Novel...\n\n"
-            "That creates a folder holding:\n"
-            "  - a document per chapter scene\n"
-            "  - a sheet per character, location, item, faction and plot thread\n"
-            "  - a world bible split across eight documents\n"
-            "  - outline, timeline, query letter, synopsis and revision "
-            "checklists\n"
-            "  - one compiled manuscript with the whole story in it\n"
-            "  - verified zip backups and per-document version history\n",
-            [],
-        )
+        """First run: no novel yet. See welcome.py."""
+        from .welcome import WelcomeView
+
+        if getattr(self, "welcome", None) is None:
+            self.welcome = WelcomeView(self)
+        self.welcome.show()
+        self.refresh_counters()          # no novel: clears the counters, hides the gauges
 
     # ==================================================================
     # Project loading
@@ -794,6 +879,8 @@ class App(WritingIntelligence, tk.Tk):
         storygraph.invalidate(project)
 
         self.project = project
+        if getattr(self, "welcome", None) is not None:
+            self.welcome.hide()
         self.tracker = stats.SessionTracker(project.data)
         settings["last_project"] = str(root)
         self.current_scene_id = ""
@@ -1151,6 +1238,7 @@ class App(WritingIntelligence, tk.Tk):
         self.editor.set_value(text)
         self._suppress_modified = False
         self._editor_dirty = False
+        self.status.set_state("saved")
 
         self.centre_title.configure(text=scene.title)
         self._update_centre_meta(scene)
@@ -1589,9 +1677,7 @@ class App(WritingIntelligence, tk.Tk):
                      actions: List[Tuple[str, Callable[[], None]]]) -> None:
         self.editor.grid_remove()
         self.detail_text.grid(row=1, column=0, sticky="nsew")
-        self.detail_text.set_readonly(False)
-        self.detail_text.set_value(body)
-        self.detail_text.set_readonly(True)
+        self.detail_text.set_report(body)
         self.centre_title.configure(text=title)
 
         for child in self.detail_buttons.winfo_children():
@@ -1620,6 +1706,7 @@ class App(WritingIntelligence, tk.Tk):
         if not self.current_scene_id:
             return
         self._editor_dirty = True
+        self.status.set_state("dirty")
         self._schedule_autosave()
         self._schedule_journal()
         self._schedule_count()
@@ -1864,6 +1951,7 @@ class App(WritingIntelligence, tk.Tk):
             self.status.say(f"Could not save: {exc}", 15)
             return False
         self._editor_dirty = False
+        self.status.set_state("saved")
         if self.tracker:
             self.tracker.update(self.project.data.word_count, scene.id)
         item = f"scene:{scene.id}"
@@ -1930,12 +2018,17 @@ class App(WritingIntelligence, tk.Tk):
     def refresh_counters(self, live_total: Optional[int] = None) -> None:
         if not self.project:
             self.status.set_counters("")
+            self.header_label.configure(text="")
+            if hasattr(self, "gauge_frame"):
+                self.gauge_frame.grid_remove()
             for gauge in (getattr(self, "book_gauge", None),
                           getattr(self, "day_gauge", None)):
                 if gauge is not None:
-                    gauge.configure(value=0)
+                    gauge.set(0, "")
             return
         data = self.project.data
+        if not self.gauge_frame.winfo_ismapped():
+            self.gauge_frame.grid()
         total = live_total if live_total is not None else data.word_count
         goal = data.targets.total_words
         bits = [f"{total:,} words"]
@@ -1955,16 +2048,15 @@ class App(WritingIntelligence, tk.Tk):
         projection = stats.Projection(data)
         self.header_label.configure(text=projection.pace_line())
 
-        self.book_gauge.configure(
-            value=min(100.0, total / goal * 100) if goal else 0
-        )
-        if self.tracker and data.targets.daily_words:
-            self.day_gauge.configure(
-                value=min(100.0,
-                          self.tracker.added / data.targets.daily_words * 100)
-            )
+        book_pct = min(100.0, total / goal * 100) if goal else 0
+        self.book_gauge.set(book_pct, f"{book_pct:.0f}%" if goal else "no goal")
+        daily = data.targets.daily_words
+        if self.tracker and daily:
+            added = self.tracker.added
+            self.day_gauge.set(min(100.0, added / daily * 100),
+                               f"{added:,} / {daily:,}")
         else:
-            self.day_gauge.configure(value=0)
+            self.day_gauge.set(0, "" if daily else "no goal")
 
     # ==================================================================
     # Commands - project
@@ -3521,7 +3613,7 @@ class App(WritingIntelligence, tk.Tk):
                 self.panes.add(self.inspector_frame, weight=1)
             except tk.TclError:
                 pass
-            self.toolbar.grid(row=0, column=0, sticky="ew")
+            self.toolbar.grid(row=1, column=0, sticky="ew")
         if self.current_scene_id:
             self.editor.text.focus_set()
 
@@ -3553,9 +3645,27 @@ class App(WritingIntelligence, tk.Tk):
         else:
             self.cmd_shortcuts()
 
+    def cmd_palette(self) -> None:
+        """Ctrl+Shift+P: search every menu command by typing."""
+        from .palette import CommandPalette
+
+        existing = getattr(self, "_palette", None)
+        if existing is not None:
+            try:
+                if existing.winfo_exists():
+                    existing.close()
+                    self._palette = None
+                    return
+            except tk.TclError:
+                pass
+        self._palette = CommandPalette(self)
+
     def cmd_shortcuts(self) -> None:
         body = """KEYBOARD SHORTCUTS
 ==================
+
+FIND ANY COMMAND
+  Ctrl+Shift+P      Command palette - type what you want, press Enter
 
 FILE
   Ctrl+S            Save

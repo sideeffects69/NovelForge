@@ -65,6 +65,12 @@ class MapEditor(tk.Toplevel):
         self.zoom = 0.55
         self.offset_x = 0.0
         self.offset_y = 0.0
+        # True while the view is "fit to window" rather than the writer's own
+        # pan/zoom. The first map is loaded while the window is still being
+        # built - before the canvas has its real size - so fitting once at load
+        # fitted it to a placeholder and it opened as a thumbnail. Staying in
+        # this mode means the fit is redone as the canvas takes its final size.
+        self._auto_fit = True
 
         # interaction state
         self.tool = tk.StringVar(value="select")
@@ -148,7 +154,8 @@ class MapEditor(tk.Toplevel):
                 # each button to its own label keeps the row the same width
                 # it always was everywhere except the two that needed it.
                 ttk.Button(bar, text=label, command=command,
-                          width=max(8, len(label) + 1)).grid(
+                          style="Compact.TButton",
+                          width=max(6, len(label) + 1)).grid(
                     row=0, column=column, padx=2)
             column += 1
 
@@ -243,7 +250,7 @@ class MapEditor(tk.Toplevel):
         self.canvas.bind("<ButtonRelease-2>", self._on_middle_up)
         self.canvas.bind("<Motion>", self._on_motion)
         self.canvas.bind("<MouseWheel>", self._on_wheel)
-        self.canvas.bind("<Configure>", lambda _e: self._schedule_redraw())
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
 
         self.bind("<Escape>", lambda _e: self._cancel_draft())
         self.bind("<Return>", lambda _e: self._finish_draft())
@@ -347,6 +354,11 @@ class MapEditor(tk.Toplevel):
         return self.to_map(self.canvas.canvasx(event.x),
                            self.canvas.canvasy(event.y))
 
+    def _on_canvas_configure(self, _event=None) -> None:
+        if self._auto_fit and self.gm:
+            self._fit_view(settle=False)     # the canvas size is already known
+        self._schedule_redraw()
+
     def _pan_by(self, dx: int, dy: int) -> None:
         """
         Slide the view by a screen-pixel offset without rebuilding the canvas.
@@ -360,6 +372,7 @@ class MapEditor(tk.Toplevel):
         """
         if dx == 0 and dy == 0:
             return
+        self._auto_fit = False
         self.offset_x += dx
         self.offset_y += dy
         self.canvas.move("all", dx, dy)
@@ -393,7 +406,7 @@ class MapEditor(tk.Toplevel):
             image = mm._parchment_background(self.gm, self.zoom)
             if image.size != (width, height):
                 image = image.resize((width, height), Image.BILINEAR)
-            photo = ImageTk.PhotoImage(image)
+            photo = ImageTk.PhotoImage(image, master=self.canvas)
         except Exception:
             return None
         # Only a couple of zoom levels are worth holding on to.
@@ -762,6 +775,7 @@ class MapEditor(tk.Toplevel):
         self.zoom = max(0.08, min(4.0, self.zoom * factor))
         if self.zoom == old:
             return
+        self._auto_fit = False
         if anchor_x is None:
             anchor_x = self.canvas.winfo_width() / 2
         if anchor_y is None:
@@ -777,7 +791,14 @@ class MapEditor(tk.Toplevel):
     def cmd_zoom_fit(self) -> None:
         if not self.gm:
             return
-        self.canvas.update_idletasks()
+        self._fit_view()
+        self.redraw()
+
+    def _fit_view(self, settle: bool = True) -> None:
+        """Set zoom and offset so the whole map fills the canvas. No drawing."""
+        self._auto_fit = True
+        if settle:
+            self.canvas.update_idletasks()
         width = max(200, self.canvas.winfo_width())
         height = max(200, self.canvas.winfo_height())
         self.zoom = max(0.08, min(2.0,
@@ -785,7 +806,6 @@ class MapEditor(tk.Toplevel):
                                       height / (self.gm.height + 60))))
         self.offset_x = (width - self.gm.width * self.zoom) / 2
         self.offset_y = (height - self.gm.height * self.zoom) / 2
-        self.redraw()
 
     # ==================================================================
     # Editing operations

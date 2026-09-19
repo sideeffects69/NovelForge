@@ -24,6 +24,7 @@ from ..config import (
 )
 from ..model import CHARACTER_ROLES, SCENE_STATUSES
 from .widgets import (
+    AutoScrollbar,
     Form,
     ScrollFrame,
     ScrolledText,
@@ -635,8 +636,7 @@ class ReportWindow(tk.Toplevel):
             background=theme["bg"], foreground=theme["fg"],
             insertbackground=theme["caret"], selectbackground=theme["select"],
         )
-        self.viewer.set_value(body)
-        self.viewer.set_readonly(True)
+        self.viewer.set_report(body)
 
         self._body = body
         self._bar = ttk.Frame(container)
@@ -683,9 +683,7 @@ class ReportWindow(tk.Toplevel):
 
     def set_body(self, body: str) -> None:
         self._body = body
-        self.viewer.set_readonly(False)
-        self.viewer.set_value(body)
-        self.viewer.set_readonly(True)
+        self.viewer.set_report(body)
 
 
 # ==========================================================================
@@ -733,7 +731,7 @@ class SearchWindow(tk.Toplevel):
             self.tree.column(key, width=width, anchor="w",
                              stretch=(key == "snippet"))
         self.tree.grid(row=2, column=0, sticky="nsew")
-        scrollbar = ttk.Scrollbar(container, orient="vertical",
+        scrollbar = AutoScrollbar(container, orient="vertical",
                                   command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
         scrollbar.grid(row=2, column=1, sticky="ns")
@@ -1056,7 +1054,7 @@ class OutlineWindow(tk.Toplevel):
             self.tree.heading(key, text=label)
             self.tree.column(key, width=width, anchor="w")
         self.tree.grid(row=0, column=0, sticky="nsew")
-        scrollbar = ttk.Scrollbar(left, orient="vertical", command=self.tree.yview)
+        scrollbar = AutoScrollbar(left, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
@@ -1095,7 +1093,7 @@ class OutlineWindow(tk.Toplevel):
                                      height=7, exportselection=False,
                                      activestyle="none")
         self.scene_list.grid(row=0, column=0, sticky="ew")
-        scene_bar = ttk.Scrollbar(scene_holder, orient="vertical",
+        scene_bar = AutoScrollbar(scene_holder, orient="vertical",
                                   command=self.scene_list.yview)
         scene_bar.grid(row=0, column=1, sticky="ns")
         self.scene_list.configure(yscrollcommand=scene_bar.set)
@@ -1280,7 +1278,7 @@ class TimelineWindow(tk.Toplevel):
             self.tree.heading(key, text=labels[key])
             self.tree.column(key, width=widths[key], anchor="w")
         self.tree.grid(row=1, column=0, sticky="nsew")
-        scrollbar = ttk.Scrollbar(container, orient="vertical",
+        scrollbar = AutoScrollbar(container, orient="vertical",
                                   command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
         scrollbar.grid(row=1, column=1, sticky="ns")
@@ -1447,7 +1445,7 @@ class BackupsWindow(tk.Toplevel):
             self.tree.heading(key, text=label)
             self.tree.column(key, width=width, anchor="w")
         self.tree.grid(row=1, column=0, sticky="nsew")
-        scrollbar = ttk.Scrollbar(container, orient="vertical",
+        scrollbar = AutoScrollbar(container, orient="vertical",
                                   command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
         scrollbar.grid(row=1, column=1, sticky="ns")
@@ -1567,7 +1565,7 @@ class SnapshotsDialog(Dialog):
         self.listbox = tk.Listbox(holder, height=14, activestyle="none",
                                   exportselection=False)
         self.listbox.grid(row=0, column=0, sticky="nsew")
-        snap_bar = ttk.Scrollbar(holder, orient="vertical",
+        snap_bar = AutoScrollbar(holder, orient="vertical",
                                  command=self.listbox.yview)
         snap_bar.grid(row=0, column=1, sticky="ns")
         self.listbox.configure(yscrollcommand=snap_bar.set)

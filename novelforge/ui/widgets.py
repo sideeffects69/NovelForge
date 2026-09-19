@@ -8,11 +8,70 @@ scrollregion tracks the frame's size.
 
 from __future__ import annotations
 
+import re
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import ttk
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-from ..config import theme
+from . import styling
+
+# Conventions the generated reports share (see ScrolledText.set_report).
+_UNDER_EQ = re.compile(r"^={3,}$")
+_UNDER_DASH = re.compile(r"^-{3,}$")
+_RULE_ONLY = re.compile(r"^\s*(?:-{6,}|={6,})\s*$")
+_FINDING = re.compile(r"^(!!| ~|  )  ([A-Z][A-Z0-9 &/'\-,()]+)$")
+_CAPS_HEAD = re.compile(r"^ {0,2}([A-Z][A-Z0-9 &/'\-,():]*[A-Z0-9)])\s*$")
+
+
+def flow(frame: tk.Misc, widgets: Sequence[tk.Misc], gap: int = 4) -> None:
+    """
+    Lay `widgets` out left to right inside `frame`, wrapping to a new line
+    whenever the next one would not fit the frame's current width.
+
+    Re-runs when the width changes (a dragged sash, a different window size);
+    the guard on the width means the height change that wrapping causes cannot
+    trigger another pass.
+    """
+    seen = {"width": 0}
+
+    def place(_event=None) -> None:
+        width = frame.winfo_width()
+        if width <= 1 or width == seen["width"]:
+            return
+        seen["width"] = width
+        used = row = column = 0
+        for widget in widgets:
+            need = widget.winfo_reqwidth() + gap
+            if column and used + need > width:
+                row, column, used = row + 1, 0, 0
+            widget.grid(row=row, column=column, padx=(0, gap), pady=(0, gap),
+                        sticky="w")
+            used += need
+            column += 1
+
+    for index, widget in enumerate(widgets):      # a sensible start, before sizing
+        widget.grid(row=0, column=index, padx=(0, gap), sticky="w")
+    frame.bind("<Configure>", place, add="+")
+
+
+class AutoScrollbar(ttk.Scrollbar):
+    """
+    A scroll bar that goes quiet when there is nothing to scroll.
+
+    It is disabled, which the style draws as an empty trough, rather than
+    hidden: taking it out of the layout changes the width the content has, and
+    wrapped text can then re-flow back and forth around the threshold.
+    """
+
+    _idle = False
+
+    def set(self, first, last) -> None:
+        idle = float(first) <= 0.0 and float(last) >= 1.0
+        if idle != self._idle:
+            self._idle = idle
+            self.state(["disabled"] if idle else ["!disabled"])
+        super().set(first, last)
 
 
 class ScrollFrame(ttk.Frame):
@@ -21,7 +80,7 @@ class ScrollFrame(ttk.Frame):
     def __init__(self, master, **kwargs) -> None:
         super().__init__(master, **kwargs)
         self.canvas = tk.Canvas(self, highlightthickness=0, borderwidth=0)
-        self.scrollbar = ttk.Scrollbar(
+        self.scrollbar = AutoScrollbar(
             self, orient="vertical", command=self.canvas.yview
         )
         self.body = ttk.Frame(self.canvas)
@@ -79,7 +138,7 @@ class ScrolledText(ttk.Frame):
         )
         if font:
             self.text.configure(font=font)
-        self.scrollbar = ttk.Scrollbar(
+        self.scrollbar = AutoScrollbar(
             self, orient="vertical", command=self.text.yview
         )
         self.text.configure(yscrollcommand=self.scrollbar.set)
@@ -104,6 +163,113 @@ class ScrolledText(ttk.Frame):
 
     def set_readonly(self, readonly: bool) -> None:
         self.text.configure(state="disabled" if readonly else "normal")
+
+    # -- reports ----------------------------------------------------------
+    def set_report(self, body: str) -> None:
+        """
+        Show generated report text with real headings instead of `=====`.
+
+        Every report in the app is plain text built with the same handful of
+        conventions - a title over a row of "=", ALL-CAPS section names, rows of
+        "-", "!!"/"~" severity markers on diagnostics findings. This reads those
+        conventions and styles them; the body stays monospace so the aligned
+        columns in dashboards and tables still line up. Nothing about how the
+        reports are produced had to change.
+        """
+        t = styling.current_tokens()
+        text = self.text
+        body_font = tkfont.Font(font=text.cget("font"))
+        char = max(1, body_font.measure("0"))
+        ui = styling.UI_FONT
+        finding_mode = "(blank) information only" in body
+
+        text.configure(state="normal")
+        text.delete("1.0", "end")
+        for name in list(text.tag_names()):
+            if name.startswith("rp_"):
+                text.tag_delete(name)
+
+        text.tag_configure("rp_h1", font=(ui, 16, "bold"), foreground=t["fg"],
+                           spacing1=4, spacing3=10)
+        text.tag_configure("rp_h2", font=(ui, 9, "bold"),
+                           foreground=styling.ensure_contrast(
+                               t["accent"], t["bg"], 4.5),
+                           spacing1=16, spacing3=4)
+        text.tag_configure("rp_find", font=(ui, 10, "bold"), foreground=t["fg"],
+                           spacing1=12, spacing3=2)
+        # A rule is a one-pixel-tall line painted in the border colour. Tk
+        # paints a tag's background across its line *spacing* too, so the space
+        # around the rule comes from separate blank lines, not from spacing.
+        text.tag_configure("rp_rule", font=(ui, -1), background=t["border"])
+        text.tag_configure("rp_gap", font=(ui, -7))
+        chips = {
+            "flag": ("FIX", "#b23b30", "#ffffff"),
+            "watch": ("LOOK", "#c98a1a", "#1b1405"),
+            "note": ("NOTE", t["border_strong"], t["fg"]),
+        }
+        for key, (_label, background, foreground) in chips.items():
+            text.tag_configure(f"rp_chip_{key}", font=(ui, 8, "bold"),
+                               background=background, foreground=foreground)
+
+        lines = body.split("\n")
+        indents_made = set()
+        skip = 0
+        for number, line in enumerate(lines):
+            if skip:
+                skip -= 1
+                continue
+            following = lines[number + 1] if number + 1 < len(lines) else ""
+            stripped = line.strip()
+
+            # A title (or dashed sub-title) sitting on its own underline.
+            if stripped and len(following.strip()) >= 3 and (
+                    _UNDER_EQ.match(following.strip())
+                    or _UNDER_DASH.match(following.strip())) and \
+                    abs(len(following.strip()) - len(stripped)) <= 6 and \
+                    not _RULE_ONLY.match(stripped):
+                is_title = following.strip().startswith("=")
+                text.insert("end", stripped + "\n",
+                            "rp_h1" if is_title else "rp_h2")
+                skip = 1
+                continue
+
+            if _RULE_ONLY.match(line):
+                text.insert("end", "\n", "rp_gap")
+                text.insert("end", " \n", "rp_rule")
+                text.insert("end", "\n", "rp_gap")
+                continue
+
+            if finding_mode:
+                found = _FINDING.match(line)
+                if found:
+                    marker, label = found.group(1), found.group(2)
+                    kind = {"!!": "flag", " ~": "watch"}.get(marker, "note")
+                    text.insert("end", f" {chips[kind][0]} ", f"rp_chip_{kind}")
+                    text.insert("end", f"  {label.title()}\n", "rp_find")
+                    continue
+
+            caps = _CAPS_HEAD.match(line)
+            if caps and sum(c.isalpha() for c in caps.group(1)) >= 3:
+                text.insert("end", caps.group(1) + "\n", "rp_h2")
+                continue
+
+            # Ordinary line. Indented lines wrap under their own indent instead
+            # of snapping back to the left edge, and "- item" hangs past the dash.
+            indent = len(line) - len(line.lstrip(" "))
+            tags = ()
+            if indent >= 2 and stripped:
+                hang = indent + (2 if stripped.startswith("- ") else 0)
+                name = f"rp_i{hang}"
+                if hang not in indents_made:
+                    text.tag_configure(name, lmargin2=hang * char)
+                    indents_made.add(hang)
+                tags = (name,)
+            text.insert("end", line + "\n", tags)
+
+        text.configure(state="disabled")
+        text.edit_reset()
+        text.edit_modified(False)
+        text.yview_moveto(0)
 
 
 class Form:
@@ -184,20 +350,13 @@ class Form:
     def multiline(self, label: str, obj: Any, attr: str,
                   height: int = 3) -> tk.Text:
         self._label(label, top=True)
-        # A plain tk.Text defaults to a white background regardless of the
-        # active theme - invisible against the light themes this was
-        # written against, but a stray white box against a genuinely dark
-        # one. Every inspector field a writer types prose into (synopsis,
-        # goal/conflict/disaster, a character's history) goes through here,
-        # so this is worth colouring rather than leaving as the one
-        # unthemed control in the panel.
-        palette = theme()
+        # Colours, the focus outline and the padding come from the option
+        # database (see styling.apply), so this is one place fewer to keep in
+        # step with the theme. The font is set here because a bare tk.Text
+        # would otherwise use Courier - the "typewriter" look in every
+        # inspector field, which reads as unfinished.
         widget = tk.Text(self.parent, height=height, wrap="word", undo=True,
-                         borderwidth=1, relief="solid", highlightthickness=0,
-                         padx=4, pady=3,
-                         background=palette["bg"], foreground=palette["fg"],
-                         insertbackground=palette["caret"],
-                         selectbackground=palette["select"])
+                         padx=6, pady=4, font=(styling.UI_FONT, 9))
         value = str(getattr(obj, attr, "") or "")
         if value:
             widget.insert("1.0", value)
@@ -248,15 +407,14 @@ class Form:
         frame.grid(row=self._row_index, column=1, sticky="ew", padx=(4, 6), pady=2)
         listbox = tk.Listbox(frame, selectmode="extended",
                             height=min(height, max(2, len(options))),
-                            exportselection=False, activestyle="none",
-                            borderwidth=1, relief="solid", highlightthickness=0)
+                            exportselection=False, activestyle="none")
         listbox.grid(row=0, column=0, sticky="ew")
         frame.columnconfigure(0, weight=1)
         # Only five rows are visible. A cast of twenty characters means the
         # rest were simply unreachable without this - the list scrolled with
         # the keyboard but nothing on screen said so, or let the mouse do it.
         if len(options) > height:
-            bar = ttk.Scrollbar(frame, orient="vertical", command=listbox.yview)
+            bar = AutoScrollbar(frame, orient="vertical", command=listbox.yview)
             bar.grid(row=0, column=1, sticky="ns")
             listbox.configure(yscrollcommand=bar.set)
         ids = [ident for ident, _d in options]
@@ -275,10 +433,12 @@ class Form:
         frame = ttk.Frame(self.parent)
         frame.grid(row=self._row_index, column=0, columnspan=2,
                    sticky="ew", pady=(10, 2), padx=2)
-        for index, (text, command) in enumerate(buttons):
-            ttk.Button(frame, text=text, command=command).grid(
-                row=0, column=index, padx=(0, 4), sticky="w"
-            )
+        # The scene inspector has four buttons in a row and the pane is about
+        # 330px wide, so this wraps onto a second line rather than letting the
+        # last button hang off the edge - at any pane width, not just today's.
+        flow(frame, [ttk.Button(frame, text=text, command=command,
+                                style="Compact.TButton")
+                     for text, command in buttons])
         self._row_index += 1
 
     def readonly(self, label: str, value: str) -> None:
@@ -338,17 +498,78 @@ class Form:
         return changed
 
 
+class Gauge(ttk.Frame):
+    """A captioned progress bar: "Book  [=====     ]  18%"."""
+
+    def __init__(self, master, caption: str, length: int = 92) -> None:
+        super().__init__(master)
+        ttk.Label(self, text=caption, style="Hint.TLabel", width=5,
+                  anchor="w").grid(row=0, column=0, sticky="w")
+        self.bar = ttk.Progressbar(
+            self, style="Target.Horizontal.TProgressbar", length=length,
+            maximum=100,
+        )
+        self.bar.grid(row=0, column=1, padx=(0, 8))
+        self.value = ttk.Label(self, text="", style="Hint.TLabel", width=11,
+                               anchor="w")
+        self.value.grid(row=0, column=2, sticky="w")
+
+    def set(self, percent: float, text: str = "") -> None:
+        self.bar.configure(value=percent)
+        self.value.configure(text=text)
+
+
 class StatusBar(ttk.Frame):
-    """Bottom bar: transient message on the left, live counters on the right."""
+    """
+    Bottom bar: save state and a transient message on the left, live counters
+    on the right.
+
+    The save state is the one thing a writer wants confirmed without asking:
+    "is what I just typed safe?" Autosave runs on idle, so between keystrokes
+    and the next save it says so, in words, not just a colour.
+    """
 
     def __init__(self, master) -> None:
-        super().__init__(master, padding=(8, 3))
+        super().__init__(master, padding=(10, 4))
+        self.state_label = tk.Label(self, text="", anchor="w",
+                                    font=(styling.UI_FONT, 9), padx=0)
+        self.state_label.grid(row=0, column=0, sticky="w", padx=(0, 12))
         self.message = ttk.Label(self, text="", anchor="w", style="Status.TLabel")
-        self.message.grid(row=0, column=0, sticky="ew")
+        self.message.grid(row=0, column=1, sticky="ew")
         self.counters = ttk.Label(self, text="", anchor="e", style="Status.TLabel")
-        self.counters.grid(row=0, column=1, sticky="e")
-        self.columnconfigure(0, weight=1)
+        self.counters.grid(row=0, column=2, sticky="e")
+        self.columnconfigure(1, weight=1)
         self._clear_job: Optional[str] = None
+        self._save_state: Optional[str] = None
+        self.set_state("")
+
+    def set_state(self, kind: str) -> None:
+        """
+        kind: "saved", "dirty", "saving", or "" to show nothing.
+
+        Called from the editor's modified handler, i.e. on every keystroke, so
+        the common case - the state has not changed - must cost one comparison.
+        """
+        if kind == self._save_state:
+            return
+        self._save_state = kind
+        self._paint_state()
+
+    def _paint_state(self) -> None:
+        t = styling.current_tokens()
+        words, colour = {
+            "saved": ("Saved", "#3f9a68"),
+            "dirty": ("Unsaved changes", "#c98a1a"),
+            "saving": ("Saving...", t["accent"]),
+        }.get(self._save_state or "", ("", t["panel_fg"]))
+        self.state_label.configure(
+            text=f"●  {words}" if words else "",
+            background=t["panel"],
+            foreground=styling.ensure_contrast(colour, t["panel"], 3.2),
+        )
+
+    def refresh_theme(self) -> None:
+        self._paint_state()
 
     def say(self, text: str, seconds: float = 6.0) -> None:
         self.message.configure(text=text)
@@ -507,11 +728,33 @@ def usable_area(window: tk.Misc) -> Tuple[int, int, int, int]:
             max(240, work_h - chrome_h - _EDGE_MARGIN))
 
 
+def display_scale(window: tk.Misc) -> float:
+    """
+    Windows display scaling as a factor: 1.0 at 100%, 1.25 at 125%, 1.5 at 150%.
+
+    The app is DPI-aware, so sizes are real pixels while text and controls grow
+    with the scale. A window sized in fixed pixels therefore gets too small for
+    its own contents on a scaled screen. Exactly 1.0 on an ordinary display.
+    """
+    try:
+        scale = float(window.winfo_fpixels("1i")) / 96.0
+    except (tk.TclError, ValueError):
+        return 1.0
+    return 1.0 if abs(scale - 1.0) < 0.05 or scale <= 0 else scale
+
+
 def fit_size(window: tk.Misc, width: int, height: int) -> Tuple[int, int]:
-    """Shrink a requested size to something that actually fits on screen."""
+    """
+    Shrink a requested size to something that actually fits on screen.
+
+    The 320x240 floor scales with the display like everything else: at 100% it
+    quietly gave small windows (the sprint timer asks for less) enough room,
+    and left unscaled it stopped doing that once the buttons inside grew.
+    """
     _x, _y, room_w, room_h = usable_area(window)
-    return (max(320, min(int(width), room_w)),
-            max(240, min(int(height), room_h)))
+    scale = display_scale(window)
+    return (max(int(320 * scale), min(int(width), room_w)),
+            max(int(240 * scale), min(int(height), room_h)))
 
 
 def center_window(window: tk.Misc, width: int, height: int,
@@ -522,8 +765,14 @@ def center_window(window: tk.Misc, width: int, height: int,
     Also sets a minimum size, itself clamped, so a window can never be dragged
     smaller than the screen can show but also never demands more than exists -
     a minsize larger than the desktop is unfixable by the user.
+
+    The sizes asked for are the ones that suit a 100% display; they are scaled
+    up here for a scaled one, and then clamped like any other.
     """
     window.update_idletasks()
+    scale = display_scale(window)
+    width, height = int(width * scale), int(height * scale)
+    min_width, min_height = int(min_width * scale), int(min_height * scale)
 
     left, top, work_w, work_h = screen_work_area(window)
     chrome_w, chrome_h = window_chrome(window)
@@ -538,6 +787,7 @@ def center_window(window: tk.Misc, width: int, height: int,
     y = max(top, min(y, top + work_h - outer_h))
 
     window.geometry(f"{width}x{height}+{x}+{y}")
+    styling.style_titlebar(window)
 
     if min_width or min_height:
         floor_w = min(min_width or width, width)

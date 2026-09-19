@@ -24,6 +24,9 @@ _Trash/
 project.json
 project.json.bak
 
+# Pictures taken by tools/uishots/run.py (default output folder)
+uishots-out/
+
 # Local preferences and machine state
 novelforge-settings.json
 novelforge-session.json

@@ -21,7 +21,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 from ..config import theme
 from ..model import SCENE_STATUSES, STATUS_COLOURS
 from .dialogs import ReportWindow
-from .widgets import ScrolledText, center_window
+from .widgets import AutoScrollbar, ScrolledText, center_window
 
 CARD_W = 210
 CARD_H = 148
@@ -92,7 +92,7 @@ class Corkboard(tk.Toplevel):
         self.canvas = tk.Canvas(wrap, background=palette["panel"],
                                 highlightthickness=0, borderwidth=0)
         self.canvas.grid(row=0, column=0, sticky="nsew")
-        scroll = ttk.Scrollbar(wrap, orient="vertical", command=self.canvas.yview)
+        scroll = AutoScrollbar(wrap, orient="vertical", command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=scroll.set)
         scroll.grid(row=0, column=1, sticky="ns")
 

@@ -26,8 +26,18 @@ def app_root() -> Path:
 
 
 def projects_root() -> Path:
-    """Where novel projects live. Created on first access."""
-    p = app_root() / "Projects"
+    """
+    Where novel projects live. Created on first access.
+
+    NOVELFORGE_PROJECTS overrides the location, for the same reason
+    NOVELFORGE_SETTINGS exists: startup falls back to opening the first
+    project found here when no `last_project` is remembered, so any test
+    that launches the real window against an "empty" install would
+    otherwise open - and could write to - a real novel. It also lets
+    projects live on another drive.
+    """
+    override = os.environ.get("NOVELFORGE_PROJECTS")
+    p = Path(override) if override else app_root() / "Projects"
     p.mkdir(parents=True, exist_ok=True)
     return p
 

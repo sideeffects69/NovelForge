@@ -103,7 +103,10 @@ The UI (`novelforge/ui/`), Tkinter, all of it live:
 | `storyviews.py` | The four story-graph windows |
 | `writing.py` | Editor intelligence: completion, live spelling/grammar marks |
 | `dialogs.py` | Modal `Dialog` subclasses and non-modal tool windows |
-| `widgets.py` | Small reusable widgets, incl. `center_window()` (see rule below) |
+| `widgets.py` | Small reusable widgets, incl. `center_window()` (see rule below), `AutoScrollbar`, `Gauge`, `StatusBar`, and `ScrolledText.set_report()` |
+| `styling.py` | The look of the whole app: theme tokens, the one ttk style, the Tk option-database defaults, title-bar tint, toolbar icons, tooltips (see "The look of the app") |
+| `palette.py` | The Ctrl+Shift+P command palette, built by walking the real menus |
+| `welcome.py` | The first-run screen, shown only when there is no novel |
 
 **There is no `ui/theme.py` any more.** A ~600-line second design system
 (WCAG-contrast-checked palettes, sv-ttk integration, elevation-based
@@ -117,6 +120,11 @@ visually check a Tkinter canvas from here and no test suite, is a real risk;
 don't do it without actually running the app and looking at it, ideally with
 the user watching.
 
+*(2026-09-19: the theme layer was rebuilt anyway - see "The look of the app" -
+but as `ui/styling.py`, derived from `config.THEMES`, and verified window by
+window with `tools/uishots/`. The advice above about looking at real
+screenshots is why that went well.)*
+
 ## Rules that are load-bearing, not style preference
 
 **1. `.docx` is the truth; `project.json` is only metadata.** Ordering,
@@ -127,12 +135,22 @@ standard. Don't add a second place prose can live.
 **2. Every window must fit the screen it opens on**, at any resolution or
 Windows display scaling — see `README.md`'s "A rule for anyone changing this
 code". Size windows through `center_window()` in `widgets.py`; never call
-`.geometry()` directly. **Caveat:** the README says this is "enforced by a
-test that opens all 23 windows at six resolutions" — as of this writing
-**no such test file exists anywhere in the repo or its git history.** Either
-that test was run ad hoc in a past session and never committed, or the claim
-is aspirational. Don't trust it as a safety net; if you touch window sizing,
-check by hand, and consider actually writing and committing that test.
+`.geometry()` directly. **Caveat:** the README says this is meant to be
+enforced by a test that opens every window at six resolutions - **that test
+still does not exist.** What exists (2026-09-19) is the GUI suite in `tests/`:
+it opens every tool window and dialog, the main window at 1340x680 and at its
+minimum size, and at a simulated 125% display scaling, and fails if any content
+is clipped, hidden or squeezed. That is real and it has caught real regressions,
+but it is three sizes, not six; adding 1024x768 and a large desktop is the
+obvious next step. The developer's own screen is 1366x768 at 100% scaling, so
+that is the size that matters first.
+
+**Sizes asked of `center_window()` are for a 100% display** and are multiplied
+by `display_scale()` before being clamped to the screen. The app is
+per-monitor-DPI aware, so sizes are real pixels while text and controls grow
+with the scale; a window sized in fixed pixels used to be too small for its own
+contents at 125% (the sprint timer, the corkboard header). The 320x240 floor in
+`fit_size()` scales too. At 100% the factor is exactly 1.0.
 
 **3. Speed over polish, always.** The user's own words: *"make it work
 amazing, no lags, super fast... I dont care of any fancy ui but make it
@@ -163,31 +181,86 @@ workable and user friendly."* Concretely:
      you build another canvas-based view, apply this from the start rather
      than rediscovering it.
 
-**4. No hard-coded colours, radii, shadows or fonts outside the theme
-tokens** in `ui/theme.py`. Three themes exist as separate designs, not
-inversions of each other (per the design-system notes — dark, light, sepia).
+**4. No hard-coded colours or fonts outside the theme tokens.** Colours come
+from `config.THEMES` through `styling.tokens()`; fonts are Segoe UI via
+`styling.UI_FONT`. A colour passed to a widget constructor overrides the Tk
+option database that `styling.apply()` fills in, so for classic Tk widgets
+prefer letting the database supply it. (Four themes exist: light, dark, warm,
+premium - `ui/theme.py` no longer exists.)
 
-## There is no automated test suite for `novelforge/`
+## Tests
 
-Despite comments/README text implying one exists (see rule #2's caveat),
-`git log --all` shows no test file was ever committed. At minimum, before
-calling a change done: `python -m py_compile` the files you touched, and
-where practical exercise the changed function directly (e.g. via a throwaway
-`python -c "..."` import, as done for `mapmaker.py`'s label cache during the
-2026-09 map-performance fix) rather than trusting it by inspection alone.
-Building a real, committed `pytest` suite — starting with the window-fit
-check the README already claims exists — would be a good, scoped project for
-a future session; ask before taking it on, since it's a meaningful chunk of
-work on its own.
+    python -m unittest discover -s tests -t .        # about 4 minutes (44 tests)
 
-`web/` does have real automated checks: `npm run test` in `web/` runs
-typecheck + lint + format-check, and `npm run shots` (Playwright, via
-`web/scripts/shoot.mjs`) screenshots every theme — genuinely useful for
-catching visual regressions in the parts of `web/` that exist.
+Needs Windows and a display for the GUI half (skipped otherwise); the windows
+open and close on the desktop while it runs. Do not run it as
+`python tests/test_x.py`: the `-t .` form is what makes `tests/__init__.py` run
+first. One module: `python -m unittest tests.test_gui_walk`.
+
+- **`tests/__init__.py` must run before anything imports `novelforge`.** It
+  points `NOVELFORGE_SETTINGS` and `NOVELFORGE_PROJECTS` at a temp folder,
+  because `config.settings` is read once at import into a singleton. Every test
+  module calls `require_isolation()`, which skips rather than run against real
+  data if novelforge was imported first. `Projects/`, `novelforge-settings.json`
+  and `novelforge-session.json` are **gitignored**, so `git status` cannot tell
+  you whether a test touched them - compare their modification times instead.
+- `gui_support.py` - `Sandbox`: a real `App` on the demo novel
+  (`tools/uishots/seed.py`), with every native dialog (`messagebox`,
+  `filedialog`, `colorchooser`), `os.startfile` and `subprocess.Popen` stubbed
+  (a real dialog blocks the run forever, and the others launch programs).
+  Dialogs answer No/Cancel, so nothing destructive ever goes ahead. Each stub
+  records that it was called. `hang_guard()` kills the run after a timeout
+  instead of freezing it. `Sandbox.stop()` cancels pending `after` timers and
+  always destroys the window: a window left alive stays tkinter's default root,
+  and the next test's images are then created against the wrong interpreter
+  ("image pyimageNN doesn't exist").
+- `test_styling.py` - colour maths, every theme's contrast, palette matching.
+  Pure logic, instant.
+- `test_gui_smoke.py` - the layout: menu strip and clones, every theme fits,
+  runtime theme switching recolours widgets already on screen, toolbar
+  collapse, save indicator, palette, reports, dialogs checked for clipping, map
+  opening fitted, distraction-free.
+- `test_gui_walk.py` - uses every control once. Every menu command (toggles
+  twice), every toolbar button, every shortcut handler, every row kind in the
+  binder (and that the inspector's fields fit the pane), every right-click menu
+  entry, **every button inside every tool window** (`Walker.tour`, which also
+  visits each notebook tab), then the flows: first run -> create a novel ->
+  open another; type -> save -> reopen; autosave; edit in Word -> reload;
+  undo/redo; theme switching keeping the writing. A watcher closes any modal
+  dialog a command opens (the command does not return until it is gone). Each
+  step also checks nothing raised inside a Tk callback, the app still has the
+  sandbox novel open, and any window it opened fits. This walk **does** invoke
+  Open Recent and Story Structure, which the old advice below says never to walk
+  - that advice is about the writer's real data; here `require_isolation()`
+  guarantees the sandbox.
+- `test_gui_scaling.py` - the whole interface at a simulated 125% display. The
+  scale is simulated by setting `tk scaling` before the window is built. The map
+  maker is left out: fifteen toolbar buttons need about 1500px at 125%, and
+  Windows will not let a window exceed the real screen.
+- `test_launch.py` - the real entry point: `python -m novelforge` as its own
+  process (what `Write.bat` runs), once with a novel and once as a fresh
+  install; waits for the window, posts WM_CLOSE (what the X button does), and
+  checks a clean exit, saved geometry, the closing backup, and no
+  `novelforge-errors.log`. **It finds the window by process id, never by title
+  alone:** a fresh install is titled just "NovelForge", which a writer's own open
+  window can also be, and the test closes whatever it finds.
+- Every check here has been proven able to fail by breaking the thing it guards
+  (a menu command, a corkboard button, the map toolbar's padding, the theme
+  recolour, the display scaling) and confirming the test names the culprit. Do
+  the same when you add or change one - a check that cannot fail proves nothing.
+  The clip detector (`tools/uishots/clipping.py`) once passed a synthetic case it
+  should have failed, because `pack` *unmaps* what does not fit instead of
+  letting it overflow like grid/place.
+- Still worth adding: 1024x768 and a large desktop; a look at the real Windows
+  10 title bar (the tint is Windows 11 only).
 
 ## If you drive the real GUI to test it: this bit nearly wrote real user data
 
-There's no harness for this, so a 2026-09 session built one: seed a
+**Use `tools/uishots/run.py` (below) rather than writing another one.** It
+already does everything here safely. The history that follows is why it is
+built the way it is.
+
+There was no harness at first, so a 2026-09 session built one: seed a
 throwaway `Project.create()`, point `NOVELFORGE_SETTINGS` at a matching
 throwaway settings file, launch the real `App()`, walk the menu tree calling
 each command's Tcl name directly (`app.tk.call(cmd_name)` — exactly what a
@@ -234,6 +307,33 @@ rather than walking into them. Everything else — the ~80 ordinary commands —
 walked cleanly with zero exceptions across two full runs, which is a decent
 amount of real confidence for an app with no test suite.
 
+### `tools/uishots/` - seeing what the window actually looks like
+
+    python tools/uishots/run.py --out shots --themes warm premium --welcome
+
+Seeds a demo novel in a temp folder, launches the real window against it in a
+fresh process per theme, saves PNGs, reports anything that does not fit its
+window, and deletes the sandbox. Facts that cost time to learn:
+
+- **Capture by window handle** (`PrintWindow`, `capture.py`), never a screen
+  region: `ImageGrab` once photographed the writer's own open NovelForge
+  window instead of the test window.
+- **The developer's screen is 1366x768.** A window bigger than that is
+  photographed with black where the screen ends. Those bands look like bugs -
+  the "clipped inspector" and "missing status bar" chased during the 2026-09-19
+  pass were exactly that - and are not. `shots.py` sizes the window to fit
+  (1340x680+0+0).
+- `cmd_theme` **persists into the sandbox's settings file**, so a script that
+  cycles themes leaves the sandbox on the last one. Reseed.
+- The settings file must exist before the first `import novelforge` (see the
+  singleton note above), so seeding runs in its own process.
+- Popup menus are native windows of class `#32768`, not Tk children:
+  `EnumWindows` for the current pid, then `PrintWindow`. `keybd_event` reaches
+  an open popup, so Down/Right/Enter drive it - that is how the in-app menu bar
+  and the cascade were verified end to end.
+- `pack` unmaps what does not fit; grid/place let it hang over the edge (see
+  the clip detector under Tests).
+
 ## Menu organisation (as of 2026-09)
 
 Two deliberate moves, made after actually walking every menu command and
@@ -250,6 +350,11 @@ Outline a Tools command when it was always under Manuscript - fixed too.
 If you reorganise a menu again, grep the README for the old `"X → Y"`
 phrasing first; it's prose, not generated from the menu code, so nothing
 catches this automatically.
+
+The menus are still one `tk.Menu` tree built in `App._build_menu`, but since
+2026-09-19 that tree is never attached to the window - the app draws its own
+menu bar from it (see "The look of the app"). Add commands to the tree exactly
+as before; the bar, the palette and the tests all read it.
 
 ## Map maker: what already exists (check before "adding" it again)
 
@@ -304,9 +409,9 @@ instead, which is worse and easy to miss since nothing raises an exception.
 ## Security posture
 
 Reviewed 2026-09, manually — the `security-review` skill's own frontmatter
-shells out to `git diff origin/HEAD...`, which fails outright since this
-repo has no remote configured. Don't rely on that skill here until one
-exists.
+shells out to `git diff origin/HEAD...`, which failed outright because this
+repo had no remote configured. It has one now (`origin`, the GitHub repo), so
+the skill may work; that hasn't been retried.
 
 The threat model is deliberately small: single local user, no accounts, no
 outbound network calls anywhere in `novelforge/`, and the one local server
@@ -394,20 +499,15 @@ each palette and looking at a real screenshot, not by reading the colour
 values and assuming they took - the white-box failure mode is invisible
 in code review.
 
-**Known remaining gap, not yet fixed**: several other `tk.Listbox`
-widgets - `dialogs.py` (scene picker, a couple of list-based dialogs),
-`storyviews.py` (name-suggestion and search-result lists),
-`writing.py` (the autocomplete popup) - are still unstyled for the same
-reason `multiline()` was, in secondary/occasional windows rather than the
-constant-use ones. Same fix, same three-line pattern
-(`background=palette["bg"], foreground=palette["fg"],
-selectbackground=palette["select"]`), just not yet applied - grep each
-file for `tk.Listbox(` to find them. Tkinter has no drop-shadow, backdrop-
-blur, or smooth hover-elevation regardless of any of this; the parts of
-the spec written assuming a browser (glow, 150ms transitions on every
-control) don't have a faithful desktop equivalent without replacing native
-widgets with hand-drawn Canvas ones - a real, separate, much larger
-project. Get explicit sign-off before ever starting that.
+**Closed 2026-09-19:** the remaining unstyled `tk.Listbox`/`tk.Text` widgets
+are now covered centrally by the Tk option database (below), not one at a time.
+The rest of this section describes the first Premium pass; read "The look of
+the app" for the current state. Tkinter still has no drop-shadow, backdrop-blur
+or smooth hover-elevation; the parts of the spec written assuming a browser
+(glow, 150ms transitions on every control) don't have a faithful desktop
+equivalent without replacing native widgets with hand-drawn Canvas ones - a
+real, separate, much larger project. Get explicit sign-off before ever
+starting that.
 
 The full CSS palette, exactly as specified, is recorded in `site/style.css`
 as CSS custom properties (`--bg`, `--surface-1`...`--surface-3`, `--brand`,
@@ -435,6 +535,137 @@ update both copies.
 **The download link points at `/releases/latest`**, not a specific
 version, so it never needs updating when a new release is tagged - just
 tag the release and the link is already current.
+
+## The look of the app (rebuilt 2026-09-19)
+
+The desktop UI was modernised in one pass and verified by photographing every
+window in two themes (`tools/uishots/`), not by reading code. What exists, and
+why each piece is the way it is:
+
+- **One flat "clam" style for every theme** (`ui/styling.py`). Windows' native
+  "vista" ttk theme ignores every ttk colour, which is why the app looked like a
+  2005 dialog box and why the dark palettes had white boxes floating in them.
+  `styling.apply()` runs at start-up and on a theme change and *derives*
+  everything (hover, borders, row selection, legible secondary text) from the
+  nine keys in `config.THEMES` - a theme is still one dict. This supersedes the
+  earlier arrangement where only Premium used clam and Classic kept native
+  chrome: warm and light are flat now too.
+- **Classic Tk widgets** (Text, Listbox, Entry, Canvas...) that `ttk.Style`
+  cannot reach take their colours from the Tk *option database* (`option_add`,
+  priority 60). That supplies defaults only; anything set explicitly still wins,
+  so the editor and map canvases keep their own colours.
+- **Title bar** is tinted through DWM (`styling.style_titlebar`; Windows 11, a
+  silent no-op elsewhere) from `center_window()`, so every window gets it. Tk
+  rebuilds its top-level window when first mapped, which throws the attribute
+  away, so it is re-applied on `<Map>`.
+- **The menu bar is drawn by the app** (`App._build_menu_strip`), because
+  Windows owns the native one and gives Tk no way to recolour it - a white
+  strip across a dark window. The `tk.Menu` tree from `_build_menu` stays the
+  source of truth and is never attached to the window; each button gets a
+  `menu clone` of a top-level menu. Two Tk rules cost time: `tk::MbPost`
+  refuses a menu that is not a *descendant of its menubutton* (so you cannot
+  point a Menubutton at a shared menu), and `clone` is what keeps dynamic
+  entries - the Undo label, Open Recent - live. Popup colours are set on the
+  originals *before* cloning (`_theme_menu`); a theme change rebuilds the strip.
+  The detached bar's index 0 is a tearoff entry: skip by `type()`, never index
+  blindly. `menu_bar_height()` returns 0 for the main window now.
+- **Toolbar**: icons come from the system icon font (Segoe Fluent Icons /
+  MDL2 via Pillow, `styling.IconSet`), so no icon files ship; without the font
+  the buttons just show their text. Below the width the labels need it shows
+  icons only (tooltips name each button and its shortcut). The collapse is
+  decided against the width the full toolbar needed when it was built, not its
+  current width, so switching modes can't feed back and flicker.
+- **Command palette** (`palette.py`, Ctrl+Shift+P - Ctrl+K is the corkboard).
+  Built each time by walking the real menus, so it cannot drift from them; runs
+  an entry with `menu.invoke`, exactly what a click does.
+- **First-run screen** (`welcome.py`) overlays the panes only when there is no
+  novel: start-up otherwise opens the first project, so it never shows a recent
+  list.
+- **Reports** (`ScrolledText.set_report`): every generated report is plain text
+  built with the same conventions - a title over `====`, ALL-CAPS section names,
+  `----` rules, `!!`/`~` severity markers. `set_report` styles those and keeps a
+  monospace body so aligned tables still line up; nothing about how reports are
+  generated changed. Used by the in-pane detail view, `ReportWindow`, and the
+  story-graph tabs. Tk paints a tag's background across its line *spacing*, so
+  a rule is a 1px line with separate blank lines around it, not spacing.
+- **A theme change recolours what is already on screen** (`styling.retheme`,
+  called from `_apply_theme`). ttk widgets follow the style by themselves and
+  new classic Tk widgets read the option database, but a Text, Listbox or Entry
+  built *before* the switch kept the old colours - View > Theme left the
+  inspector's boxes cream in a dark window until another row was clicked. It
+  walks every window, including open tool windows; the editor is skipped
+  because `_style_editor` owns it (ghost mode hides its text). A report window's
+  heading colours are baked in when it is rendered and are not redone.
+  (Re-adding an option-database value at the same priority *does* take effect
+  immediately; the stale colours were never the database's fault.)
+- **Right-click menus** get themed colours from `*Menu.*` in the option database,
+  since they are bare `tk.Menu`s built on the spot. The in-app menu bar's menus
+  are coloured explicitly (`_theme_menu`) before being cloned.
+- **Button rows wrap** (`widgets.flow`, used by `Form.button_row`): the scene
+  inspector has four buttons in a ~330px pane and the last one hung off the
+  edge once the buttons gained padding. It also survives a dragged sash.
+  `Compact.TButton` has a natural width (clam's 11-character minimum is
+  overridden); an explicit `width=` on a widget still wins, which the map
+  toolbar relies on.
+- **Always pass `master=` to `ImageTk.PhotoImage`.** Without it the image
+  belongs to whichever Tk root is tkinter's default - fine with one window,
+  wrong the moment a process has had two (the tests).
+- The placeholder window icon follows the theme accent; a real
+  `brand/icon.png` does not change with the theme.
+- **Save-state indicator** in the status bar. `StatusBar.set_state` runs from
+  the per-keystroke modified handler, so its unchanged path must stay one
+  comparison (the Speed rule above).
+- **Buttons**: `TButton` (default), `Accent.TButton` (primary), `Tool.TButton`
+  (borderless, toolbar), `Compact.TButton` (dense rows). clam gives every
+  button an 11-character *minimum* width; `Tool.TButton` overrides it to 0.
+  **The map editor's toolbar has fifteen buttons in a row and overflowed off the
+  edge - hiding Help and the coordinate readout - when the default padding
+  grew;** it uses `Compact.TButton`, and the clipped-content test guards it.
+- **Scroll bars** are a slim thumb (`AutoScrollbar`), and *disabled* rather than
+  hidden when there is nothing to scroll: hiding changes the width the content
+  has, and wrapped text can then re-flow back and forth around the threshold.
+- **Map editor** stays "fit to window" until the writer pans or zooms
+  (`_auto_fit`). The first map used to be fitted while the window was still
+  being built and opened as a thumbnail (about a quarter of the canvas width,
+  now about 96%).
+- Secondary text uses `text_dim` (at least 4.5:1) rather than the palette's
+  `dim` (about 2:1 on the warm panel); tree status colours are nudged only as
+  far as needed to stay legible on the sidebar (`ensure_contrast`).
+- **Not done, deliberately:** shadows, blur, rounded corners and smooth hover
+  transitions (not available without hand-drawn Canvas widgets); the check-box
+  indicator is clam's plain square with a cross; and `premium` is **not** the
+  default theme - `warm` is. Changing `DEFAULT_SETTINGS["theme"]` would only
+  affect new installs (an existing settings file persists its theme), and it was
+  left as the writer's decision.
+- The centre header's title label is squeezed by about 19px at the 900px
+  minimum window width (long scene titles are cut short). It predates this work
+  and is accepted; the clip detector reports it, and the test ignores it.
+
+## Releasing a new version
+
+Releases are made on GitHub, and there is **no `gh` CLI** on the developer's
+machine. The site's Download button points at `/releases/latest`, so it shows
+the new version only once a *Release* exists - pushing a tag alone does not
+change it.
+
+1. Bump `APP_VERSION` in `novelforge/__init__.py` (the About box and the
+   settings file read it). `web/package.json` has its own, unfinished version
+   and is left alone.
+2. Run the whole test suite.
+3. Commit, `git tag vX.Y.Z`, `git push origin main vX.Y.Z`.
+4. Create the Release for the tag. Follow `v1.0.0`'s shape: title
+   "NovelForge X.Y - what changed", a "Getting started" (install Python 3.13+,
+   download **Source code (zip)**, double-click `Write.bat`), a short "What's
+   new", and no attached files - people take GitHub's own source zip.
+5. Anything pushed under `site/` deploys Pages by itself (about a minute; the
+   run is visible under the repo's Actions tab).
+6. Check it from the outside: download the tag's source zip into a short path
+   and run the test suite from *that*. It proves the published copy is complete
+   (nothing needed is gitignored) and not just the working folder.
+
+The `v1.0.0` release notes still link to the pre-rename username
+(`om-abhyankar.github.io`), which is dead - GitHub Pages does not redirect a
+renamed account. Use `sideeffects69` in anything new.
 
 ## Running it
 
