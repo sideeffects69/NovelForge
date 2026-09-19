@@ -7,7 +7,7 @@ Nothing ever leaves this machine.
 """
 
 APP_NAME = "NovelForge"
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.1.0"
 SCHEMA_VERSION = 1
 
 __all__ = ["APP_NAME", "APP_VERSION", "SCHEMA_VERSION"]
