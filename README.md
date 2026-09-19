@@ -3,12 +3,12 @@
 **A local novel-writing studio that writes real Word documents, not a
 database you hope to export from someday.**
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6.svg)](#requirements)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platform: Windows](https://img.shields.io/badge/Platform-Windows-0078D6.svg)](#requirements)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-3776AB.svg)](#requirements)
-[![No account, no cloud, no telemetry](https://img.shields.io/badge/cloud-none-success.svg)](#where-your-work-lives)
-[![Support this project](https://img.shields.io/badge/support-donate-ff69b4.svg)](#support-novelforge)
-[![Website](https://img.shields.io/badge/website-om--abhyankar.github.io%2FNovelForge-6e3a22.svg)](https://sideeffects69.github.io/NovelForge/)
+[![No account, no cloud, no telemetry](https://img.shields.io/badge/Cloud-None-success.svg)](#where-your-work-lives)
+[![Support this project](https://img.shields.io/badge/Support-Donate-ff69b4.svg)](#support-novelforge)
+[![Website](https://img.shields.io/badge/website-NovelForge-6e3a22.svg)](https://sideeffects69.github.io/NovelForge/)
 
 Every single thing NovelForge creates — every scene, every character sheet,
 every map — is a real Microsoft Word document sitting in a folder on your own
