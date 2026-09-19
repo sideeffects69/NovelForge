@@ -37,11 +37,11 @@ class WelcomeView(ttk.Frame):
         column = ttk.Frame(self)
         column.place(relx=0.5, rely=0.47, anchor="center")
 
-        icons = getattr(app, "_app_icons", None) or []
-        if icons:
-            tk.Label(column, image=icons[-1], borderwidth=0,
+        self._logo = styling.brand_image(app, int(112 * getattr(app, "ui_scale", 1.0)))
+        if self._logo is not None:
+            tk.Label(column, image=self._logo, borderwidth=0,
                      background=styling.current_tokens()["panel"]
-                     ).grid(row=0, column=0, pady=(0, 14))
+                     ).grid(row=0, column=0, pady=(0, 16))
         ttk.Label(column, text=f"Welcome to {APP_NAME}",
                   style="Hero.TLabel").grid(row=1, column=0)
         ttk.Label(

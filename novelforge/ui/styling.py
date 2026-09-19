@@ -585,46 +585,70 @@ class IconSet:
         return image
 
 
+def _brand_source(t: Dict):
+    """
+    The logo as a PIL image: brand/icon.png (the writer's own N-mark), or - only
+    if that file is missing - a plain accent-coloured "N", so a broken install
+    still shows a mark instead of Tk's default feather.
+    """
+    from PIL import Image, ImageDraw, ImageFont
+
+    brand = app_root() / "brand" / "icon.png"
+    if brand.exists():
+        try:
+            return Image.open(brand).convert("RGBA")
+        except Exception:
+            pass
+    size = 256
+    source = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(source)
+    draw.rounded_rectangle((8, 8, size - 8, size - 8), radius=56, fill=t["accent"])
+    try:
+        font = ImageFont.truetype(
+            str(Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "segoeuib.ttf"), 168)
+    except Exception:
+        font = ImageFont.load_default()
+    draw.text((size / 2, size / 2 + 6), "N", font=font, fill=t["on_accent"], anchor="mm")
+    return source
+
+
+def _sized(source, px: int):
+    """Downscale the logo; small sizes get a touch of sharpening so the mark stays legible."""
+    from PIL import Image, ImageFilter
+
+    out = source.resize((px, px), Image.LANCZOS)
+    if px <= 64:
+        out = out.filter(ImageFilter.UnsharpMask(radius=0.8, percent=70, threshold=2))
+    return out
+
+
 def app_icons(root: tk.Misc, t: Optional[Dict] = None) -> List[object]:
     """
-    Window icons at several sizes.
+    Window icons at several sizes - the title bar, the taskbar, Alt-Tab.
 
-    `brand/icon.png` next to the package wins if it exists (drop the real logo
-    there). Otherwise a plain mark is drawn, which is still better than Tk's
-    default feather in every title bar and on the taskbar.
+    Windows picks the size it needs from the list, so it is given the real range
+    rather than one image that gets stretched.
     """
     t = t or current_tokens()
     try:
-        from PIL import Image, ImageDraw, ImageFont, ImageTk
+        from PIL import ImageTk
 
-        source = None
-        brand = app_root() / "brand" / "icon.png"
-        if brand.exists():
-            try:
-                source = Image.open(brand).convert("RGBA")
-            except Exception:
-                source = None
-        if source is None:
-            size = 256
-            source = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-            draw = ImageDraw.Draw(source)
-            draw.rounded_rectangle((8, 8, size - 8, size - 8), radius=56,
-                                   fill=t["accent"])
-            try:
-                font = ImageFont.truetype(
-                    str(Path(os.environ.get("WINDIR", r"C:\Windows"))
-                        / "Fonts" / "segoeuib.ttf"), 168)
-            except Exception:
-                font = ImageFont.load_default()
-            draw.text((size / 2, size / 2 + 6), "N", font=font,
-                      fill=t["on_accent"], anchor="mm")
-        photos = []
-        for px in (16, 24, 32, 48, 64):
-            photos.append(ImageTk.PhotoImage(
-                source.resize((px, px), Image.LANCZOS), master=root))
-        return photos
+        source = _brand_source(t)
+        return [ImageTk.PhotoImage(_sized(source, px), master=root)
+                for px in (16, 24, 32, 48, 64, 128, 256)]
     except Exception:
         return []
+
+
+def brand_image(root: tk.Misc, px: int, t: Optional[Dict] = None):
+    """The logo as a PhotoImage `px` wide - for the welcome screen and About."""
+    try:
+        from PIL import ImageTk
+
+        return ImageTk.PhotoImage(_sized(_brand_source(t or current_tokens()), px),
+                                  master=root)
+    except Exception:
+        return None
 
 
 # --------------------------------------------------------------------------

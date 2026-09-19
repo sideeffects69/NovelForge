@@ -3817,8 +3817,22 @@ your voice beats every rule in them.
 
 Python {".".join(str(v) for v in __import__("sys").version_info[:3])}
 """
+        def header(frame: ttk.Frame) -> None:
+            self._about_logo = styling.brand_image(
+                self, int(88 * self.ui_scale), self.tokens)
+            if self._about_logo is not None:
+                tk.Label(frame, image=self._about_logo, borderwidth=0,
+                         background=self.tokens["panel"]).grid(
+                    row=0, column=0, rowspan=3, padx=(4, 16))
+            ttk.Label(frame, text=APP_NAME, style="Title.TLabel").grid(
+                row=0, column=1, sticky="sw")
+            ttk.Label(frame, text=f"Version {APP_VERSION}",
+                      style="Status.TLabel").grid(row=1, column=1, sticky="w")
+            ttk.Label(frame, text="Plan. Write. Build your story.",
+                      style="Hint.TLabel").grid(row=2, column=1, sticky="nw")
+
         dialogs.ReportWindow(self, f"About {APP_NAME}", body,
-                             width=720, height=680)
+                             width=720, height=700, header=header)
 
     # ==================================================================
     # Shutdown
@@ -3888,6 +3902,24 @@ Python {".".join(str(v) for v in __import__("sys").version_info[:3])}
 # ==========================================================================
 # Entry point
 # ==========================================================================
+
+
+def set_app_identity() -> None:
+    """
+    Give the process its own Windows identity.
+
+    Without one, the taskbar groups every Tk window under python.exe and shows
+    Python's icon on it, whatever icon the window sets. With one, the taskbar
+    shows NovelForge's own logo and keeps its windows together. Purely cosmetic,
+    so a failure is silent.
+    """
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "NovelForge.Desktop")
+    except Exception:
+        pass
 
 
 def enable_dpi_awareness() -> None:
@@ -3990,6 +4022,7 @@ def _friendly_error(exc_type, value) -> str:
 
 
 def main() -> int:
+    set_app_identity()
     enable_dpi_awareness()
     app = App()
 

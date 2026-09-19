@@ -616,7 +616,8 @@ class ReportWindow(tk.Toplevel):
 
     def __init__(self, parent, title: str, body: str,
                  width: int = 860, height: int = 640,
-                 actions: Optional[Sequence[Tuple[str, Callable[[], None]]]] = None
+                 actions: Optional[Sequence[Tuple[str, Callable[[], None]]]] = None,
+                 header: Optional[Callable[[ttk.Frame], None]] = None
                  ) -> None:
         super().__init__(parent)
         self.title(title)
@@ -626,12 +627,20 @@ class ReportWindow(tk.Toplevel):
         container.grid(row=0, column=0, sticky="nsew")
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
-        container.rowconfigure(0, weight=1)
+        # `header` builds an optional block above the text (the About window's
+        # logo); everything below it shifts down one row.
+        top = 0
+        if header is not None:
+            head = ttk.Frame(container)
+            head.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+            header(head)
+            top = 1
+        container.rowconfigure(top, weight=1)
         container.columnconfigure(0, weight=1)
 
         self.viewer = ScrolledText(container, height=30, wrap="word",
                                    font=("Consolas", 10))
-        self.viewer.grid(row=0, column=0, sticky="nsew")
+        self.viewer.grid(row=top, column=0, sticky="nsew")
         self.viewer.text.configure(
             background=theme["bg"], foreground=theme["fg"],
             insertbackground=theme["caret"], selectbackground=theme["select"],
@@ -640,7 +649,7 @@ class ReportWindow(tk.Toplevel):
 
         self._body = body
         self._bar = ttk.Frame(container)
-        self._bar.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+        self._bar.grid(row=top + 1, column=0, sticky="ew", pady=(8, 0))
         self._extra: List[ttk.Button] = []
 
         for label, command in (actions or []):
