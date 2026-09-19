@@ -654,14 +654,31 @@ change it.
 2. Run the whole test suite.
 3. Commit, `git tag vX.Y.Z`, `git push origin main vX.Y.Z`.
 4. Create the Release for the tag. Follow `v1.0.0`'s shape: title
-   "NovelForge X.Y - what changed", a "Getting started" (install Python 3.13+,
-   download **Source code (zip)**, double-click `Write.bat`), a short "What's
-   new", and no attached files - people take GitHub's own source zip.
+   "NovelForge X.Y" (`v1.0.0` is "NovelForge 1.0", `v2.1.0` is "NovelForge 2.1"),
+   a short "What's new" written for a writer, a "Getting started" (install
+   Python 3.13+, download **Source code (zip)**, double-click `Write.bat`), an
+   "Upgrading" note (novels live in `Projects/` and preferences in
+   `novelforge-settings.json`, both inside the install folder - copy them
+   across), and no attached files - people take GitHub's own source zip.
+   Without `gh`, either use the website (Releases > Draft a new release > pick
+   the tag > paste the notes) or the API, which is how 2.1.0 was made: POST
+   `{tag_name, target_commitish, name, body, draft, prerelease, make_latest}` to
+   `https://api.github.com/repos/sideeffects69/NovelForge/releases` with the
+   token Git Credential Manager already holds. Get it with `git credential
+   fill` (protocol=https, host=github.com) and `GCM_INTERACTIVE=never` so it can
+   never open a prompt; keep it in memory, send it in one header, never print or
+   store it. A `201` answer carries the release URL.
 5. Anything pushed under `site/` deploys Pages by itself (about a minute; the
    run is visible under the repo's Actions tab).
-6. Check it from the outside: download the tag's source zip into a short path
-   and run the test suite from *that*. It proves the published copy is complete
-   (nothing needed is gitignored) and not just the working folder.
+6. Check it from the outside, not just from the working folder:
+   `https://github.com/sideeffects69/NovelForge/releases/latest` must redirect to
+   the new tag (that is the site's Download button); the Pages run for the push
+   must be green (`api.github.com/repos/sideeffects69/NovelForge/actions/runs`);
+   and the live screenshots must be byte-identical to `site/assets/screenshots/`.
+   Then download the tag's source zip into a short path (`C:
+f_rel`) and run
+   the test suite from *that* - it proves the published copy is complete
+   (nothing needed is gitignored), which the working folder cannot.
 
 The `v1.0.0` release notes still link to the pre-rename username
 (`om-abhyankar.github.io`), which is dead - GitHub Pages does not redirect a
