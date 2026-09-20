@@ -4,11 +4,19 @@ The map editor window.
 Draws the shared primitive display list from `mapmaker` onto a Tkinter Canvas,
 so the editing view and the exported PNG/SVG are the same picture.
 
-Performance approach: a full redraw rebuilds every canvas item, which costs
-tens of milliseconds on a busy map. That is fine for zoom, pan and selection,
-but far too slow for a mouse-motion event. So an in-progress stroke is drawn as
-one temporary canvas item and the full redraw happens only when the stroke
-ends. The parchment texture is rendered once per zoom level and cached.
+Performance approach, in three layers:
+
+* `mapmaker.build_primitives` remembers the display list until the map itself
+  changes, so a redraw caused by zooming, panning or selecting rebuilds nothing;
+  it only turns the list into canvas items (tens of milliseconds on a busy map).
+* Even that is too slow for a mouse-motion event, so an in-progress stroke is
+  drawn as one temporary canvas item and the full redraw happens when it ends,
+  and panning moves the existing items (`canvas.move`).
+* Zooming scales the items on screen at once (`canvas.scale`) and does one real
+  redraw when the wheel has been quiet for a moment, to put line widths and type
+  right.
+
+The parchment texture is rendered once per zoom level and cached.
 """
 
 from __future__ import annotations
@@ -22,8 +30,10 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from .. import mapgen, mapmaker as mm
 from ..config import open_in_default_app, reveal_in_explorer, settings, theme
+from . import mapicons, styling
 from .dialogs import ChoiceDialog, Dialog, ReportWindow, TextPrompt
-from .widgets import Form, ScrollFrame, center_window
+from .widgets import (Card, Dropdown, Form, ScrollFrame, center_window,
+                      display_scale)
 
 Point = Tuple[float, float]
 
@@ -37,6 +47,9 @@ TOOLS = [
     ("erase", "Erase", "Click anything to delete it."),
     ("pan", "Pan", "Drag to move the view. Middle-drag works with any tool."),
 ]
+
+TOOL_ICONS = {"select": "select", "terrain": "terrain", "freehand": "freehand",
+              "pin": "pin", "label": "label", "erase": "erase", "pan": "pan"}
 
 UNDO_LIMIT = 40
 
@@ -93,7 +106,7 @@ class MapEditor(tk.Toplevel):
         self._build()
         self._load_first()
 
-        center_window(self, 1440, 900, min_width=820, min_height=520)
+        center_window(self, 1440, 900, min_width=900, min_height=540)
         self.protocol("WM_DELETE_WINDOW", self._close)
 
     # ==================================================================
@@ -101,142 +114,148 @@ class MapEditor(tk.Toplevel):
     # ==================================================================
 
     def _build(self) -> None:
-        palette = theme()
-
-        root = ttk.Frame(self, padding=6)
-        root.grid(row=0, column=0, sticky="nsew")
-        self.rowconfigure(0, weight=1)
+        t = styling.current_tokens()
+        self.tokens = t
+        scale = display_scale(self)
+        self.icons = mapicons.IconCache(self, max(16, int(round(18 * scale))))
+        # (widget, icon, colour token): icons are baked in a colour, so a theme
+        # change has to draw them again.
+        self._icon_buttons: List[Tuple[Any, str, str]] = []
+        self._rail_buttons: List[Tuple[Any, str]] = []
+        self.configure(background=t["window"])
+        self.rowconfigure(1, weight=1)
         self.columnconfigure(0, weight=1)
-        root.rowconfigure(1, weight=1)
-        root.columnconfigure(1, weight=1)
 
-        # -- toolbar ----------------------------------------------------
-        bar = ttk.Frame(root)
-        bar.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 6))
+        # -- the bar: what you do to a map, in order of how often ------------
+        strip = Card(self, radius=12, padding=8, fit="height", ground="window")
+        strip.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 8))
+        bar = strip.body
+        self.bar = bar
+        column = 0
 
-        ttk.Label(bar, text="Map").grid(row=0, column=0, padx=(0, 4))
-        self.map_picker = ttk.Combobox(bar, state="readonly", width=26)
-        self.map_picker.grid(row=0, column=1)
-        self.map_picker.bind("<<ComboboxSelected>>", self._on_pick_map)
-
-        buttons = [
-            ("Surprise Me", self.cmd_surprise),
-            ("Generate...", self.cmd_generate),
-            ("New", self.cmd_new_map),
-            ("Save", self.cmd_save),
-            ("Rename", self.cmd_rename),
-            ("Delete", self.cmd_delete_map),
-            ("|", None),
-            ("PNG", self.cmd_export_png),
-            ("SVG", self.cmd_export_svg),
-            ("To Word", self.cmd_export_docx),
-            ("|", None),
-            ("Undo", self.cmd_undo),
-            ("Redo", self.cmd_redo),
-            ("|", None),
-            ("Fit", self.cmd_zoom_fit),
-            ("Names", self.cmd_name_generator),
-            ("Edit Names", self.cmd_edit_names),
-            ("Help", self.cmd_help),
-        ]
-        column = 2
-        for label, command in buttons:
-            if label == "|":
-                ttk.Separator(bar, orient="vertical").grid(
-                    row=0, column=column, sticky="ns", padx=6)
-            else:
-                # A flat 8 was too narrow for "Surprise Me" and "Edit Names"
-                # (11 and 10 characters), which clipped them to "Surprise !"
-                # and "Edit Nam". Widening every button to fit the longest
-                # label overshot the other way: with 15 buttons in one row,
-                # that pushed the whole toolbar past the window's edge and
-                # hid "Help" and the coordinate readout entirely. Sizing
-                # each button to its own label keeps the row the same width
-                # it always was everywhere except the two that needed it.
-                ttk.Button(bar, text=label, command=command,
-                          style="Compact.TButton",
-                          width=max(6, len(label) + 1)).grid(
-                    row=0, column=column, padx=2)
+        def gap() -> None:
+            nonlocal column
+            ttk.Separator(bar, orient="vertical").grid(
+                row=0, column=column, sticky="ns", padx=8, pady=4)
             column += 1
 
-        self.coords_label = ttk.Label(bar, text="", style="Status.TLabel")
-        self.coords_label.grid(row=0, column=column, sticky="e", padx=(10, 0))
-        bar.columnconfigure(column, weight=1)
+        def put(widget, padx=(0, 4)) -> None:
+            nonlocal column
+            widget.grid(row=0, column=column, padx=padx)
+            column += 1
 
-        # -- left: tools ------------------------------------------------
-        left = ttk.Frame(root, width=210)
-        left.grid(row=1, column=0, sticky="nsew", padx=(0, 6))
-        left.columnconfigure(0, weight=1)
+        self.map_picker = ttk.Combobox(bar, state="readonly", width=22)
+        self.map_picker.bind("<<ComboboxSelected>>", self._on_pick_map)
+        put(self.map_picker, padx=(0, 6))
+        styling.Tooltip(self.map_picker, "Switch to another map in this novel")
+        gap()
+        put(self._bar_button("sparkle", "Surprise Me", self.cmd_surprise,
+                             "Build a random world in one click", "Accent.TButton",
+                             "on_accent"))
+        put(ttk.Button(bar, text="Generate...", command=self.cmd_generate))
+        gap()
+        put(self._bar_button("plus", "", self.cmd_new_map, "New map"))
+        put(self._bar_button("save", "", self.cmd_save, "Save this map  (Ctrl+S)"))
+        gap()
+        put(self._bar_button("undo", "", self.cmd_undo, "Undo  (Ctrl+Z)"))
+        put(self._bar_button("redo", "", self.cmd_redo, "Redo  (Ctrl+Y)"))
+        bar.columnconfigure(column, weight=1)                  # spacer
+        column += 1
+        export = self._bar_button("export", "Export", None,
+                                  "Save the map as a picture, a vector drawing "
+                                  "or a Word document")
+        self.export_menu = Dropdown(export, [
+            ("PNG picture...", self.cmd_export_png),
+            ("SVG vector drawing...", self.cmd_export_svg),
+            ("Word document...", self.cmd_export_docx),
+        ])
+        put(export)
+        more = self._bar_button("more", "", None, "More: rename, delete, names, help")
+        self.more_menu = Dropdown(more, [
+            ("Rename map...", self.cmd_rename),
+            ("Delete map...", self.cmd_delete_map),
+            ("-", None),
+            ("Name generator...", self.cmd_name_generator),
+            ("Edit name lists...", self.cmd_edit_names),
+            ("-", None),
+            ("Help", self.cmd_help),
+        ])
+        put(more, padx=0)
 
-        ttk.Label(left, text="TOOLS", style="Section.TLabel").grid(
-            row=0, column=0, sticky="w")
-        row = 1
-        for key, label, _hint in TOOLS:
-            ttk.Radiobutton(left, text=label, value=key, variable=self.tool,
-                            command=self._on_tool_change).grid(
-                row=row, column=0, sticky="w")
-            row += 1
+        # -- the body: tools, the map, and what is selected -------------------
+        body = ttk.Frame(self, style="Chrome.TFrame")
+        body.grid(row=1, column=0, sticky="nsew", padx=10)
+        body.rowconfigure(0, weight=1)
+        body.columnconfigure(1, weight=1)
 
-        self.tool_hint = ttk.Label(left, text="", style="Hint.TLabel",
-                                   wraplength=195, justify="left")
-        self.tool_hint.grid(row=row, column=0, sticky="w", pady=(4, 8))
-        row += 1
+        left = ttk.Frame(body, style="Chrome.TFrame")
+        left.grid(row=0, column=0, sticky="ns", padx=(0, 8))
+        left.rowconfigure(0, weight=1)
 
-        ttk.Label(left, text="TERRAIN", style="Section.TLabel").grid(
-            row=row, column=0, sticky="w")
-        row += 1
-        self.terrain_box = tk.Listbox(left, height=13, exportselection=False,
-                                      activestyle="none", borderwidth=1,
-                                      relief="solid", highlightthickness=0,
-                                      background=palette["bg"],
-                                      foreground=palette["fg"],
-                                      selectbackground=palette["select"],
-                                      selectforeground=palette["fg"])
+        # The tool rail: one icon per tool, the chosen one tinted.
+        rail = Card(left, radius=12, padding=6, fit="both", ground="window")
+        rail.grid(row=0, column=0, sticky="n", padx=(0, 8))
+        for row, (key, label, _hint) in enumerate(TOOLS):
+            button = ttk.Radiobutton(
+                rail.body, value=key, variable=self.tool, style="Rail.Toolbutton",
+                command=self._on_tool_change, takefocus=False)
+            button.grid(row=row, column=0, pady=1)
+            styling.Tooltip(button, label)
+            self._rail_buttons.append((button, TOOL_ICONS[key]))
+        self._paint_rail()
+
+        # The palette: what the chosen tool draws with.
+        palette = Card(left, radius=12, padding=10, fit="width", ground="window")
+        palette.grid(row=0, column=1, sticky="ns")
+        self.palette_scroll = ScrollFrame(palette.body)
+        self.palette_scroll.pack(fill="both", expand=True)
+        panel = self.palette_scroll.body
+        panel.columnconfigure(0, weight=1)
+        self.palette_scroll.canvas.configure(width=196)
+
+        self.tool_name = ttk.Label(panel, text="", style="Project.TLabel")
+        self.tool_name.grid(row=0, column=0, sticky="w")
+        self.tool_hint = ttk.Label(panel, text="", style="Hint.TLabel",
+                                   wraplength=180, justify="left")
+        self.tool_hint.grid(row=1, column=0, sticky="w", pady=(2, 10))
+
+        ttk.Label(panel, text="TERRAIN", style="Section.TLabel").grid(
+            row=2, column=0, sticky="w")
+        self.terrain_box = tk.Listbox(panel, height=9, exportselection=False,
+                                      activestyle="none")
         for key in mm.TERRAIN_ORDER:
-            self.terrain_box.insert("end", mm.TERRAIN[key]["label"])
+            self.terrain_box.insert("end", "  " + mm.TERRAIN[key]["label"])
         self.terrain_box.selection_set(0)
         self.terrain_box.bind("<<ListboxSelect>>", self._on_terrain_pick)
-        self.terrain_box.grid(row=row, column=0, sticky="ew")
-        row += 1
+        self.terrain_box.grid(row=3, column=0, sticky="ew", pady=(4, 0))
 
-        ttk.Label(left, text="PIN TYPE", style="Section.TLabel").grid(
-            row=row, column=0, sticky="w", pady=(8, 0))
-        row += 1
-        self.pin_box = ttk.Combobox(left, state="readonly", width=22,
+        ttk.Label(panel, text="PIN TYPE", style="Section.TLabel").grid(
+            row=4, column=0, sticky="w", pady=(12, 0))
+        self.pin_box = ttk.Combobox(panel, state="readonly", width=20,
                                     values=list(mm.PIN_KINDS.values()))
         self.pin_box.current(list(mm.PIN_KINDS).index("city"))
         self.pin_box.bind("<<ComboboxSelected>>", self._on_pin_pick)
-        self.pin_box.grid(row=row, column=0, sticky="ew")
-        row += 1
+        self.pin_box.grid(row=5, column=0, sticky="ew", pady=(4, 0))
 
-        ttk.Label(left, text="LAYERS", style="Section.TLabel").grid(
-            row=row, column=0, sticky="w", pady=(8, 0))
-        row += 1
-        self.layer_box = tk.Listbox(left, height=5, exportselection=False,
-                                     activestyle="none", borderwidth=1,
-                                     relief="solid", highlightthickness=0,
-                                     background=palette["bg"],
-                                     foreground=palette["fg"],
-                                     selectbackground=palette["select"],
-                                     selectforeground=palette["fg"])
-        self.layer_box.grid(row=row, column=0, sticky="ew")
+        ttk.Label(panel, text="LAYERS", style="Section.TLabel").grid(
+            row=6, column=0, sticky="w", pady=(12, 0))
+        self.layer_box = tk.Listbox(panel, height=4, exportselection=False,
+                                    activestyle="none")
+        self.layer_box.grid(row=7, column=0, sticky="ew", pady=(4, 0))
         self.layer_box.bind("<Double-1>", lambda _e: self._toggle_layer())
-        row += 1
-        layer_bar = ttk.Frame(left)
-        layer_bar.grid(row=row, column=0, sticky="ew", pady=(2, 0))
-        ttk.Button(layer_bar, text="Add", width=6,
+        layer_bar = ttk.Frame(panel)
+        layer_bar.grid(row=8, column=0, sticky="ew", pady=(6, 0))
+        ttk.Button(layer_bar, text="Add", width=6, style="Compact.TButton",
                    command=self._add_layer).grid(row=0, column=0)
-        ttk.Button(layer_bar, text="Show/Hide", width=11,
-                   command=self._toggle_layer).grid(row=0, column=1, padx=2)
-        row += 1
+        ttk.Button(layer_bar, text="Show/Hide", width=10, style="Compact.TButton",
+                   command=self._toggle_layer).grid(row=0, column=1, padx=(4, 0))
 
-        # -- centre: canvas ---------------------------------------------
-        centre = ttk.Frame(root)
-        centre.grid(row=1, column=1, sticky="nsew")
-        centre.rowconfigure(0, weight=1)
-        centre.columnconfigure(0, weight=1)
-
-        self.canvas = tk.Canvas(centre, background=palette["panel"],
+        # The map itself, on a desk.
+        stage = Card(body, radius=12, padding=3)
+        stage.grid(row=0, column=1, sticky="nsew")
+        stage.body.rowconfigure(0, weight=1)
+        stage.body.columnconfigure(0, weight=1)
+        self.canvas = tk.Canvas(stage.body, background=t["window"],
                                 highlightthickness=0, borderwidth=0)
         self.canvas.grid(row=0, column=0, sticky="nsew")
 
@@ -261,20 +280,73 @@ class MapEditor(tk.Toplevel):
         self.bind("<plus>", lambda _e: self._zoom_by(1.2))
         self.bind("<minus>", lambda _e: self._zoom_by(1 / 1.2))
 
-        # -- right: properties ------------------------------------------
-        right = ttk.Frame(root, width=250)
-        right.grid(row=1, column=2, sticky="nsew", padx=(6, 0))
-        right.rowconfigure(1, weight=1)
-        right.columnconfigure(0, weight=1)
-        ttk.Label(right, text="PROPERTIES", style="Section.TLabel").grid(
-            row=0, column=0, sticky="w")
-        self.props = ScrollFrame(right)
+        # What is selected.
+        inspector = Card(body, radius=12, padding=12, fit="width", ground="window")
+        inspector.grid(row=0, column=2, sticky="ns", padx=(8, 0))
+        inspector.body.rowconfigure(1, weight=1)
+        inspector.body.columnconfigure(0, weight=1)
+        ttk.Label(inspector.body, text="PROPERTIES", style="Section.TLabel").grid(
+            row=0, column=0, sticky="w", pady=(0, 4))
+        self.props = ScrollFrame(inspector.body)
         self.props.grid(row=1, column=0, sticky="nsew")
+        self.props.canvas.configure(width=232)
 
-        self.status = ttk.Label(root, text="", style="Status.TLabel", anchor="w")
-        self.status.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(4, 0))
+        # -- the status strip: a message, the pointer, and the zoom -----------
+        foot = ttk.Frame(self, padding=(16, 4, 12, 6), style="Chrome.TFrame")
+        foot.grid(row=2, column=0, sticky="ew")
+        foot.columnconfigure(0, weight=1)
+        self.status = ttk.Label(foot, text="", style="Chrome.Status.TLabel", anchor="w")
+        self.status.grid(row=0, column=0, sticky="ew")
+        self.coords_label = ttk.Label(foot, text="", style="Chrome.Status.TLabel")
+        self.coords_label.grid(row=0, column=1, sticky="e", padx=(8, 8))
+        for index, (icon, tip, command) in enumerate((
+                ("zoom_out", "Zoom out  (-)", lambda: self._zoom_by(1 / 1.2)),
+                ("zoom_in", "Zoom in  (+)", lambda: self._zoom_by(1.2)),
+                ("fit", "Fit the whole map in the window", self.cmd_zoom_fit))):
+            self._bar_button(icon, "", command, tip, "Tool.TButton", parent=foot
+                             ).grid(row=0, column=2 + index, padx=(2, 0))
 
         self._on_tool_change()
+
+    def _bar_button(self, icon: str, text: str, command, tip: str,
+                    style: str = "Quiet.TButton", colour: str = "panel_fg",
+                    parent=None) -> ttk.Button:
+        """A button with an icon (and optionally words), a tooltip, and a place in the recolouring list."""
+        image = self.icons.get(icon, self.tokens[colour])
+        button = ttk.Button(parent or self.bar, text=text, style=style,
+                            command=command, image=image or "",
+                            compound=("left" if text else "image") if image else "none")
+        if image is None and not text:
+            button.configure(text=tip.split("  ")[0])         # no Pillow: words instead
+        styling.Tooltip(button, tip)
+        self._icon_buttons.append((button, icon, colour))
+        return button
+
+    def _paint_rail(self) -> None:
+        """Icons for the tool rail, in the two colours a tool button can be."""
+        t = self.tokens
+        for button, icon in self._rail_buttons:
+            plain = self.icons.get(icon, t["panel_fg"])
+            chosen = self.icons.get(icon, t["accent"])
+            if plain and chosen:
+                button.configure(image=(plain, "selected", chosen))
+
+    def restyle(self) -> None:
+        """A theme change: the desk, the icons, and the map's frame around them."""
+        t = styling.current_tokens()
+        self.tokens = t
+        try:
+            self.configure(background=t["window"])
+            self.canvas.configure(background=t["window"])
+            for button, icon, colour in self._icon_buttons:
+                image = self.icons.get(icon, t[colour])
+                if image:
+                    button.configure(image=image)
+            self._paint_rail()
+        except tk.TclError:
+            return
+        if self.gm:
+            self.redraw()
 
     # ==================================================================
     # Map list
@@ -287,6 +359,11 @@ class MapEditor(tk.Toplevel):
         target = select or (self.gm.name if self.gm else "")
         if target in names:
             self.map_picker.current(names.index(target))
+        elif self.gm:
+            # A map that is on screen but not yet saved is not in the list.
+            # Showing the first saved map's name instead said the opposite of
+            # what the writer was looking at.
+            self.map_picker.set(f"{self.gm.name}  (unsaved)")
         elif names:
             self.map_picker.current(0)
         else:
@@ -381,13 +458,13 @@ class MapEditor(tk.Toplevel):
     # Drawing
     # ==================================================================
 
-    def _schedule_redraw(self) -> None:
+    def _schedule_redraw(self, delay: int = 16) -> None:
         if self._redraw_job:
             try:
                 self.after_cancel(self._redraw_job)
             except (ValueError, tk.TclError):
                 pass
-        self._redraw_job = self.after(16, self.redraw)
+        self._redraw_job = self.after(delay, self.redraw)
 
     def _background_image(self):
         """Parchment texture, rendered once per zoom step and cached."""
@@ -436,10 +513,52 @@ class MapEditor(tk.Toplevel):
 
         for prim in mm.build_primitives(self.gm):
             self._draw_primitive(prim)
+        self._draw_desk(x0, y0, x1, y1)
+
+        if self.gm.is_empty():
+            canvas.create_text(
+                (x0 + x1) / 2, (y0 + y1) / 2, justify="center",
+                fill=self.tokens["text_dim"], font=(styling.UI_FONT, 12),
+                text="An empty map.\n\nPress Surprise Me for a whole world, or pick\n"
+                     "a tool on the left and start drawing.")
 
         self._draw_draft()
         self._draw_selection()
         self._update_status()
+
+    def _draw_desk(self, x0: float, y0: float, x1: float, y1: float) -> None:
+        """
+        Everything beyond the sheet, and the sheet's shadow.
+
+        A Tk canvas does not clip, so a wide stroke near the map's edge (the
+        pale shallows around a coast, say) spilled out onto the desk. The bands
+        below paint the desk back over whatever strayed past the sheet, and the
+        shadow is drawn on top of them so it still lies under the sheet's edge.
+        """
+        canvas = self.canvas
+        desk = self.tokens["window"]
+        far = 6000                                    # more than any canvas is wide
+        # Float coordinates round, and a stray row of pixels sat just outside
+        # the mask. The sheet's own border is inset 20px or more, so one pixel
+        # off its edge costs nothing and closes the gap.
+        x0, y0, x1, y1 = x0 + 1, y0 + 1, x1 - 1, y1 - 1
+
+        def band(a: float, b: float, c: float, d: float, colour: str) -> None:
+            if c > a and d > b:
+                canvas.create_rectangle(a, b, c, d, fill=colour, outline="")
+
+        band(-far, -far, far, y0, desk)               # above, below, left, right
+        band(-far, y1, far, far, desk)
+        band(-far, y0, x0, y1, desk)
+        band(x1, y0, far, y1, desk)
+        for grow, dark in ((11, 0.05), (8, 0.08), (5, 0.12), (2, 0.18)):
+            colour = styling.mix(desk, "#000000", dark)
+            left, top = x0 - grow + 2, y0 - grow + 5
+            right, bottom = x1 + grow + 2, y1 + grow + 5
+            band(left, top, right, y0, colour)        # the shadow, as a frame
+            band(left, y1, right, bottom, colour)
+            band(left, y0, x0, y1, colour)
+            band(x1, y0, right, y1, colour)
 
     def _draw_primitive(self, prim: tuple) -> None:
         canvas = self.canvas
@@ -476,7 +595,7 @@ class MapEditor(tk.Toplevel):
                                    outline=outline or "",
                                    width=max(1, width * z))
             elif head == "text":
-                _k, x, y, text, size, colour, anchor, italic, bold, tracking = prim
+                x, y, text, size, colour, anchor, italic, bold, tracking, halo =                     mm.text_parts(prim)
                 sx, sy = self.to_screen(x, y)
                 pixels = max(6, int(size * z))
                 if pixels < 7:
@@ -489,12 +608,19 @@ class MapEditor(tk.Toplevel):
                 shown = text
                 if tracking and abs(tracking) > 0.4:
                     shown = " ".join(text)    # approximate letter spacing
-                canvas.create_text(
-                    sx, sy, text=shown, fill=colour,
-                    font=("Georgia", pixels, " ".join(style) if style else "normal"),
-                    anchor={"center": "center", "w": "w", "e": "e",
-                            "n": "n", "s": "s"}.get(anchor, "center"),
-                )
+                font = ("Georgia", pixels, " ".join(style) if style else "normal")
+                where = {"center": "center", "w": "w", "e": "e",
+                         "n": "n", "s": "s"}.get(anchor, "center")
+                if halo and pixels >= 9:
+                    # Tk cannot outline text, so stamp the halo colour at the
+                    # four diagonals first and lay the letters over it.
+                    grow = max(1, round(pixels * 0.09))
+                    for ox, oy in ((-grow, -grow), (grow, -grow),
+                                   (-grow, grow), (grow, grow)):
+                        canvas.create_text(sx + ox, sy + oy, text=shown,
+                                           fill=halo, font=font, anchor=where)
+                canvas.create_text(sx, sy, text=shown, fill=colour, font=font,
+                                   anchor=where)
         except tk.TclError:
             return
 
@@ -584,7 +710,8 @@ class MapEditor(tk.Toplevel):
 
     def _on_tool_change(self) -> None:
         tool = self.tool.get()
-        hint = next((h for k, _l, h in TOOLS if k == tool), "")
+        label, hint = next(((l, h) for k, l, h in TOOLS if k == tool), ("", ""))
+        self.tool_name.configure(text=label)
         self.tool_hint.configure(text=hint)
         if tool not in ("terrain", "freehand"):
             self._cancel_draft()
@@ -783,10 +910,14 @@ class MapEditor(tk.Toplevel):
         # Keep the point under the cursor fixed while zooming.
         self.offset_x = anchor_x - (anchor_x - self.offset_x) * (self.zoom / old)
         self.offset_y = anchor_y - (anchor_y - self.offset_y) * (self.zoom / old)
-        # A trackpad or a fast wheel can fire many of these a second; coalesce
-        # them the same way drags are, instead of rebuilding the map once per
-        # tick.
-        self._schedule_redraw()
+        # Show the zoom at once by scaling what is already on the canvas (about
+        # the same point the offsets above keep fixed), and let one real redraw
+        # follow when the wheel goes quiet to put line widths and type right.
+        # A fast wheel or a trackpad fires many of these a second; rebuilding
+        # the map for each is what made zooming feel like wading.
+        ratio = self.zoom / old
+        self.canvas.scale("all", anchor_x, anchor_y, ratio, ratio)
+        self._schedule_redraw(140)
 
     def cmd_zoom_fit(self) -> None:
         if not self.gm:

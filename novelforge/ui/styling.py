@@ -30,7 +30,26 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 from ..config import app_root, theme
 
-UI_FONT = "Segoe UI"
+UI_FONT = "Segoe UI"        # becomes Segoe UI Variable Text on Windows 11 (resolve_font)
+
+# Type scale, in points. One place, so "a bit bigger" is a one-line change.
+BASE, SMALL, LEAD, TITLE, DISPLAY, HERO = 10, 9, 12, 15, 21, 28
+
+
+def resolve_font(root: tk.Misc) -> str:
+    """Windows 11's own UI face if it is installed, otherwise plain Segoe UI."""
+    global UI_FONT
+    try:
+        import tkinter.font as tkfont
+
+        families = {name.lower() for name in tkfont.families(root)}
+        for name in ("Segoe UI Variable Text", "Segoe UI"):
+            if name.lower() in families:
+                UI_FONT = name
+                break
+    except Exception:
+        pass
+    return UI_FONT
 
 
 # --------------------------------------------------------------------------
@@ -121,6 +140,12 @@ def tokens(palette: Dict[str, str]) -> Dict[str, Union[str, bool]]:
     t["row_select"] = mix(panel, accent, 0.30 if dark else 0.22)
     t["accent_hover"] = mix(accent, white if dark else "#000000", 0.16)
     t["on_accent"] = readable_on(accent)
+    # Layered surfaces, back to front: the window behind everything, cards (the
+    # binder, the editor, the inspector) standing on it, and the writing sheet
+    # or a field inset into a card. A step apart each, so depth comes from tone
+    # and a hairline, not from shadows Tk cannot draw.
+    t["window"] = mix(panel, "#000000", 0.38) if dark else mix(panel, fg, 0.075)
+    t["card_border"] = mix(panel, white, 0.075) if dark else mix(panel, fg, 0.10)
 
     # Secondary text: the palette's `dim` is fine for decoration but too faint
     # for hints someone actually needs to read (about 2:1 on the warm panel).
@@ -153,9 +178,11 @@ def apply(root: tk.Misc, style: ttk.Style, palette: Dict[str, str],
     except tk.TclError:
         pass
 
-    ui = (UI_FONT, 9)
-    bold = (UI_FONT, 9, "bold")
+    resolve_font(root)
+    ui = (UI_FONT, BASE)
+    bold = (UI_FONT, BASE, "bold")
     panel, fg = t["panel"], t["panel_fg"]
+    window = t["window"]
 
     style.configure(
         ".", background=panel, foreground=fg, font=ui,
@@ -171,22 +198,38 @@ def apply(root: tk.Misc, style: ttk.Style, palette: Dict[str, str],
     style.configure("TLabel", background=panel, foreground=fg)
     style.configure("Section.TLabel", font=bold, foreground=t["accent"])
     style.configure("Field.TLabel", font=ui)
-    style.configure("Hint.TLabel", font=(UI_FONT, 8), foreground=t["text_dim"])
+    style.configure("Hint.TLabel", font=(UI_FONT, SMALL), foreground=t["text_dim"])
     style.configure("Value.TLabel", font=ui)
     style.configure("Status.TLabel", font=ui, foreground=t["text_dim"])
-    style.configure("Title.TLabel", font=(UI_FONT, 13, "bold"))
-    style.configure("Hero.TLabel", font=(UI_FONT, 24, "bold"))
-    style.configure("Lead.TLabel", font=(UI_FONT, 11), foreground=t["text_dim"])
-    style.configure("CardTitle.TLabel", font=(UI_FONT, 10, "bold"),
+    style.configure("Title.TLabel", font=(UI_FONT, TITLE, "bold"))
+    style.configure("Hero.TLabel", font=(UI_FONT, HERO, "bold"))
+    style.configure("Lead.TLabel", font=(UI_FONT, LEAD), foreground=t["text_dim"])
+    style.configure("CardTitle.TLabel", font=(UI_FONT, BASE + 1, "bold"),
                     background=t["raised"])
     style.configure("CardText.TLabel", font=ui, foreground=t["text_dim"],
                     background=t["raised"])
     style.configure("Card.TFrame", background=t["raised"])
     style.configure("Rule.TFrame", background=t["border"])
+    # The window's own chrome (menu bar, toolbar, status bar) sits on the backdrop,
+    # not on a card, so it needs its own colour behind the text.
+    style.configure("Page.TFrame", background=t["bg"])
+    style.configure("Chrome.TFrame", background=window)
+    style.configure("Chrome.TLabel", background=window, foreground=fg)
+    style.configure("Chrome.Hint.TLabel", background=window, foreground=t["text_dim"],
+                    font=(UI_FONT, SMALL))
+    style.configure("Chrome.Status.TLabel", background=window,
+                    foreground=t["text_dim"], font=ui)
+    style.configure("Chrome.TSeparator", background=t["border"])
+    # The editor's header: a small letter-spaced kicker over a large serif title.
+    style.configure("Kicker.TLabel", font=(UI_FONT, SMALL, "bold"),
+                    foreground=t["accent"])
+    style.configure("Display.TLabel", font=("Georgia", DISPLAY))
+    style.configure("Brand.TLabel", font=("Georgia", TITLE, "bold"))
+    style.configure("Project.TLabel", font=(UI_FONT, LEAD, "bold"))
 
     # -- buttons --------------------------------------------------------
     def button(name: str, base: str, hover: str, press: str, text: str,
-               border: str, pad: Tuple[int, int] = (10, 4),
+               border: str, pad: Tuple[int, int] = (14, 6),
                font=ui) -> None:
         style.configure(
             name, background=base, foreground=text, bordercolor=border,
@@ -213,9 +256,22 @@ def apply(root: tk.Misc, style: ttk.Style, palette: Dict[str, str],
     style.configure("Compact.TButton", width=0)     # natural width; see Tool.TButton
     button("Accent.TButton", t["accent"], t["accent_hover"], t["accent_hover"],
            t["on_accent"], t["accent"], font=bold)
+    # A quiet button for use *inside a card* (Tool.TButton is for the window's
+    # own bar): rounded corners have to blend with whatever is behind them.
+    button("Quiet.TButton", panel, t["hover"], t["raised_press"], fg, panel,
+           pad=(9, 7))
+    style.configure("Quiet.TButton", width=0)
+    # Items in a drop-down list: flat, left-aligned, lit on hover.
+    button("Menu.TButton", t["raised"], t["hover"], t["raised_press"], fg,
+           t["raised"], pad=(12, 7))
+    style.configure("Menu.TButton", width=0, anchor="w")
+    # The tool rail's buttons: an icon, tinted when its tool is the chosen one.
+    style.configure("Rail.Toolbutton", padding=(9, 9), anchor="center",
+                    relief="flat", borderwidth=0, background=panel,
+                    foreground=fg)
     # The toolbar's quiet buttons: no outline until you point at them.
     button("Tool.TButton", panel, t["hover"], t["raised_press"], fg, panel,
-           pad=(10, 6))
+           pad=(10, 7))
     # clam gives every button an 11-character minimum width, which made the
     # toolbar buttons roomy enough to push the toolbar off a small screen.
     style.configure("Tool.TButton", width=0)
@@ -226,7 +282,7 @@ def apply(root: tk.Misc, style: ttk.Style, palette: Dict[str, str],
         style.configure(
             name, fieldbackground=t["field"], foreground=t["fg"],
             bordercolor=t["border"], lightcolor=t["field"],
-            darkcolor=t["field"], insertcolor=t["caret"], padding=(6, 3),
+            darkcolor=t["field"], insertcolor=t["caret"], padding=(9, 5),
             borderwidth=1, selectbackground=t["select"],
             selectforeground=t["fg"], arrowcolor=t["text_dim"],
             background=t["field"],
@@ -240,7 +296,7 @@ def apply(root: tk.Misc, style: ttk.Style, palette: Dict[str, str],
         "TCombobox", fieldbackground=t["field"], background=t["field"],
         foreground=t["fg"], arrowcolor=t["text_dim"],
         bordercolor=t["border"], lightcolor=t["field"], darkcolor=t["field"],
-        padding=(6, 3), arrowsize=14, selectbackground=t["field"],
+        padding=(9, 5), arrowsize=14, selectbackground=t["field"],
         selectforeground=t["fg"],
     )
     style.map(
@@ -306,14 +362,15 @@ def apply(root: tk.Misc, style: ttk.Style, palette: Dict[str, str],
     # -- lists and tables -----------------------------------------------
     style.configure(
         "Treeview", background=panel, fieldbackground=panel,
-        foreground=fg, borderwidth=0, rowheight=int(round(24 * scale)),
+        foreground=fg, borderwidth=0, rowheight=int(round(30 * scale)),
         font=ui, relief="flat",
     )
+    style.configure("Treeview", bordercolor=panel, lightcolor=panel, darkcolor=panel)
     style.map("Treeview", background=[("selected", t["row_select"])],
               foreground=[("selected", t["fg"])])
     style.configure(
         "Treeview.Heading", background=t["raised"], foreground=t["text_dim"],
-        relief="flat", padding=(8, 5), font=(UI_FONT, 8, "bold"),
+        relief="flat", padding=(8, 5), font=(UI_FONT, SMALL, "bold"),
         bordercolor=t["border"], lightcolor=t["raised"], darkcolor=t["raised"],
     )
     style.map("Treeview.Heading", background=[("active", t["raised_hover"])])
@@ -331,7 +388,7 @@ def apply(root: tk.Misc, style: ttk.Style, palette: Dict[str, str],
                     tabmargins=(0, 4, 0, 0))
     style.configure(
         "TNotebook.Tab", background=panel, foreground=t["text_dim"],
-        padding=(14, 6), borderwidth=0, bordercolor=panel,
+        padding=(16, 7), borderwidth=0, bordercolor=panel,
         lightcolor=panel, darkcolor=panel,
     )
     style.map(
@@ -342,8 +399,12 @@ def apply(root: tk.Misc, style: ttk.Style, palette: Dict[str, str],
         expand=[("selected", (0, 0, 0, 0))],
     )
     style.configure("TSeparator", background=t["border"])
-    style.configure("Sash", sashthickness=6, gripcount=0, background=panel,
-                    bordercolor=panel, lightcolor=panel, darkcolor=panel)
+    # Splitters sit between cards, so they take the backdrop's colour: the gap
+    # between two cards is the window showing through.
+    style.configure("TPanedwindow", background=window)
+    style.configure("Sash", sashthickness=int(round(10 * scale)), gripcount=0,
+                    background=window, bordercolor=window, lightcolor=window,
+                    darkcolor=window)
     style.configure("TLabelframe", background=panel, bordercolor=t["border"],
                     lightcolor=panel, darkcolor=panel, relief="solid")
     style.configure("TLabelframe.Label", background=panel,
@@ -351,6 +412,29 @@ def apply(root: tk.Misc, style: ttk.Style, palette: Dict[str, str],
     style.configure("TScale", background=panel, troughcolor=t["gutter"],
                     bordercolor=t["border"], lightcolor=t["accent"],
                     darkcolor=t["accent"])
+
+    # -- rounded controls: images swapped in for the flat clam parts ------
+    # A failure leaves the flat style above in place, which is fine on its own.
+    from . import fluent
+
+    if fluent.install(root, style, t, scale):
+        # A rounded image leaves its corners transparent, and ttk first fills the
+        # WHOLE widget rectangle with the style's `background`. So with these
+        # controls that colour has to be whatever is behind the widget, and must
+        # not vary with state - states are the image's job now. Anything else
+        # shows as a square of the wrong colour around each rounded corner.
+        behind = (("TButton", panel), ("Accent.TButton", panel),
+                  ("Compact.TButton", panel), ("Tool.TButton", window),
+                  ("Quiet.TButton", panel), ("Menu.TButton", t["raised"]),
+                  ("Rail.Toolbutton", panel),
+                  ("TEntry", panel), ("TCombobox", panel), ("TSpinbox", panel),
+                  ("Vertical.TScrollbar", panel), ("Horizontal.TScrollbar", panel),
+                  ("Page.Vertical.TScrollbar", t["bg"]),
+                  ("Page.Horizontal.TScrollbar", t["bg"]),
+                  ("TNotebook.Tab", panel))
+        for name, colour in behind:
+            style.configure(name, background=colour)
+            style.map(name, background=[])
 
     # -- classic Tk widgets (Text, Listbox, Canvas, ...) ----------------
     # ttk.Style cannot reach these. The option database can, and it only
@@ -413,7 +497,7 @@ def apply(root: tk.Misc, style: ttk.Style, palette: Dict[str, str],
     db("*TCombobox*Listbox.highlightThickness", 0)
 
     try:
-        root.configure(background=panel)
+        root.configure(background=window)
     except tk.TclError:
         pass
     return t
@@ -438,6 +522,10 @@ def retheme(root: tk.Misc, t: Dict[str, Union[str, bool]],
         try:
             stack.extend(widget.winfo_children())
             if widget in skipped:
+                continue
+            repaint = getattr(widget, "restyle", None)
+            if callable(repaint):                    # a Card, for instance
+                repaint()
                 continue
             kind = widget.winfo_class()
             if kind in ("Text", "Entry", "Spinbox"):
@@ -533,8 +621,13 @@ GLYPHS: Dict[str, int] = {
     "word": 0xE8A7,
     "commands": 0xE700,
     "settings": 0xE713,
-    "folder": 0xE838,
+    "folder": 0xE8B7,
     "help": 0xE897,
+    # binder rows
+    "edit": 0xE70F, "list": 0xE71D, "person": 0xE77B, "pin": 0xE707,
+    "box": 0xE7B8, "flag": 0xE7C1, "link": 0xE71B, "globe": 0xE774,
+    "map": 0xE800, "calendar": 0xE787, "note": 0xE70B, "send": 0xE724,
+    "doc": 0xE8A5, "clock": 0xE823,
 }
 _ICON_FONTS = ("SegoeIcons.ttf", "segmdl2.ttf")
 
@@ -561,6 +654,27 @@ class IconSet:
     @property
     def available(self) -> bool:
         return self._font is not None
+
+    def dot(self, colour: str, px: int = 0):
+        """A small filled circle, centred in an icon-sized transparent square."""
+        key = ("dot", colour)
+        image = self._cache.get(key)
+        if image is None:
+            try:
+                from PIL import Image, ImageDraw, ImageTk
+
+                side = self.size + 4
+                ss = 4
+                big = Image.new("RGBA", (side * ss, side * ss), (0, 0, 0, 0))
+                r = (px or max(7, round(self.size * 0.5))) * ss / 2
+                c = side * ss / 2
+                ImageDraw.Draw(big).ellipse((c - r, c - r, c + r, c + r), fill=colour)
+                image = ImageTk.PhotoImage(big.resize((side, side), Image.LANCZOS),
+                                           master=self.root)
+            except Exception:
+                return None
+            self._cache[key] = image
+        return image
 
     def get(self, name: str, colour: str):
         """A PhotoImage of the glyph in `colour`, or None (show text only)."""

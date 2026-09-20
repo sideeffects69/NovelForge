@@ -24,7 +24,7 @@ from .. import storygraph
 from ..config import THEMES, open_in_default_app, settings
 from ..model import ENTITY_LABELS
 from .dialogs import Dialog
-from .widgets import AutoScrollbar, ScrolledText, center_window
+from .widgets import shell, AutoScrollbar, ScrolledText, center_window
 
 
 def _monospace(widget: ScrolledText) -> None:
@@ -110,10 +110,7 @@ class ReplaceWindow(tk.Toplevel):
         self.title(f"Find and Replace - {project.data.title}")
         self._previewed = ""
 
-        frame = ttk.Frame(self, padding=12)
-        frame.grid(row=0, column=0, sticky="nsew")
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
+        frame = shell(self, 12)
         frame.columnconfigure(1, weight=1)
         frame.rowconfigure(5, weight=1)
 
@@ -323,10 +320,7 @@ class ChapterMapWindow(tk.Toplevel):
         self.states = mapstory.chapter_states(project, graph)
         self.game_map = self.maps[0] if self.maps else None
 
-        container = ttk.Frame(self, padding=8)
-        container.grid(row=0, column=0, sticky="nsew")
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
+        container = shell(self, 8)
         container.rowconfigure(1, weight=1)
         container.columnconfigure(0, weight=1)
 
@@ -622,10 +616,7 @@ class StoryGraphWindow(tk.Toplevel):
         self.title(f"Story Graph - {project.data.title}")
         self.graph = build_graph_with_progress(parent, project)
 
-        container = ttk.Frame(self, padding=8)
-        container.grid(row=0, column=0, sticky="nsew")
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
+        container = shell(self, 8)
         container.rowconfigure(0, weight=1)
         container.columnconfigure(0, weight=1)
 
@@ -787,10 +778,7 @@ class IdeaInboxWindow(tk.Toplevel):
         self.title(f"Idea Inbox - {project.data.title}")
         self._suggestions: List[Tuple[str, str, float]] = []
 
-        container = ttk.Frame(self, padding=10)
-        container.grid(row=0, column=0, sticky="nsew")
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
+        container = shell(self, 10)
         container.columnconfigure(0, weight=1)
         container.rowconfigure(2, weight=1)
 

@@ -20,14 +20,30 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from ..config import theme
 from ..model import SCENE_STATUSES, STATUS_COLOURS
+from . import styling
 from .dialogs import ReportWindow
-from .widgets import AutoScrollbar, ScrolledText, center_window
+from .widgets import AutoScrollbar, ScrolledText, center_window, shell
 
-CARD_W = 210
-CARD_H = 148
+CARD_W = 232
+CARD_H = 158
 GAP_X = 18
 GAP_Y = 22
 HEAD_H = 30
+
+
+def rounded(canvas: tk.Canvas, x1: float, y1: float, x2: float, y2: float,
+            radius: float, **options) -> int:
+    """
+    A rounded rectangle on a canvas.
+
+    Tk has none, but a polygon drawn `smooth` through its corners rounds them:
+    each corner point is passed once, between the two edge points either side,
+    and the spline bends around it. Cheap, and one canvas item per shape.
+    """
+    r = min(radius, (x2 - x1) / 2.0, (y2 - y1) / 2.0)
+    points = [x1 + r, y1, x2 - r, y1, x2, y1, x2, y1 + r, x2, y2 - r, x2, y2,
+              x2 - r, y2, x1 + r, y2, x1, y2, x1, y2 - r, x1, y1 + r, x1, y1]
+    return canvas.create_polygon(points, smooth=True, **options)
 
 
 class Corkboard(tk.Toplevel):
@@ -59,10 +75,7 @@ class Corkboard(tk.Toplevel):
 
     def _build(self) -> None:
         palette = theme()
-        root = ttk.Frame(self, padding=6)
-        root.grid(row=0, column=0, sticky="nsew")
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
+        root = shell(self, 6)
         root.rowconfigure(1, weight=1)
         root.columnconfigure(0, weight=1)
 
@@ -77,7 +90,9 @@ class Corkboard(tk.Toplevel):
             ("Relationships", self.cmd_relationships),
             ("Help", self.cmd_help),
         ]):
-            ttk.Button(bar, text=label, command=command, width=13).grid(
+            # Natural width: seven fixed 13-character buttons left the info
+            # label at the end no room on a scaled display.
+            ttk.Button(bar, text=label, command=command, width=0).grid(
                 row=0, column=index, padx=2)
 
         self.info = ttk.Label(bar, text="", style="Status.TLabel", anchor="e")
@@ -143,14 +158,15 @@ class Corkboard(tk.Toplevel):
             canvas.create_text(
                 GAP_X, y, anchor="nw",
                 text=f"{chapter.title.upper()}",
-                font=("Segoe UI", 10, "bold"), fill=palette["accent"],
+                font=(styling.UI_FONT, styling.BASE, "bold"), fill=palette["accent"],
                 tags=(f"head:{chapter.id}",),
             )
             canvas.create_text(
-                GAP_X + 6, y + 15, anchor="nw",
-                text=f"{len(scenes)} scenes   {words:,} words"
+                GAP_X + 1, y + 17, anchor="nw",
+                text=f"{len(scenes)} scene{'' if len(scenes) == 1 else 's'}   {words:,} words"
                      + ("" if chapter.include_in_compile else "   (excluded)"),
-                font=("Segoe UI", 8), fill=palette["dim"],
+                font=(styling.UI_FONT, styling.SMALL),
+                fill=styling.current_tokens()["text_dim"],
                 tags=(f"head:{chapter.id}",),
             )
             self._headings[chapter.id] = (GAP_X, y)
@@ -194,29 +210,31 @@ class Corkboard(tk.Toplevel):
 
     def _draw_card(self, scene, x: float, y: float) -> None:
         canvas = self.canvas
-        palette = theme()
-        colour = STATUS_COLOURS.get(scene.status, "#9a9a9a")
+        t = styling.current_tokens()
+        # Status colours are picked for a light page; nudge each just far enough
+        # to stay readable on this card in whatever theme is showing.
+        colour = styling.ensure_contrast(
+            STATUS_COLOURS.get(scene.status, "#9a9a9a"), t["raised"], 3.2)
         selected = scene.id == self.selected_id
         tag = f"card:{scene.id}"
+        dim = t["text_dim"]
 
-        # A soft drop shadow gives the cards physical separation.
-        canvas.create_rectangle(x + 3, y + 3, x + CARD_W + 3, y + CARD_H + 3,
-                                fill=palette["gutter"], outline="", tags=(tag,))
-        canvas.create_rectangle(
-            x, y, x + CARD_W, y + CARD_H,
-            fill=palette["bg"],
-            outline=palette["accent"] if selected else palette["dim"],
-            width=2 if selected else 1, tags=(tag,),
-        )
-        # Status stripe down the left edge.
-        canvas.create_rectangle(x, y, x + 5, y + CARD_H, fill=colour,
-                                outline="", tags=(tag,))
+        # A soft shadow gives the cards physical separation.
+        rounded(canvas, x + 2, y + 4, x + CARD_W + 2, y + CARD_H + 4, 12,
+                fill=styling.mix(t["panel"], "#000000", 0.28), outline="", tags=(tag,))
+        rounded(canvas, x, y, x + CARD_W, y + CARD_H, 12, fill=t["raised"],
+                outline=t["accent"] if selected else t["border_strong"],
+                width=2 if selected else 1, tags=(tag,))
+        # The status, as a slim bar set into the card's left edge.
+        rounded(canvas, x + 10, y + 14, x + 14, y + CARD_H - 14, 2, fill=colour,
+                outline="", tags=(tag,))
 
+        text_x, text_w = x + 24, CARD_W - 44
         title = scene.title or "(untitled)"
         canvas.create_text(
-            x + 14, y + 10, anchor="nw", width=CARD_W - 26,
-            text=title[:70], font=("Segoe UI", 9, "bold"),
-            fill=palette["fg"], tags=(tag,),
+            text_x, y + 12, anchor="nw", width=text_w,
+            text=title[:70], font=(styling.UI_FONT, styling.BASE, "bold"),
+            fill=t["fg"], tags=(tag,),
         )
 
         pov = self.project.data.entity(scene.pov_id)
@@ -226,33 +244,33 @@ class Corkboard(tk.Toplevel):
             f"{scene.word_count:,}w",
         ] if bit)
         canvas.create_text(
-            x + 14, y + 30, anchor="nw", width=CARD_W - 26, text=meta,
-            font=("Segoe UI", 7), fill=palette["dim"], tags=(tag,),
+            text_x, y + 33, anchor="nw", width=text_w, text=meta,
+            font=(styling.UI_FONT, styling.SMALL), fill=dim, tags=(tag,),
         )
 
         synopsis = scene.synopsis or "(no synopsis - double-click to add one)"
         canvas.create_text(
-            x + 14, y + 48, anchor="nw", width=CARD_W - 26,
+            text_x, y + 55, anchor="nw", width=text_w,
             text=synopsis[:260],
-            font=("Segoe UI", 8, "" if scene.synopsis else "italic"),
-            fill=palette["fg"] if scene.synopsis else palette["dim"],
+            font=(styling.UI_FONT, styling.SMALL + 0, "" if scene.synopsis else "italic"),
+            fill=t["fg"] if scene.synopsis else dim,
             tags=(tag,),
         )
 
         canvas.create_text(
-            x + 14, y + CARD_H - 16, anchor="nw", text=scene.status,
-            font=("Segoe UI", 7, "bold"), fill=colour, tags=(tag,),
+            text_x, y + CARD_H - 22, anchor="nw", text=scene.status,
+            font=(styling.UI_FONT, styling.SMALL, "bold"), fill=colour, tags=(tag,),
         )
         if not scene.include_in_compile:
             canvas.create_text(
-                x + CARD_W - 14, y + CARD_H - 16, anchor="ne", text="excluded",
-                font=("Segoe UI", 7), fill=palette["dim"], tags=(tag,),
+                x + CARD_W - 16, y + CARD_H - 22, anchor="ne", text="excluded",
+                font=(styling.UI_FONT, styling.SMALL), fill=dim, tags=(tag,),
             )
         # A quiet marker for a scene with no thread - easy to miss otherwise.
         if not scene.thread_ids:
             canvas.create_text(
-                x + CARD_W - 14, y + 10, anchor="ne", text="⁙?",
-                font=("Segoe UI", 8), fill=palette["dim"], tags=(tag,),
+                x + CARD_W - 16, y + 12, anchor="ne", text="⁙?",
+                font=(styling.UI_FONT, styling.SMALL), fill=dim, tags=(tag,),
             )
 
     # ==================================================================
@@ -481,10 +499,7 @@ class _CardDialog(tk.Toplevel):
 
         from .widgets import Form, ScrollFrame
 
-        container = ttk.Frame(self, padding=12)
-        container.grid(row=0, column=0, sticky="nsew")
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
+        container = shell(self, 12)
         container.rowconfigure(0, weight=1)
         container.columnconfigure(0, weight=1)
 
@@ -564,10 +579,7 @@ class RelationshipWeb(tk.Toplevel):
         self.project = project
         self.title("Character Relationships")
 
-        root = ttk.Frame(self, padding=8)
-        root.grid(row=0, column=0, sticky="nsew")
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
+        root = shell(self, 8)
         root.rowconfigure(1, weight=1)
         root.columnconfigure(0, weight=1)
 

@@ -57,6 +57,7 @@ from . import dialogs, styling
 from .writing import WritingIntelligence
 from .widgets import (
     AutoScrollbar,
+    Card,
     Form,
     Gauge,
     ScrollFrame,
@@ -72,19 +73,27 @@ from .widgets import (
 
 # Glyphs are plain Unicode so no font or icon file has to ship with the tool.
 GROUP_ORDER = [
-    ("manuscript", "✎  Manuscript"),
-    ("beats", "◈  Outline & Beats"),
-    ("character", "☺  Characters"),
-    ("location", "⌂  Locations"),
-    ("item", "❖  Items"),
-    ("faction", "⚑  Factions"),
-    ("thread", "⁙  Plot Threads"),
-    ("world", "◍  World Bible"),
-    ("maps", "⊕  Maps"),
-    ("timeline", "⧗  Timeline"),
-    ("notes", "✐  Notes & Research"),
-    ("publishing", "✉  Publishing"),
+    ("manuscript", "Manuscript"),
+    ("beats", "Outline & Beats"),
+    ("character", "Characters"),
+    ("location", "Locations"),
+    ("item", "Items"),
+    ("faction", "Factions"),
+    ("thread", "Plot Threads"),
+    ("world", "World Bible"),
+    ("maps", "Maps"),
+    ("timeline", "Timeline"),
+    ("notes", "Notes & Research"),
+    ("publishing", "Publishing"),
 ]
+
+# Which icon (styling.GLYPHS) each binder group and entity type wears.
+GROUP_ICONS = {
+    "manuscript": "edit", "beats": "list", "character": "person",
+    "location": "pin", "item": "box", "faction": "flag", "thread": "link",
+    "world": "globe", "maps": "map", "timeline": "calendar", "notes": "note",
+    "publishing": "send",
+}
 
 
 class App(WritingIntelligence, tk.Tk):
@@ -177,6 +186,8 @@ class App(WritingIntelligence, tk.Tk):
             self._configure_tree_tags()
         if hasattr(self, "_toolbar_buttons"):
             self._refresh_toolbar_icons()
+        if hasattr(self, "tree") and getattr(self, "project", None):
+            self._apply_tree_icons()
         if hasattr(self, "status"):
             self.status.refresh_theme()
         if hasattr(self, "menu_strip"):
@@ -215,15 +226,17 @@ class App(WritingIntelligence, tk.Tk):
         def legible(colour: str, target: float = 3.6) -> str:
             return styling.ensure_contrast(colour, ground, target)
 
-        for status, colour in STATUS_COLOURS.items():
-            self.tree.tag_configure(f"status:{status}", foreground=legible(colour))
-        self.tree.tag_configure("group", font=("Segoe UI", 9, "bold"),
-                                foreground=legible(palette["accent"], 4.5))
+        # The status used to colour the whole row's text; a coloured dot before
+        # the title says the same thing more quietly (see _apply_tree_icons).
+        for status in STATUS_COLOURS:
+            self.tree.tag_configure(f"status:{status}", foreground=palette["panel_fg"])
+        self.tree.tag_configure("group", font=(styling.UI_FONT, styling.BASE, "bold"),
+                                foreground=palette["panel_fg"])
         self.tree.tag_configure("muted", foreground=legible(palette["dim"], 3.0))
         self.tree.tag_configure("excluded", foreground=legible(palette["dim"], 3.0))
         self.tree.tag_configure("done", foreground=legible(
             STATUS_COLOURS.get("Final", "#4f8a5b")))
-        self.tree.tag_configure("pov", font=("Segoe UI", 9, "bold"))
+        self.tree.tag_configure("pov", font=(styling.UI_FONT, styling.BASE, "bold"))
 
         if hasattr(self, "editor"):
             self._style_editor()
@@ -243,13 +256,14 @@ class App(WritingIntelligence, tk.Tk):
             foreground=palette["bg"] if self._ghost_mode else palette["fg"],
             insertbackground=palette["caret"],
             selectbackground=palette["select"],
-            spacing1=2, spacing2=3, spacing3=8,
+            spacing1=2, spacing2=6, spacing3=10,
         )
         self.editor.text.tag_configure("dim", foreground=palette["dim"])
         self.editor.text.tag_configure(
             "bright", foreground=palette["bg"] if self._ghost_mode
             else palette["fg"]
         )
+        self.after_idle(self._center_editor)      # the column width follows the font size
 
     # ==================================================================
     # Menu
@@ -507,7 +521,7 @@ class App(WritingIntelligence, tk.Tk):
     # ==================================================================
 
     def _build_layout(self) -> None:
-        toolbar = ttk.Frame(self, padding=(8, 6))
+        toolbar = ttk.Frame(self, padding=(12, 8), style="Chrome.TFrame")
         toolbar.grid(row=1, column=0, sticky="ew")
         self.toolbar = toolbar
         self.icons = styling.IconSet(self, self.ui_scale)
@@ -540,8 +554,9 @@ class App(WritingIntelligence, tk.Tk):
         column = 0
         for group_index, group in enumerate(groups):
             if group_index:
-                ttk.Separator(toolbar, orient="vertical").grid(
-                    row=0, column=column, sticky="ns", padx=6, pady=4)
+                ttk.Separator(toolbar, orient="vertical",
+                              style="Chrome.TSeparator").grid(
+                    row=0, column=column, sticky="ns", padx=8, pady=6)
                 column += 1
             for label, icon, command, tip in group:
                 self._add_toolbar_button(column, label, icon, command, tip)
@@ -550,7 +565,7 @@ class App(WritingIntelligence, tk.Tk):
         column += 1
 
         # Two bars: the book overall, and today against the daily target.
-        gauges = ttk.Frame(toolbar)
+        gauges = ttk.Frame(toolbar, style="Chrome.TFrame")
         gauges.grid(row=0, column=column, sticky="e", padx=(8, 8))
         self.gauge_frame = gauges
         self.book_gauge = Gauge(gauges, "Book")
@@ -562,21 +577,32 @@ class App(WritingIntelligence, tk.Tk):
             column, "Commands", "commands", self.cmd_palette,
             "Find any command by typing  (Ctrl+Shift+P)")
 
+        # Three cards on the window's backdrop; the gaps between them are the
+        # splitters, so the panes can still be dragged.
         self.panes = ttk.PanedWindow(self, orient="horizontal")
-        self.panes.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 4))
+        self.panes.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 6))
         self.rowconfigure(2, weight=1)
         self.columnconfigure(0, weight=1)
 
         # -- binder ------------------------------------------------------
-        self.binder_frame = ttk.Frame(self.panes)
-        self.binder_frame.rowconfigure(1, weight=1)
+        self.binder_card = Card(self.panes)
+        self.binder_frame = self.binder_card.body
+        self.binder_frame.rowconfigure(2, weight=1)
         self.binder_frame.columnconfigure(0, weight=1)
 
+        brand = ttk.Frame(self.binder_frame)
+        brand.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 12))
+        self._brand_mark = styling.brand_image(self, int(24 * self.ui_scale), self.tokens)
+        if self._brand_mark is not None:
+            ttk.Label(brand, image=self._brand_mark).grid(row=0, column=0, padx=(2, 8))
+        ttk.Label(brand, text="NovelForge", style="Brand.TLabel").grid(
+            row=0, column=1, sticky="w")
+
         binder_head = ttk.Frame(self.binder_frame)
-        binder_head.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(2, 8))
+        binder_head.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 8))
         binder_head.columnconfigure(0, weight=1)
         self.project_label = ttk.Label(binder_head, text="No novel open",
-                                       style="Title.TLabel")
+                                       style="Project.TLabel")
         self.project_label.grid(row=0, column=0, sticky="w")
         # The pace line ("averaging ... finishing about ...") used to sit in the
         # toolbar and was the first thing to be pushed off the edge on a small
@@ -593,34 +619,45 @@ class App(WritingIntelligence, tk.Tk):
                                  show="tree")
         self.tree.column("#0", width=250, anchor="w", stretch=True)
         self.tree.column("meta", width=78, anchor="e", stretch=False)
-        self.tree.grid(row=1, column=0, sticky="nsew")
+        self.tree.grid(row=2, column=0, sticky="nsew")
         tree_scroll = AutoScrollbar(self.binder_frame, orient="vertical",
                                     command=self.tree.yview)
         self.tree.configure(yscrollcommand=tree_scroll.set)
-        tree_scroll.grid(row=1, column=1, sticky="ns")
+        tree_scroll.grid(row=2, column=1, sticky="ns")
         self.tree.bind("<<TreeviewSelect>>", self.on_tree_select)
         self.tree.bind("<Double-1>", self.on_tree_double)
         self.tree.bind("<Button-3>", self.on_tree_right_click)
         bind_tree_shortcuts(self.tree)
         self._configure_tree_tags()
-        self.panes.add(self.binder_frame, weight=0)
+        self.panes.add(self.binder_card, weight=0)
 
-        # -- centre ------------------------------------------------------
-        self.centre = ttk.Frame(self.panes)
+        # -- centre: a header, and the writing sheet ---------------------
+        self.centre_card = Card(self.panes)
+        self.centre = self.centre_card.body
         self.centre.rowconfigure(1, weight=1)
         self.centre.columnconfigure(0, weight=1)
 
-        head = ttk.Frame(self.centre, padding=(4, 2))
+        head = ttk.Frame(self.centre, padding=(6, 0, 6, 10))
         head.grid(row=0, column=0, sticky="ew")
         head.columnconfigure(0, weight=1)
-        self.centre_title = ttk.Label(head, text="", style="Title.TLabel")
-        self.centre_title.grid(row=0, column=0, sticky="w")
+        self.centre_kicker = ttk.Label(head, text="", style="Kicker.TLabel")
+        self.centre_kicker.grid(row=0, column=0, sticky="w")
+        self.centre_title = ttk.Label(head, text="", style="Display.TLabel",
+                                      wraplength=600)
+        self.centre_title.grid(row=1, column=0, sticky="w")
         self.centre_meta = ttk.Label(head, text="", style="Status.TLabel")
-        self.centre_meta.grid(row=0, column=1, sticky="e")
+        self.centre_meta.grid(row=2, column=0, sticky="w", pady=(2, 0))
+        head.bind("<Configure>", lambda e: self.centre_title.configure(
+            wraplength=max(200, e.width - 16)))
 
-        self.editor = ScrolledText(self.centre, height=26, wrap="word")
-        self.detail_text = ScrolledText(self.centre, height=26, wrap="word",
-                                        font=("Consolas", 10))
+        self.sheet = Card(self.centre, radius=10, padding=3, tone="page")
+        self.sheet.grid(row=1, column=0, sticky="nsew")
+        self.sheet.body.rowconfigure(0, weight=1)
+        self.sheet.body.columnconfigure(0, weight=1)
+        self.editor = ScrolledText(self.sheet.body, height=26, wrap="word",
+                                   surface="page")
+        self.detail_text = ScrolledText(self.sheet.body, height=26, wrap="word",
+                                        font=("Consolas", 10), surface="page")
         self.detail_text.set_readonly(True)
 
         # _apply_theme styles this pane, but it runs from _build_styles, which
@@ -634,7 +671,7 @@ class App(WritingIntelligence, tk.Tk):
             selectbackground=_detail_palette["select"],
         )
 
-        self.editor.grid(row=1, column=0, sticky="nsew")
+        self.editor.grid(row=0, column=0, sticky="nsew")
         add_editing_keys(self.editor.text)
         self.editor.text.bind("<Button-3>", self.on_editor_right_click)
         self.editor.text.bind("<Control-space>", self.cmd_complete)
@@ -644,29 +681,51 @@ class App(WritingIntelligence, tk.Tk):
         self.editor.text.nf_owns_menu = True
         self.editor_check = WritingCheck(self.editor.text, self.lexicon,
                                          on_summary=self._on_check_summary)
+        self._editor_pad = -1
         self._style_editor()
+        self.editor.text.bind("<Configure>", self._center_editor)
         self.editor.text.bind("<<Modified>>", self.on_editor_modified)
         self.editor.text.bind("<KeyRelease>", self.on_editor_key)
         self.editor.text.bind("<ButtonRelease-1>", lambda _e: self._schedule_focus())
 
-        self.detail_buttons = ttk.Frame(self.centre, padding=(2, 4))
+        self.detail_buttons = ttk.Frame(self.centre, padding=(2, 8, 2, 0))
 
-        self.panes.add(self.centre, weight=3)
+        self.panes.add(self.centre_card, weight=3)
 
         # -- inspector ---------------------------------------------------
-        self.inspector_frame = ttk.Frame(self.panes)
+        self.inspector_card = Card(self.panes)
+        self.inspector_frame = self.inspector_card.body
         self.inspector_frame.rowconfigure(1, weight=1)
         self.inspector_frame.columnconfigure(0, weight=1)
         ttk.Label(self.inspector_frame, text="INSPECTOR",
                   style="Section.TLabel").grid(row=0, column=0, sticky="w",
-                                               pady=(0, 2), padx=2)
+                                               pady=(0, 4), padx=2)
         self.inspector = ScrollFrame(self.inspector_frame)
         self.inspector.grid(row=1, column=0, sticky="nsew")
-        self.panes.add(self.inspector_frame, weight=1)
+        self.panes.add(self.inspector_card, weight=1)
 
         self.status = StatusBar(self)
         self.status.grid(row=3, column=0, sticky="ew")
         self._build_menu_strip()
+
+    def _center_editor(self, _event=None) -> None:
+        """
+        Keep the text to a comfortable line length.
+
+        On a wide window the prose sits in a centred column (about seventy
+        characters) instead of running edge to edge, which is what makes a long
+        page readable. Only the text's inner margin changes, so the widget, its
+        scroll bar and the writing sheet stay exactly where they are.
+        """
+        text = self.editor.text
+        width = text.winfo_width()
+        if width <= 1:
+            return
+        column = int(700 * self.ui_scale * int(settings["editor_font_size"]) / 13)
+        margin = max(int(28 * self.ui_scale), (width - column) // 2)
+        if margin != self._editor_pad:
+            self._editor_pad = margin
+            text.configure(padx=margin)
 
 
     # ------------------------------------------------------------------
@@ -690,7 +749,7 @@ class App(WritingIntelligence, tk.Tk):
         old = getattr(self, "menu_strip", None)
         if old is not None:
             old.destroy()
-        self.menu_strip = ttk.Frame(self, padding=(6, 2, 6, 0))
+        self.menu_strip = ttk.Frame(self, padding=(8, 4, 8, 0), style="Chrome.TFrame")
         self.menu_strip.grid(row=0, column=0, sticky="ew")
 
         bar = self.menubar
@@ -702,10 +761,10 @@ class App(WritingIntelligence, tk.Tk):
             self._theme_menu(source)
             button = tk.Menubutton(
                 self.menu_strip, text=bar.entrycget(index, "label"),
-                background=t["panel"], foreground=t["panel_fg"],
+                background=t["window"], foreground=t["panel_fg"],
                 activebackground=t["hover"], activeforeground=t["panel_fg"],
-                relief="flat", borderwidth=0, padx=10, pady=4,
-                font=(styling.UI_FONT, 9), takefocus=0,
+                relief="flat", borderwidth=0, padx=11, pady=5,
+                font=(styling.UI_FONT, styling.BASE), takefocus=0,
             )
             clone = f"{button}.menu"
             self.tk.call(str(source), "clone", clone, "normal")
@@ -1049,9 +1108,57 @@ class App(WritingIntelligence, tk.Tk):
                              values=("",), open=node in opened, tags=("group",))
             self._add_folder_docs(node, folder_key)
 
+        self._apply_tree_icons()
         if reselect and want and self.tree.exists(want):
             self.tree.selection_set(want)
             self.tree.see(want)
+
+    def _apply_tree_icons(self) -> None:
+        """An icon on every binder row, and a status dot on every scene."""
+        if not self.project:
+            return
+        t = self.tokens
+        data = self.project.data
+        quiet, accent = t["text_dim"], t["accent"]
+        kinds = {e.id: e.type for e in data.entities}
+
+        def glyph(name: Optional[str], colour: str):
+            return self.icons.get(name, colour) if name else None
+
+        def dot(colour: str):
+            return self.icons.dot(styling.ensure_contrast(colour, t["panel"], 2.6))
+
+        def walk(node: str = ""):
+            for child in self.tree.get_children(node):
+                yield child
+                yield from walk(child)
+
+        for iid in walk():
+            kind, _, ident = iid.partition(":")
+            image = None
+            if kind == "group":
+                image = glyph(GROUP_ICONS.get(ident), accent)
+            elif kind == "chapter":
+                image = glyph("folder", quiet)
+            elif kind == "scene":
+                scene = data.scene(ident)
+                image = dot(STATUS_COLOURS.get(scene.status if scene else "", quiet))
+            elif kind == "entity":
+                image = glyph(GROUP_ICONS.get(kinds.get(ident, "")), quiet)
+            elif kind == "note":
+                image = glyph("note", quiet)
+            elif kind == "event":
+                image = glyph("clock", quiet)
+            elif kind == "mapfile":
+                image = glyph("map", quiet)
+            elif kind == "doc":
+                image = glyph("doc", quiet)
+            elif kind == "beat":
+                beat = next((b for b in data.beats if b.key == ident), None)
+                image = dot("#3f9a68" if beat and beat.done
+                            else (accent if beat and beat.answer else quiet))
+            if image is not None:
+                self.tree.item(iid, image=image)
 
     def _add_folder_docs(self, parent: str, folder_key: str,
                          skip: Optional[set] = None) -> None:
@@ -1166,6 +1273,7 @@ class App(WritingIntelligence, tk.Tk):
         if not self.project:
             return
         data = self.project.data
+        self.centre_kicker.configure(text="")        # only a scene sets one
 
         if kind == "scene":
             scene = data.scene(ident)
@@ -1241,6 +1349,8 @@ class App(WritingIntelligence, tk.Tk):
         self.status.set_state("saved")
 
         self.centre_title.configure(text=scene.title)
+        chapter = self.project.data.chapter(scene.chapter_id)
+        self.centre_kicker.configure(text=chapter.title.upper() if chapter else "")
         self._update_centre_meta(scene)
         self._build_scene_inspector(scene)
         self._schedule_focus()
@@ -1671,12 +1781,12 @@ class App(WritingIntelligence, tk.Tk):
     def _show_editor(self) -> None:
         self.detail_text.grid_remove()
         self.detail_buttons.grid_remove()
-        self.editor.grid(row=1, column=0, sticky="nsew")
+        self.editor.grid(row=0, column=0, sticky="nsew")
 
     def _show_detail(self, title: str, body: str,
                      actions: List[Tuple[str, Callable[[], None]]]) -> None:
         self.editor.grid_remove()
-        self.detail_text.grid(row=1, column=0, sticky="nsew")
+        self.detail_text.grid(row=0, column=0, sticky="nsew")
         self.detail_text.set_report(body)
         self.centre_title.configure(text=title)
 
@@ -3601,16 +3711,16 @@ class App(WritingIntelligence, tk.Tk):
         self._distraction_free = not self._distraction_free
         if self._distraction_free:
             try:
-                self.panes.forget(self.binder_frame)
-                self.panes.forget(self.inspector_frame)
+                self.panes.forget(self.binder_card)
+                self.panes.forget(self.inspector_card)
             except tk.TclError:
                 pass
             self.toolbar.grid_remove()
             self.status.say("Distraction free. F12 to bring the panes back.", 8)
         else:
             try:
-                self.panes.insert(0, self.binder_frame, weight=0)
-                self.panes.add(self.inspector_frame, weight=1)
+                self.panes.insert(0, self.binder_card, weight=0)
+                self.panes.add(self.inspector_card, weight=1)
             except tk.TclError:
                 pass
             self.toolbar.grid(row=1, column=0, sticky="ew")

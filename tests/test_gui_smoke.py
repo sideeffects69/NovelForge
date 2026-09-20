@@ -227,6 +227,11 @@ class MainWindow(unittest.TestCase):
             def inspect(name=name, before=before):
                 for w in app.winfo_children():
                     if isinstance(w, tk.Toplevel) and w not in before:
+                        # Let layout that is still pending finish: a widget that
+                        # has been placed but not yet drawn reads as "hidden",
+                        # and how long a window takes to build is not what this
+                        # test is about (a slow build is guarded separately).
+                        w.update_idletasks()
                         found = clipped_content(w)
                         if found:
                             problems[name] = found[:3]

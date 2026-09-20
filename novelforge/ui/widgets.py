@@ -55,6 +55,226 @@ def flow(frame: tk.Misc, widgets: Sequence[tk.Misc], gap: int = 4) -> None:
     frame.bind("<Configure>", place, add="+")
 
 
+class Card(tk.Canvas):
+    """
+    A panel with rounded corners and a hairline edge, standing on the window.
+
+    Tk cannot round a frame, so this is a Canvas. The four corners are small
+    anti-aliased images (fill and hairline baked in), the straight parts are two
+    overlapping rectangles and four lines, and everything the card holds lives in
+    `.body`, a frame inset by `padding` so no child pokes past a curve. Resizing
+    moves about a dozen canvas items; nothing is re-rendered.
+
+    `tone` is "panel" (the card colour), "page" (the writing sheet's) or "field"
+    (an inset text area, with an outline that lights up on focus).
+
+    `fit` makes the card ask for as much room as its contents rather than Tk's
+    default 378x265: True or "height" for the height only (an inline field takes
+    its width from the form), "width", or "both". `ground` is what the card
+    stands on - "panel" for a card inside another, "window" for one on the
+    backdrop; left out, a fitted card is taken to be inline.
+    """
+
+    def __init__(self, master, radius: int = 12, padding: int = 12,
+                 tone: str = "panel", fit=False, ground: Optional[str] = None) -> None:
+        super().__init__(master, highlightthickness=0, borderwidth=0)
+        self.tone = tone
+        self._fit = "height" if fit is True else (fit or "")
+        self._ground = ground or ("panel" if self._fit else "window")
+        self._focused = False
+        self._radius_base = radius
+        self._padding_base = padding
+        self.body = ttk.Frame(self, style="TFrame" if tone == "panel" else "Page.TFrame")
+        self._window = self.create_window(0, 0, anchor="nw", window=self.body)
+        self._corners: List[object] = []
+        self._fill = self._edge = ""
+        self._r = radius
+        self._pad = padding
+        self.bind("<Configure>", self._on_configure)
+        if self._fit:
+            self.body.bind("<Configure>", self._fit_request)
+            self.after_idle(self._fit_request)
+        self.restyle()
+
+    def focus_ring(self, on: bool) -> None:
+        """Light the outline (a field card takes focus through the widget inside it)."""
+        if on != self._focused:
+            self._focused = on
+            self.restyle()
+
+    def _fit_request(self, _event=None) -> None:
+        wanted = {}
+        if self._fit in ("height", "both"):
+            wanted["height"] = self.body.winfo_reqheight() + 2 * self._pad
+        if self._fit in ("width", "both"):
+            wanted["width"] = self.body.winfo_reqwidth() + 2 * self._pad
+        try:
+            self.configure(**wanted)
+        except tk.TclError:
+            pass
+
+    def restyle(self) -> None:
+        """Re-read the theme: repaint the corners and the fill."""
+        from . import fluent
+
+        t = styling.current_tokens()
+        scale = display_scale(self)
+        self._r = max(4, int(round(self._radius_base * scale)))
+        self._pad = int(round(self._padding_base * scale))
+        if self.tone == "panel":
+            self._fill, self._edge = t["panel"], t["card_border"]
+        elif self.tone == "page":
+            self._fill, self._edge = t["bg"], t["card_border"]
+        else:
+            self._fill = t["field"]
+            self._edge = t["accent"] if self._focused else t["border"]
+        # An inline card sits on whatever its parent is (a form on a card); a
+        # pane card sits on the window's backdrop.
+        self.configure(background=t["panel"] if self._ground == "panel" else t["window"])
+        self.body.configure(style="TFrame" if self.tone == "panel" else "Page.TFrame")
+        try:
+            from PIL import ImageTk
+
+            r = self._r
+            full = fluent.rounded(2 * r, 2 * r, r, self._fill, self._edge, 1)
+            quarters = (full.crop((0, 0, r, r)), full.crop((r, 0, 2 * r, r)),
+                        full.crop((0, r, r, 2 * r)), full.crop((r, r, 2 * r, 2 * r)))
+            self._corners = [ImageTk.PhotoImage(q, master=self) for q in quarters]
+        except Exception:
+            self._corners = []
+        self._redraw(self.winfo_width(), self.winfo_height())
+
+    def _on_configure(self, event) -> None:
+        self._redraw(event.width, event.height)
+
+    def _redraw(self, w: int, h: int) -> None:
+        self.delete("card")
+        r, pad, fill, edge = self._r, self._pad, self._fill, self._edge
+        if w < 2 * r + 2 or h < 2 * r + 2:
+            return
+        self.create_rectangle(r, 0, w - r, h, fill=fill, outline="", tags="card")
+        self.create_rectangle(0, r, w, h - r, fill=fill, outline="", tags="card")
+        if self._corners:
+            for image, x, y in zip(self._corners, (0, w - r, 0, w - r),
+                                   (0, 0, h - r, h - r)):
+                self.create_image(x, y, image=image, anchor="nw", tags="card")
+        for x1, y1, x2, y2 in ((r, 0, w - r, 0), (r, h - 1, w - r, h - 1),
+                               (0, r, 0, h - r), (w - 1, r, w - 1, h - r)):
+            self.create_line(x1, y1, x2, y2, fill=edge, tags="card")
+        self.tag_lower("card")
+        self.coords(self._window, pad, pad)
+        self.itemconfigure(self._window, width=max(1, w - 2 * pad),
+                           height=max(1, h - 2 * pad))
+
+
+def shell(window: tk.Misc, padding: int = 12, margin: int = 10) -> ttk.Frame:
+    """
+    Give a window the app's look: the backdrop's colour, with everything on it
+    sitting on one rounded card.
+
+    Returns the card's body. Build the window's content in it exactly as you
+    would have built it in a plain frame - it is a frame, and the card takes
+    care of the rest (the rounded edge, the theme, resizing). The card fills the
+    window, so there is nothing to grid.
+    """
+    t = styling.current_tokens()
+    try:
+        window.configure(background=t["window"])
+    except tk.TclError:
+        pass
+    card = Card(window, radius=12, padding=padding, ground="window")
+    card.grid(row=0, column=0, sticky="nsew", padx=margin, pady=margin)
+    window.rowconfigure(0, weight=1)
+    window.columnconfigure(0, weight=1)
+    return card.body
+
+
+class Dropdown:
+    """
+    A button that opens a short list of actions right beneath it.
+
+    Not a native menu. On Windows a posted menu runs its own modal loop, which
+    freezes anything that is driving the window and cannot take the app's
+    rounded, themed look. This is a small borderless window of ordinary buttons:
+    it closes on Escape, on choosing something, and when focus goes elsewhere.
+
+    `items` is [(label, command)], with "-" for a divider.
+    """
+
+    def __init__(self, button: ttk.Button,
+                 items: Sequence[Tuple[str, Optional[Callable[[], None]]]]) -> None:
+        self.button = button
+        self.items = list(items)
+        self.popup: Optional[tk.Toplevel] = None
+        button.configure(command=self.toggle)
+
+    @property
+    def is_open(self) -> bool:
+        return bool(self.popup is not None and self.popup.winfo_exists())
+
+    def toggle(self) -> None:
+        if self.is_open:
+            self.close()
+        else:
+            self.open()
+
+    def open(self) -> None:
+        self.close()
+        t = styling.current_tokens()
+        popup = tk.Toplevel(self.button.winfo_toplevel())
+        popup.withdraw()
+        popup.overrideredirect(True)
+        popup.transient(self.button.winfo_toplevel())
+        rim = tk.Frame(popup, background=t["card_border"], padx=1, pady=1)
+        rim.pack()
+        inner = ttk.Frame(rim, style="Card.TFrame", padding=4)
+        inner.pack()
+        for label, command in self.items:
+            if label == "-":
+                ttk.Separator(inner, orient="horizontal").pack(
+                    fill="x", padx=6, pady=4)
+                continue
+            ttk.Button(inner, text=label, style="Menu.TButton",
+                       command=lambda c=command: self._choose(c)).pack(
+                fill="x", pady=1)
+        popup.update_idletasks()
+        width, height = popup.winfo_reqwidth(), popup.winfo_reqheight()
+        left = self.button.winfo_rootx()
+        top = self.button.winfo_rooty() + self.button.winfo_height() + 3
+        screen_w, screen_h = popup.winfo_screenwidth(), popup.winfo_screenheight()
+        left = max(0, min(left, screen_w - width - 4))
+        if top + height > screen_h - 4:                  # no room beneath: open above
+            top = max(0, self.button.winfo_rooty() - height - 3)
+        popup.geometry(f"+{left}+{top}")
+        popup.deiconify()
+        popup.lift()
+        popup.focus_force()
+        popup.bind("<Escape>", lambda _e: self.close())
+        popup.bind("<FocusOut>", lambda _e: popup.after(120, self._lost_focus))
+        self.popup = popup
+
+    def _lost_focus(self) -> None:
+        popup = self.popup
+        if popup is None or not popup.winfo_exists():
+            return
+        holder = popup.focus_displayof()
+        if holder is None or holder.winfo_toplevel() is not popup:
+            self.close()
+
+    def _choose(self, command: Optional[Callable[[], None]]) -> None:
+        self.close()
+        if command is not None:
+            command()
+
+    def close(self) -> None:
+        popup, self.popup = self.popup, None
+        if popup is not None:
+            try:
+                popup.destroy()
+            except tk.TclError:
+                pass
+
+
 class AutoScrollbar(ttk.Scrollbar):
     """
     A scroll bar that goes quiet when there is nothing to scroll.
@@ -129,21 +349,39 @@ class ScrolledText(ttk.Frame):
     """Text widget with a vertical scrollbar and sane editing defaults."""
 
     def __init__(self, master, height: int = 10, wrap: str = "word",
-                 font: Optional[Tuple] = None, **kwargs) -> None:
-        super().__init__(master)
+                 font: Optional[Tuple] = None, surface: str = "panel",
+                 **kwargs) -> None:
+        super().__init__(master, style="TFrame" if surface == "panel" else "Page.TFrame")
+        # On a card, the text sits in an inset rounded field like the
+        # inspector's; a bare Text there is a dark rectangle with no edge. (The
+        # writing sheet is its own card, so it is left alone.)
+        holder: tk.Misc = self
+        self._field: Optional[Card] = None
+        if surface == "panel":
+            self._field = Card(self, radius=9, padding=2, tone="field", fit="both")
+            self._field.grid(row=0, column=0, sticky="nsew")
+            self._field.body.rowconfigure(0, weight=1)
+            self._field.body.columnconfigure(0, weight=1)
+            holder = self._field.body
         self.text = tk.Text(
-            self, height=height, wrap=wrap, undo=True, maxundo=-1,
+            holder, height=height, wrap=wrap, undo=True, maxundo=-1,
             autoseparators=True, borderwidth=0, highlightthickness=0,
             padx=10, pady=8, **kwargs
         )
         if font:
             self.text.configure(font=font)
         self.scrollbar = AutoScrollbar(
-            self, orient="vertical", command=self.text.yview
+            self, orient="vertical", command=self.text.yview,
+            style="Vertical.TScrollbar" if surface == "panel"
+            else "Page.Vertical.TScrollbar",
         )
         self.text.configure(yscrollcommand=self.scrollbar.set)
+        if self._field is not None:
+            field = self._field
+            self.text.bind("<FocusIn>", lambda _e: field.focus_ring(True), add="+")
+            self.text.bind("<FocusOut>", lambda _e: field.focus_ring(False), add="+")
         self.text.grid(row=0, column=0, sticky="nsew")
-        self.scrollbar.grid(row=0, column=1, sticky="ns")
+        self.scrollbar.grid(row=0, column=1, sticky="ns", padx=(4, 0))
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
 
@@ -355,13 +593,17 @@ class Form:
         # step with the theme. The font is set here because a bare tk.Text
         # would otherwise use Courier - the "typewriter" look in every
         # inspector field, which reads as unfinished.
-        widget = tk.Text(self.parent, height=height, wrap="word", undo=True,
-                         padx=6, pady=4, font=(styling.UI_FONT, 9))
+        holder = Card(self.parent, radius=9, padding=7, tone="field", fit=True)
+        holder.grid(row=self._row_index, column=1, sticky="ew", padx=(4, 6), pady=2)
+        widget = tk.Text(holder.body, height=height, wrap="word", undo=True,
+                         padx=3, pady=2, font=(styling.UI_FONT, styling.BASE),
+                         highlightthickness=0, borderwidth=0)
+        widget.pack(fill="both", expand=True)
+        widget.bind("<FocusIn>", lambda _e: holder.focus_ring(True), add="+")
+        widget.bind("<FocusOut>", lambda _e: holder.focus_ring(False), add="+")
         value = str(getattr(obj, attr, "") or "")
         if value:
             widget.insert("1.0", value)
-        widget.grid(row=self._row_index, column=1, sticky="ew",
-                    padx=(4, 6), pady=2)
         self._row_index += 1
         self.rows.append({"kind": "text", "widget": widget,
                           "obj": obj, "attr": attr})
@@ -403,11 +645,13 @@ class Form:
                     height: int = 5) -> tk.Listbox:
         """Multi-select list bound to a list-of-ids attribute."""
         self._label(label, top=True)
-        frame = ttk.Frame(self.parent)
-        frame.grid(row=self._row_index, column=1, sticky="ew", padx=(4, 6), pady=2)
+        holder = Card(self.parent, radius=9, padding=6, tone="field", fit=True)
+        holder.grid(row=self._row_index, column=1, sticky="ew", padx=(4, 6), pady=2)
+        frame = holder.body
         listbox = tk.Listbox(frame, selectmode="extended",
                             height=min(height, max(2, len(options))),
-                            exportselection=False, activestyle="none")
+                            exportselection=False, activestyle="none",
+                            highlightthickness=0, borderwidth=0)
         listbox.grid(row=0, column=0, sticky="ew")
         frame.columnconfigure(0, weight=1)
         # Only five rows are visible. A cast of twenty characters means the
@@ -502,20 +746,40 @@ class Gauge(ttk.Frame):
     """A captioned progress bar: "Book  [=====     ]  18%"."""
 
     def __init__(self, master, caption: str, length: int = 92) -> None:
-        super().__init__(master)
-        ttk.Label(self, text=caption, style="Hint.TLabel", width=5,
+        super().__init__(master, style="Chrome.TFrame")
+        ttk.Label(self, text=caption, style="Chrome.Hint.TLabel", width=5,
                   anchor="w").grid(row=0, column=0, sticky="w")
-        self.bar = ttk.Progressbar(
-            self, style="Target.Horizontal.TProgressbar", length=length,
-            maximum=100,
-        )
+        self._fraction = 0.0
+        self._size = (int(length * display_scale(self)), int(8 * display_scale(self)))
+        self._photo = None
+        self.bar = ttk.Label(self, style="Chrome.TLabel")
         self.bar.grid(row=0, column=1, padx=(0, 8))
-        self.value = ttk.Label(self, text="", style="Hint.TLabel", width=11,
+        self._paint_meter()
+        self.value = ttk.Label(self, text="", style="Chrome.Hint.TLabel", width=11,
                                anchor="w")
         self.value.grid(row=0, column=2, sticky="w")
 
+    def _paint_meter(self) -> None:
+        from PIL import ImageTk
+
+        from . import fluent
+
+        t = styling.current_tokens()
+        image = fluent.meter(*self._size, self._fraction, t["border"], t["accent"])
+        if self._photo is None:
+            self._photo = ImageTk.PhotoImage(image, master=self)
+            self.bar.configure(image=self._photo)
+        else:
+            self._photo.paste(image)
+
+    def restyle(self) -> None:
+        self._paint_meter()
+
     def set(self, percent: float, text: str = "") -> None:
-        self.bar.configure(value=percent)
+        fraction = max(0.0, min(1.0, percent / 100.0))
+        if abs(fraction - self._fraction) > 0.0005:
+            self._fraction = fraction
+            self._paint_meter()
         self.value.configure(text=text)
 
 
@@ -530,13 +794,13 @@ class StatusBar(ttk.Frame):
     """
 
     def __init__(self, master) -> None:
-        super().__init__(master, padding=(10, 4))
+        super().__init__(master, padding=(14, 6), style="Chrome.TFrame")
         self.state_label = tk.Label(self, text="", anchor="w",
-                                    font=(styling.UI_FONT, 9), padx=0)
+                                    font=(styling.UI_FONT, styling.SMALL), padx=0)
         self.state_label.grid(row=0, column=0, sticky="w", padx=(0, 12))
-        self.message = ttk.Label(self, text="", anchor="w", style="Status.TLabel")
+        self.message = ttk.Label(self, text="", anchor="w", style="Chrome.Status.TLabel")
         self.message.grid(row=0, column=1, sticky="ew")
-        self.counters = ttk.Label(self, text="", anchor="e", style="Status.TLabel")
+        self.counters = ttk.Label(self, text="", anchor="e", style="Chrome.Status.TLabel")
         self.counters.grid(row=0, column=2, sticky="e")
         self.columnconfigure(1, weight=1)
         self._clear_job: Optional[str] = None
@@ -564,8 +828,8 @@ class StatusBar(ttk.Frame):
         }.get(self._save_state or "", ("", t["panel_fg"]))
         self.state_label.configure(
             text=f"●  {words}" if words else "",
-            background=t["panel"],
-            foreground=styling.ensure_contrast(colour, t["panel"], 3.2),
+            background=t["window"],
+            foreground=styling.ensure_contrast(colour, t["window"], 3.2),
         )
 
     def refresh_theme(self) -> None:

@@ -18,6 +18,7 @@ import json
 import math
 import os
 import random
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -146,9 +147,12 @@ TERRAIN_ORDER = [
     "ice", "region", "river", "road", "wall", "route",
 ]
 
-# Draw order. Water under land, decorations over both, routes on top.
+# Draw order, low to high; shapes of equal rank keep the order they were made
+# in. Water and land share a rank on purpose: a sea drawn first lies under the
+# land drawn after it, and a lake drawn on the land lies on top of it. With
+# water always underneath, every lake a writer drew simply vanished.
 PAINT_ORDER = {
-    "water": 0, "land": 1, "ice": 2, "desert": 3, "swamp": 4, "forest": 5,
+    "water": 1, "land": 1, "ice": 2, "desert": 3, "swamp": 4, "forest": 5,
     "hills": 6, "mountains": 7, "region": 8, "river": 9, "road": 10,
     "wall": 11, "route": 12,
 }
@@ -303,6 +307,13 @@ class GameMap:
     # serialised - see to_json below.
     _label_cache: Optional[Tuple[tuple, Dict[str, Tuple[str, bool]]]] = field(
         default=None, init=False, repr=False, compare=False)
+    # The same idea for the whole display list, and for each shape's share of
+    # it: a redraw caused by zooming, panning or selecting something changes
+    # nothing about the map, so it should not rebuild thousands of trees.
+    _prim_cache: Optional[Tuple[tuple, List[tuple]]] = field(
+        default=None, init=False, repr=False, compare=False)
+    _shape_cache: Dict[tuple, Tuple[tuple, List[tuple]]] = field(
+        default_factory=dict, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -381,7 +392,11 @@ class GameMap:
 # ("polygon", points, fill, outline, width, dash)
 # ("line",    points, color, width, dash)
 # ("ellipse", x0, y0, x1, y1, fill, outline, width)
-# ("text",    x, y, text, size, color, anchor, italic, bold, tracking)
+# ("text",    x, y, text, size, color, anchor, italic, bold, tracking[, halo])
+#
+# `halo` is optional: a colour to outline the letters with, so a name stays
+# legible where it crosses a coast, a river or a mountain. Every backend reads
+# the list through `text_parts`, so none of them breaks on the short form.
 
 
 def _rgb(colour: str) -> Tuple[int, int, int]:
@@ -459,26 +474,72 @@ def _walk_path(points: Sequence[Point], spacing: float) -> List[Tuple[Point, flo
     return out
 
 
-def _scatter_in_bounds(shape: Shape, spacing: float, seed: int
-                       ) -> List[Point]:
+def _stable_seed(shape: Shape) -> int:
+    """
+    A number that is the same on every launch.
+
+    Python salts `hash()` of a string differently in every process, so seeding
+    with it reshuffled every forest each time a map was opened - the same map
+    looked different on Monday and on Tuesday.
+    """
+    return zlib.crc32(shape.id.encode("utf-8")) & 0xFFFF
+
+
+def _inside_test(shape: Shape, x0: float, y0: float, x1: float, y1: float):
+    """
+    A fast "is this point inside the shape?" test.
+
+    Ray casting is O(points) per question, and a forest asks about thousands of
+    spots against a coast of hundreds of points. Drawing the polygon once into
+    a small bitmap and looking pixels up is a hundred times quicker, and one
+    pixel of error at the edge of a forest is invisible.
+    """
+    points = shape.points
+    if len(points) > 24:
+        try:
+            from PIL import Image, ImageDraw
+
+            span = max(x1 - x0, y1 - y0, 1.0)
+            scale = min(1.0, 360.0 / span)
+            mask = Image.new("L", (max(2, int((x1 - x0) * scale) + 2),
+                                   max(2, int((y1 - y0) * scale) + 2)), 0)
+            ImageDraw.Draw(mask).polygon(
+                [((px - x0) * scale, (py - y0) * scale) for px, py in points],
+                fill=255)
+            pixels = mask.load()
+            mw, mh = mask.size
+
+            def inside(px: float, py: float) -> bool:
+                ix, iy = int((px - x0) * scale), int((py - y0) * scale)
+                return 0 <= ix < mw and 0 <= iy < mh and pixels[ix, iy] > 0
+
+            return inside
+        except Exception:
+            pass
+    return lambda px, py: point_in_polygon((px, py), points)
+
+
+def _scatter_in_bounds(shape: Shape, spacing: float, seed: int,
+                       limit: int = 6000) -> List[Point]:
     """Jittered grid of points inside a shape's bounding box, filtered by the polygon."""
     x0, y0, x1, y1 = shape.bounds()
     if x1 - x0 < 2 or y1 - y0 < 2:
         return []
-    rng = random.Random(seed ^ (hash(shape.id) & 0xFFFF))
+    rng = random.Random(seed ^ _stable_seed(shape))
     spacing = max(10.0, float(spacing))
     out: List[Point] = []
     rows = int((y1 - y0) / spacing) + 1
     cols = int((x1 - x0) / spacing) + 1
-    if rows * cols > 6000:           # keep decoration bounded on huge shapes
-        spacing = math.sqrt((x1 - x0) * (y1 - y0) / 6000.0)
+    if rows * cols > limit:           # keep decoration bounded on huge shapes
+        spacing = math.sqrt((x1 - x0) * (y1 - y0) / float(limit))
         rows = int((y1 - y0) / spacing) + 1
         cols = int((x1 - x0) / spacing) + 1
+    inside = _inside_test(shape, x0, y0, x1, y1)
     for r in range(rows):
         for c in range(cols):
             px = x0 + c * spacing + rng.uniform(-spacing * 0.3, spacing * 0.3)
             py = y0 + r * spacing + rng.uniform(-spacing * 0.3, spacing * 0.3)
-            if point_in_polygon((px, py), shape.points):
+            if inside(px, py):
                 out.append((px, py))
     return out
 
@@ -876,90 +937,143 @@ def layout_pin_labels(gm: GameMap, visible: Optional[set] = None
 # -- terrain decoration ----------------------------------------------------
 
 
-def _peaks(points: Sequence[Point], ink: str, paper: str,
-           spacing: float = 24.0, height: float = 15.0,
+def _luma(colour: str) -> float:
+    r, g, b = _rgb(colour)
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+
+
+def _relief_tones(land: str, ink: str) -> Tuple[str, str, str]:
+    """(lit, shaded, snow) for terrain stamps, whatever the palette. Light comes from the left."""
+    if _luma(land) > 0.5:
+        return (_mix(land, "#ffffff", 0.30), _mix(land, ink, 0.34),
+                _mix(land, "#ffffff", 0.85))
+    return (_mix(land, "#ffffff", 0.16), _mix(land, "#000000", 0.38),
+            _mix(land, "#ffffff", 0.55))
+
+
+def _peak(x: float, y: float, size: float, ink: str, lit: str, shade: str,
+          snow: str) -> List[tuple]:
+    """One mountain: a lit left face, a shaded right face, an outline, snow on the big ones."""
+    half = size * 0.8
+    apex = (x + size * 0.05, y - size)
+    left = (x - half, y + size * 0.38)
+    right = (x + half, y + size * 0.42)
+    foot = (x + size * 0.12, y + size * 0.4)
+    out: List[tuple] = [
+        ("polygon", [left, apex, foot], lit, "", 0.0, False),
+        ("polygon", [apex, right, foot], shade, "", 0.0, False),
+    ]
+    if size >= 15.0:
+        out.append(("polygon",
+                    [apex, (apex[0] - half * 0.34, apex[1] + size * 0.30),
+                     (apex[0] - half * 0.10, apex[1] + size * 0.22),
+                     (apex[0] + half * 0.06, apex[1] + size * 0.34),
+                     (apex[0] + half * 0.36, apex[1] + size * 0.29)],
+                    snow, "", 0.0, False))
+    out.append(("line", [apex, (x + size * 0.02, y + size * 0.1), foot],
+                ink, 0.8, False))
+    out.append(("line", [left, apex, right], ink, 1.25, False))
+    return out
+
+
+def _peaks(points: Sequence[Point], ink: str, land: str,
+           spacing: float = 22.0, height: float = 17.0,
            seed: int = 7) -> List[tuple]:
     """
-    Mountains drawn along a ridge line.
+    A mountain range along a ridge line.
 
-    Sizes and vertical offsets vary per peak, and peaks are drawn back-to-front
-    so the nearer ones overlap the farther ones. A row of identical triangles
-    reads as a fence; varied overlapping ones read as a range.
+    Each spot on the ridge gets one to three peaks: a main one and smaller
+    companions to either side, so the range has depth instead of being a row of
+    identical tents. Peaks grow toward the middle of the range and taper at its
+    ends, and are drawn back to front so nearer ones overlap farther ones.
     """
     rng = random.Random(seed)
     samples = _walk_path(points, spacing)
-    drawn: List[Tuple[float, float, float]] = []
-    for (px, py), _angle in samples:
-        scale = rng.uniform(0.62, 1.42)
-        drawn.append((px, py + rng.uniform(-height * 0.28, height * 0.28),
-                      height * scale))
-    # Farther (higher on the page) first, so nearer peaks sit in front.
-    drawn.sort(key=lambda item: item[1])
-
+    lit, shade, snow = _relief_tones(land, ink)
+    count = len(samples)
+    stamps: List[Tuple[float, float, float]] = []
+    for i, ((px, py), angle) in enumerate(samples):
+        t = i / (count - 1) if count > 1 else 0.5
+        envelope = 0.62 + 0.62 * math.sin(math.pi * t)
+        nx, ny = -math.sin(angle), math.cos(angle)
+        companions = (rng.random() < 0.6) + (rng.random() < 0.3)
+        for k in range(1 + companions):
+            side = 0.0 if k == 0 else rng.choice((-1.0, 1.0)) * rng.uniform(0.8, 1.5) * height
+            slide = rng.uniform(-0.45, 0.45) * spacing
+            size = height * envelope * (rng.uniform(0.85, 1.35) if k == 0
+                                        else rng.uniform(0.5, 0.9))
+            stamps.append((px + nx * side + math.cos(angle) * slide,
+                           py + ny * side + math.sin(angle) * slide, size))
+    stamps.sort(key=lambda stamp: stamp[1])
     out: List[tuple] = []
-    for px, py, size in drawn:
-        half = size * 0.72
-        out.append(("polygon",
-                    [(px - half, py + size * 0.42), (px, py - size * 0.62),
-                     (px + half, py + size * 0.42)],
-                    paper, ink, 1.4, False))
-        # Shade the right flank so the range has a light direction.
-        out.append(("polygon",
-                    [(px, py - size * 0.62), (px + half, py + size * 0.42),
-                     (px + half * 0.28, py + size * 0.42)],
-                    _mix(paper, ink, 0.22), "", 0.0, False))
-        out.append(("line", [(px - half * 0.26, py + size * 0.08),
-                             (px, py - size * 0.62)], ink, 0.9, False))
+    for x, y, size in stamps:
+        out.extend(_peak(x, y, size, ink, lit, shade, snow))
     return out
 
 
-def _hills(points: Sequence[Point], ink: str,
-           spacing: float = 22.0) -> List[tuple]:
+def _hills(points: Sequence[Point], ink: str, land: str,
+           spacing: float = 19.0, seed: int = 5) -> List[tuple]:
+    """Rolling hills: low shaded domes, in loose clusters along a line."""
+    rng = random.Random(seed)
+    lit, shade, _snow = _relief_tones(land, ink)
+    stamps: List[Tuple[float, float, float]] = []
+    for (px, py), angle in _walk_path(points, spacing):
+        nx, ny = -math.sin(angle), math.cos(angle)
+        for k in range(1 + (rng.random() < 0.35)):
+            side = 0.0 if k == 0 else rng.choice((-1.0, 1.0)) * rng.uniform(6.0, 11.0)
+            stamps.append((px + nx * side + rng.uniform(-4.0, 4.0),
+                           py + ny * side + rng.uniform(-3.0, 3.0),
+                           rng.uniform(6.5, 10.5)))
+    stamps.sort(key=lambda stamp: stamp[1])
     out: List[tuple] = []
-    for (px, py), _a in _walk_path(points, spacing):
-        r = 7.0
-        out.append(("line",
-                    [(px - r, py + 2), (px - r * 0.45, py - r * 0.55),
-                     (px + r * 0.1, py + 2)], ink, 1.5, False))
-        out.append(("line",
-                    [(px + r * 0.05, py + 2), (px + r * 0.6, py - r * 0.35),
-                     (px + r * 1.15, py + 2)], ink, 1.3, False))
+    for x, y, r in stamps:
+        dome = [(x + r * math.cos(math.pi * k / 8.0),
+                 y - r * 0.72 * math.sin(math.pi * k / 8.0)) for k in range(9)]
+        out.append(("polygon", dome, lit, "", 0.0, False))
+        out.append(("polygon", [dome[0], dome[1], dome[2], dome[3], (x + r * 0.05, y)],
+                    shade, "", 0.0, False))
+        out.append(("line", dome, ink, 1.1, False))
     return out
 
 
-def _trees(shape: Shape, ink: str, seed: int,
-           spacing: float = 30.0) -> List[tuple]:
+def _trees(shape: Shape, ink: str, canopy: str, seed: int,
+           spacing: float = 21.0, cap: int = 650) -> List[tuple]:
     """
     Trees scattered inside a forest.
 
-    Clumped rather than evenly spread: a coarse hash gates whole neighbourhoods
-    on or off, so the wood has clearings and dense stands instead of looking
-    like tiled wallpaper. Sizes vary and about a fifth of candidate spots are
-    skipped outright.
+    Clumped rather than evenly spread: a smooth pseudo-random field gates whole
+    neighbourhoods on or off, so the wood has clearings and dense stands instead
+    of looking like tiled wallpaper. Sizes vary, roughly a third are conifers,
+    and they are drawn back to front. The count is capped so a continent-sized
+    forest does not turn into ten thousand canvas items.
     """
-    rng = random.Random(seed ^ (hash(shape.id) & 0xFFFF))
-    out: List[tuple] = []
-    for px, py in _scatter_in_bounds(shape, spacing, seed):
-        # Clumping: a smooth-ish pseudo-random field over a ~4-cell grid.
+    rng = random.Random(seed ^ _stable_seed(shape))
+    spots = _scatter_in_bounds(shape, spacing, seed)
+    if len(spots) > cap:
+        stride = len(spots) / float(cap)
+        spots = [spots[int(i * stride)] for i in range(cap)]
+    trees: List[Tuple[float, float, float, bool]] = []
+    for px, py in spots:
         clump = (math.sin(px * 0.021 + seed * 0.7) +
                  math.cos(py * 0.019 - seed * 0.4))
-        if clump < -0.55:
+        if clump < -0.55 or rng.random() < 0.15:
             continue
-        if rng.random() < 0.18:
-            continue
-        r = 3.3 * rng.uniform(0.78, 1.5)
-        jx = px + rng.uniform(-spacing * 0.22, spacing * 0.22)
-        jy = py + rng.uniform(-spacing * 0.22, spacing * 0.22)
-        if rng.random() < 0.3:
-            # A conifer, for variety.
-            out.append(("polygon",
-                        [(jx - r * 0.8, jy + r * 0.7), (jx, jy - r * 1.5),
-                         (jx + r * 0.8, jy + r * 0.7)], "", ink, 1.1, False))
-        else:
-            out.append(("ellipse", jx - r, jy - r * 1.25, jx + r, jy + r * 0.55,
-                        "", ink, 1.1))
-        out.append(("line", [(jx, jy + r * 0.6), (jx, jy + r * 1.25)],
+        r = 3.6 * rng.uniform(0.8, 1.45)
+        trees.append((px + rng.uniform(-spacing * 0.2, spacing * 0.2),
+                      py + rng.uniform(-spacing * 0.2, spacing * 0.2),
+                      r, rng.random() < 0.34))
+    trees.sort(key=lambda tree: tree[1])
+    out: List[tuple] = []
+    for jx, jy, r, conifer in trees:
+        out.append(("line", [(jx, jy + r * 0.45), (jx, jy + r * 1.25)],
                     ink, 1.0, False))
+        if conifer:
+            out.append(("polygon",
+                        [(jx - r * 0.85, jy + r * 0.75), (jx, jy - r * 1.6),
+                         (jx + r * 0.85, jy + r * 0.75)], canopy, ink, 0.9, False))
+        else:
+            out.append(("ellipse", jx - r, jy - r * 1.15, jx + r, jy + r * 0.6,
+                        canopy, ink, 0.9))
     return out
 
 
@@ -982,16 +1096,90 @@ def _squiggles(shape: Shape, ink: str, seed: int,
 
 
 def _tapered_river(points: Sequence[Point], colour: str,
-                   width: float) -> List[tuple]:
-    """A river drawn in three passes so it thickens toward its mouth."""
+                   width: float, bank: str = "") -> List[tuple]:
+    """A river drawn in three passes so it thickens toward its mouth, with banks."""
     pts = list(points)
     if len(pts) < 2:
         return []
-    out: List[tuple] = []
     third = max(2, len(pts) // 3)
-    out.append(("line", pts, colour, max(1.0, width * 0.6), False))
-    out.append(("line", pts[third:], colour, max(1.2, width * 0.85), False))
-    out.append(("line", pts[third * 2:], colour, max(1.5, width * 1.15), False))
+    passes = ((pts, max(1.0, width * 0.6)),
+              (pts[third:], max(1.2, width * 0.85)),
+              (pts[third * 2:], max(1.5, width * 1.15)))
+    out: List[tuple] = []
+    if bank:
+        for run, w in passes:
+            out.append(("line", run, bank, w + 1.2, False))
+    for run, w in passes:
+        out.append(("line", run, colour, w, False))
+    return out
+
+
+def _offset_ring(points: Sequence[Point], distance: float) -> List[Point]:
+    """
+    A closed ring pushed outward by `distance`.
+
+    Each vertex moves along the bisector of its two edges. Where that would
+    fold the outline back on itself (a bay narrower than the distance) the
+    vertex is skipped, so the result is always a clean, if simplified, ring -
+    which is all a decorative ripple needs. Returns [] for a degenerate ring.
+    """
+    ring = list(points)
+    if len(ring) > 1 and ring[0] == ring[-1]:
+        ring.pop()
+    n = len(ring)
+    if n < 4:
+        return []
+    area = sum(ring[i][0] * ring[(i + 1) % n][1] - ring[(i + 1) % n][0] * ring[i][1]
+               for i in range(n))
+    turn = 1.0 if area > 0 else -1.0          # a clockwise ring's outward normal is (dy, -dx)
+
+    def unit_normal(a: Point, b: Point) -> Tuple[float, float]:
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        length = math.hypot(dx, dy) or 1.0
+        return (dy / length * turn, -dx / length * turn)
+
+    moved: List[Tuple[Point, Point]] = []
+    for i in range(n):
+        prev, here, nxt = ring[i - 1], ring[i], ring[(i + 1) % n]
+        n1, n2 = unit_normal(prev, here), unit_normal(here, nxt)
+        bx, by = n1[0] + n2[0], n1[1] + n2[1]
+        scale = distance / max(0.35, 1.0 + n1[0] * n2[0] + n1[1] * n2[1])
+        moved.append(((here[0] + bx * scale, here[1] + by * scale), here))
+    kept = [moved[0]]
+    for point, original in moved[1:]:
+        last, last_original = kept[-1]
+        forward = ((point[0] - last[0]) * (original[0] - last_original[0])
+                   + (point[1] - last[1]) * (original[1] - last_original[1]))
+        if forward > 0.0:
+            kept.append((point, original))
+    out = [pair[0] for pair in kept]
+    return _smooth(out + [out[0]], 2) if len(out) >= 4 else []
+
+
+def _shore_primitives(pts: Sequence[Point], width: float, palette: Dict[str, Any],
+                      reach: float) -> List[tuple]:
+    """
+    The sea around a coast: pale shallows that fade out, then two ripple lines.
+
+    The shallows are stroked copies of the coastline, widest first, each a
+    little narrower and a little paler than the last. The ripples are thin
+    rings pushed out from the coast. `build_primitives` paints every coast's
+    water before any land, so a ripple that strays across a neighbouring
+    island is simply covered by it.
+    """
+    sea = palette["paper"]
+    shallow = (palette.get("halo") or [_mix(sea, "#ffffff", 0.4)])[-1]
+    ink = palette["ink_light"]
+    out: List[tuple] = []
+    for distance, tone, dashed in ((reach * 2.35, 0.74, True),
+                                   (reach * 1.7, 0.6, False)):
+        ring = _offset_ring(pts, distance)
+        if ring:
+            out.append(("line", ring, _mix(ink, sea, tone), 1.0, dashed))
+    steps = 5
+    for i in range(steps, 0, -1):
+        out.append(("line", pts, _mix(shallow, sea, (i - 1) / float(steps)),
+                    width + 2 * reach * i / steps, False))
     return out
 
 
@@ -1120,52 +1308,82 @@ def _title_primitives(gm: GameMap) -> List[tuple]:
 # -- the main builder ------------------------------------------------------
 
 
-def build_primitives(gm: GameMap, include_furniture: bool = True
-                     ) -> List[tuple]:
-    """Turn a map into an ordered display list. This is the single source of truth."""
-    palette = gm.palette()
-    ink = palette["ink"]
-    light = palette["ink_light"]
-    paper = palette["paper"]
-    water = palette["water"]
-    # Per-style terrain fills, so land stays clearly lighter than the sea in
-    # every palette rather than only in the one it was tuned against.
-    style_terrain: Dict[str, str] = palette.get("terrain", {}) or {}
-    visible = gm.visible_layers()
-    out: List[tuple] = []
+BIOMES = ("forest", "desert", "swamp", "ice")
 
-    if gm.grid != "none":
-        out.extend(_grid_primitives(gm))
 
-    ordered = sorted(
-        (s for s in gm.shapes if s.layer in visible),
-        key=lambda s: PAINT_ORDER.get(s.kind, 50),
+def _points_key(points: Sequence[Point]) -> int:
+    return hash(tuple(map(tuple, points)))
+
+
+def _primitive_key(gm: GameMap, furniture: bool) -> tuple:
+    """Everything the display list depends on. Views (zoom, pan, selection) are not in it."""
+    return (
+        gm.style, gm.width, gm.height, gm.grid, gm.grid_size, gm.scale_text,
+        gm.compass, gm.border, gm.title_on_map, gm.name, gm.seed,
+        gm.hide_colliding_labels, gm.auto_place_labels, furniture,
+        frozenset(gm.visible_layers()),
+        tuple((s.id, s.kind, s.layer, s.fill, s.outline, s.width, s.label,
+               s.closed, _points_key(s.points)) for s in gm.shapes),
+        tuple((p.id, p.layer, p.x, p.y, p.kind, p.label, p.label_side, p.size)
+              for p in gm.pins),
+        tuple((l.id, l.layer, l.x, l.y, l.text, l.size, l.color, l.italic,
+               l.bold, l.tracking) for l in gm.labels),
     )
 
-    for shape in ordered:
-        if len(shape.points) < 2:
-            continue
-        spec = TERRAIN.get(shape.kind, TERRAIN["land"])
-        closed = shape.closed and spec["closed"] and len(shape.points) >= 3
-        pts = _smooth(shape.points, 2 if len(shape.points) < 240 else 1)
-        if closed and pts[0] != pts[-1]:
-            pts = pts + [pts[0]]
 
-        fill = shape.fill or style_terrain.get(shape.kind) or (spec["fill"] or "")
-        outline = shape.outline or ink
-        width = float(shape.width or 2.0)
+def build_primitives(gm: GameMap, include_furniture: bool = True
+                     ) -> List[tuple]:
+    """
+    Turn a map into an ordered display list. This is the single source of truth.
 
-        # Coastal halo: progressively wider, lighter strokes under the fill.
-        # Scaled to the map so a large world map gets a proportionate glow.
-        if spec.get("halo") and closed:
-            band = max(4.0, min(9.0, gm.height * 0.006))
-            halo_bands = list(reversed(palette["halo"]))
-            for index, halo in enumerate(halo_bands):
-                out.append(("line", pts, halo,
-                            width + band * (len(halo_bands) - index), False))
+    The result is remembered until the map itself changes, and each shape's
+    share of it is remembered until that shape does: zooming, panning and
+    selecting rebuild nothing, and dragging one vertex re-scatters the trees of
+    one forest, not all of them.
+    """
+    key = _primitive_key(gm, include_furniture)
+    cached = gm._prim_cache
+    if cached is not None and cached[0] == key:
+        return list(cached[1])
+    prims = _build_primitives(gm, include_furniture)
+    gm._prim_cache = (key, prims)
+    return list(prims)
 
-        decor = spec.get("decor")
-        if closed:
+
+def _shape_shore(gm: GameMap, shape: Shape, palette: Dict[str, Any]) -> List[tuple]:
+    pts = _smooth(shape.points, 2 if len(shape.points) < 240 else 1)
+    if pts and pts[0] != pts[-1]:
+        pts = pts + [pts[0]]
+    reach = max(10.0, min(26.0, gm.height * 0.018))
+    return _shore_primitives(pts, float(shape.width or 2.0), palette, reach)
+
+
+def _shape_body(gm: GameMap, shape: Shape, palette: Dict[str, Any]) -> List[tuple]:
+    """Everything one shape draws: fill, outline, decoration and its own label."""
+    ink, light, paper = palette["ink"], palette["ink_light"], palette["paper"]
+    terrain: Dict[str, str] = palette.get("terrain", {}) or {}
+    land_tone = terrain.get("land") or paper
+    spec = TERRAIN.get(shape.kind, TERRAIN["land"])
+    closed = shape.closed and spec["closed"] and len(shape.points) >= 3
+    pts = _smooth(shape.points, 2 if len(shape.points) < 240 else 1)
+    if closed and pts[0] != pts[-1]:
+        pts = pts + [pts[0]]
+
+    fill = shape.fill or terrain.get(shape.kind) or (spec["fill"] or "")
+    outline = shape.outline or ink
+    if shape.kind == "water" and not shape.outline:
+        outline = _mix(ink, fill or paper, 0.5)         # a lake's edge is quieter than a coast
+    width = float(shape.width or 2.0)
+    decor = spec.get("decor")
+    out: List[tuple] = []
+
+    if closed:
+        if shape.kind in BIOMES and fill and not shape.outline:
+            # A forest or a desert has no inked edge on a real map: it fades.
+            out.append(("line", pts, _mix(fill, land_tone, 0.55), 7.0, False))
+            out.append(("polygon", pts, fill, "", 0.0, False))
+            out.append(("line", pts, _mix(fill, ink, 0.22), 0.9, False))
+        else:
             out.append(("polygon", pts, fill, outline if fill else "",
                         width if fill else 0.0, False))
             if fill and shape.kind != "region":
@@ -1173,48 +1391,106 @@ def build_primitives(gm: GameMap, include_furniture: bool = True
             elif shape.kind == "region":
                 out.append(("line", pts, shape.outline or light,
                             max(1.2, width), True))
-        else:
-            if decor == "river":
-                # Rivers need to read at a glance against a busy land fill, so
-                # they get the deeper water tone and a little more weight.
-                out.extend(_tapered_river(
-                    pts, shape.fill or palette["water_deep"], width + 2.6
-                ))
-            elif decor == "road":
-                out.append(("line", pts, shape.outline or light,
-                            max(1.4, width), True))
-            elif decor == "route":
-                out.append(("line", pts, shape.outline or ink,
-                            max(1.6, width), True))
-                if len(pts) >= 2:
-                    out.extend(_arrow_head(pts, shape.outline or ink,
-                                           max(1.6, width)))
-            elif decor == "wall":
-                out.append(("line", pts, outline, max(2.4, width + 1.2), False))
-                for (px, py), angle in _walk_path(pts, 14.0):
-                    nx = math.cos(angle + math.pi / 2) * 3.4
-                    ny = math.sin(angle + math.pi / 2) * 3.4
-                    out.append(("line", [(px - nx, py - ny), (px + nx, py + ny)],
-                                outline, 1.2, False))
-            elif decor not in ("peaks", "hills"):
-                out.append(("line", pts, outline, width, False))
+    else:
+        if decor == "river":
+            # Rivers need to read at a glance against a busy land fill, so
+            # they get the deeper water tone, a bank and a little more weight.
+            core = shape.fill or palette["water_deep"]
+            out.extend(_tapered_river(pts, core, width + 1.0,
+                                      bank=_mix(core, ink, 0.30)))
+        elif decor == "road":
+            out.append(("line", pts, shape.outline or light,
+                        max(1.4, width), True))
+        elif decor == "route":
+            out.append(("line", pts, shape.outline or ink,
+                        max(1.6, width), True))
+            if len(pts) >= 2:
+                out.extend(_arrow_head(pts, shape.outline or ink,
+                                       max(1.6, width)))
+        elif decor == "wall":
+            out.append(("line", pts, outline, max(2.4, width + 1.2), False))
+            for (px, py), angle in _walk_path(pts, 14.0):
+                nx = math.cos(angle + math.pi / 2) * 3.4
+                ny = math.sin(angle + math.pi / 2) * 3.4
+                out.append(("line", [(px - nx, py - ny), (px + nx, py + ny)],
+                            outline, 1.2, False))
+        elif decor not in ("peaks", "hills"):
+            out.append(("line", pts, outline, width, False))
 
-        if decor == "peaks":
-            out.extend(_peaks(pts, ink, paper, seed=gm.seed ^ (hash(shape.id) & 0xFF)))
-        elif decor == "hills":
-            out.extend(_hills(pts, ink))
-        elif decor == "trees" and closed:
-            out.extend(_trees(shape, ink, gm.seed))
-        elif decor == "dots" and closed:
-            out.extend(_dots(shape, light, gm.seed))
-        elif decor == "squiggles" and closed:
-            out.extend(_squiggles(shape, light, gm.seed))
+    seed = gm.seed ^ _stable_seed(shape)
+    if decor == "peaks":
+        out.extend(_peaks(pts, ink, land_tone, seed=seed))
+    elif decor == "hills":
+        out.extend(_hills(pts, ink, land_tone, seed=seed))
+    elif decor == "trees" and closed:
+        out.extend(_trees(shape, ink, _mix(fill or land_tone, ink, 0.34), gm.seed))
+    elif decor == "dots" and closed:
+        out.extend(_dots(shape, light, gm.seed))
+    elif decor == "squiggles" and closed:
+        out.extend(_squiggles(shape, light, gm.seed))
 
-        if shape.label.strip():
-            cx, cy = shape.centroid()
-            out.append(("text", cx, cy, shape.label,
-                        max(11, int(gm.height * 0.019)), light, "center",
-                        True, False, 2.0))
+    if shape.label.strip():
+        cx, cy = shape.centroid()
+        out.append(("text", cx, cy, shape.label,
+                    max(11, int(gm.height * 0.019)), light, "center",
+                    True, False, 2.0, _mix(land_tone, paper, 0.25)))
+    return out
+
+
+def _build_primitives(gm: GameMap, include_furniture: bool) -> List[tuple]:
+    palette = gm.palette()
+    ink = palette["ink"]
+    paper = palette["paper"]
+    terrain: Dict[str, str] = palette.get("terrain", {}) or {}
+    land_tone = terrain.get("land") or paper
+    halo = _mix(land_tone, paper, 0.25)
+    visible = gm.visible_layers()
+    out: List[tuple] = []
+
+    if gm.grid != "none":
+        out.extend(_grid_primitives(gm))
+
+    ordered = sorted(
+        (s for s in gm.shapes if s.layer in visible and len(s.points) >= 2),
+        key=lambda s: PAINT_ORDER.get(s.kind, 50),
+    )
+
+    live: set = set()
+    cache = gm._shape_cache
+
+    def remembered(shape: Shape, part: str, build) -> List[tuple]:
+        key = (part, gm.style, gm.seed, gm.height, shape.kind, shape.fill,
+               shape.outline, shape.width, shape.label, shape.closed,
+               _points_key(shape.points))
+        slot = (shape.id, part)
+        live.add(slot)
+        entry = cache.get(slot)
+        if entry is not None and entry[0] == key:
+            return entry[1]
+        value = build(shape, palette) if part == "shore" else build(gm, shape, palette)
+        cache[slot] = (key, value)
+        return value
+
+    def has_coast(shape: Shape) -> bool:
+        spec = TERRAIN.get(shape.kind, TERRAIN["land"])
+        return bool(spec.get("halo") and shape.closed and spec["closed"]
+                    and len(shape.points) >= 3)
+
+    shore_done = False
+    for shape in ordered:
+        if not shore_done and has_coast(shape):
+            # Every coast's water goes down before any land, so the rings round
+            # one island never paint over another. Water shapes drawn earlier
+            # (a hand-drawn sea) still lie beneath them.
+            for other in ordered:
+                if has_coast(other):
+                    out.extend(remembered(
+                        other, "shore",
+                        lambda sh, pal: _shape_shore(gm, sh, pal)))
+            shore_done = True
+        out.extend(remembered(shape, "body", _shape_body))
+    for slot in [k for k in cache if k not in live]:
+        del cache[slot]
 
     accent = "#8a2f22" if gm.style in ("parchment", "treasure") else ink
     placement = _cached_label_placement(gm, visible) if gm.auto_place_labels else {}
@@ -1230,7 +1506,7 @@ def build_primitives(gm: GameMap, include_furniture: bool = True
             continue
         lx, ly, anchor = pin_label_anchor(pin, side)
         out.append(("text", lx, ly, pin.label, label_size, ink, anchor,
-                    False, pin.kind in ("capital", "city"), 0.0))
+                    False, pin.kind in ("capital", "city"), 0.0, halo))
 
     for label in gm.labels:
         if label.layer not in visible:
@@ -1239,7 +1515,7 @@ def build_primitives(gm: GameMap, include_furniture: bool = True
             continue
         out.append(("text", label.x, label.y, label.text, int(label.size),
                     label.color or ink, "center", label.italic, label.bold,
-                    float(label.tracking)))
+                    float(label.tracking), _mix(land_tone, paper, 0.5)))
 
     if include_furniture:
         if gm.border:
@@ -1250,6 +1526,13 @@ def build_primitives(gm: GameMap, include_furniture: bool = True
         out.extend(_title_primitives(gm))
 
     return out
+
+
+def text_parts(prim: tuple) -> tuple:
+    """A text primitive as (x, y, text, size, colour, anchor, italic, bold, tracking, halo)."""
+    halo = prim[10] if len(prim) > 10 else ""
+    return (prim[1], prim[2], prim[3], prim[4], prim[5], prim[6], prim[7],
+            prim[8], prim[9], halo)
 
 
 def _arrow_head(points: Sequence[Point], colour: str,
@@ -1436,17 +1719,20 @@ def render_png(gm: GameMap, path: Path | str, scale: float = 1.0,
                 draw.ellipse(box, fill=fill or None, outline=outline or None,
                              width=max(1, int(round(width * effective))))
             elif head == "text":
-                _kind, x, y, text, size, colour, anchor, italic, bold, tracking = prim
+                x, y, text, size, colour, anchor, italic, bold, tracking, halo =                     text_parts(prim)
                 font = _font(int(size * effective), italic, bold)
                 anchor_map = {"center": "mm", "w": "lm", "e": "rm",
                               "n": "ma", "s": "md"}
+                stroke = max(1, int(round(size * 0.13 * effective))) if halo else 0
                 if tracking and abs(tracking) > 0.4:
                     _draw_tracked(draw, x * effective, y * effective, text,
                                   font, colour, tracking * effective,
-                                  anchor_map.get(anchor, "mm"))
+                                  anchor_map.get(anchor, "mm"), halo, stroke)
                 else:
                     draw.text((x * effective, y * effective), text, font=font,
-                              fill=colour, anchor=anchor_map.get(anchor, "mm"))
+                              fill=colour, anchor=anchor_map.get(anchor, "mm"),
+                              stroke_width=stroke,
+                              stroke_fill=halo or None)
         except (ValueError, TypeError, OSError):
             # One malformed primitive must not abandon the whole export.
             continue
@@ -1462,21 +1748,31 @@ def render_png(gm: GameMap, path: Path | str, scale: float = 1.0,
 
 
 def _draw_tracked(draw, x: float, y: float, text: str, font, colour: str,
-                  tracking: float, anchor: str) -> None:
+                  tracking: float, anchor: str, halo: str = "",
+                  stroke: int = 0) -> None:
     """Letter-spaced text, which Pillow cannot do natively."""
     widths = [draw.textlength(ch, font=font) for ch in text]
     total = sum(widths) + tracking * max(0, len(text) - 1)
     if anchor.startswith("r"):
-        cursor = x - total
+        start = x - total
     elif anchor.startswith("l"):
-        cursor = x
+        start = x
     else:
-        cursor = x - total / 2.0
+        start = x - total / 2.0
     vertical = "m" if anchor.endswith("m") else anchor[-1]
-    for ch, w in zip(text, widths):
-        draw.text((cursor, y), ch, font=font, fill=colour,
-                  anchor="l" + vertical)
-        cursor += w + tracking
+    # Every outline first and every letter after, or one letter's halo would
+    # be painted over its neighbour.
+    for outline in ((True, False) if halo and stroke else (False,)):
+        cursor = start
+        for ch, w in zip(text, widths):
+            if outline:
+                draw.text((cursor, y), ch, font=font, fill=halo,
+                          anchor="l" + vertical, stroke_width=stroke,
+                          stroke_fill=halo)
+            else:
+                draw.text((cursor, y), ch, font=font, fill=colour,
+                          anchor="l" + vertical)
+            cursor += w + tracking
 
 
 def _dash_segments(points: Sequence[Point], dash: float,
@@ -1578,7 +1874,7 @@ def render_svg(gm: GameMap, path: Path | str) -> Path:
                 f'stroke="{outline or "none"}" stroke-width="{width:.2f}"/>'
             )
         elif head == "text":
-            _k, x, y, text, size, colour, anchor, italic, bold, tracking = prim
+            x, y, text, size, colour, anchor, italic, bold, tracking, halo =                 text_parts(prim)
             anchor_svg = {"center": "middle", "w": "start", "e": "end",
                           "n": "middle", "s": "middle"}.get(anchor, "middle")
             baseline = {"n": "hanging", "s": "auto"}.get(anchor, "central")
@@ -1589,6 +1885,8 @@ def render_svg(gm: GameMap, path: Path | str) -> Path:
                 + (' font-style="italic"' if italic else "")
                 + (' font-weight="bold"' if bold else "")
                 + (f' letter-spacing="{tracking:.2f}"' if tracking else "")
+                + (f' stroke="{halo}" stroke-width="{size * 0.26:.2f}" '
+                   f'stroke-linejoin="round" paint-order="stroke"' if halo else "")
                 + f">{_svg_escape(text)}</text>"
             )
 
@@ -1846,17 +2144,18 @@ def name_styles_file(folder: Path | str) -> Path:
     return Path(folder) / "Name Styles.json"
 
 
-def name_for(role: str, fallback: str = "") -> str:
+def name_for(role: str, fallback: str = "", seed: Optional[int] = None) -> str:
     """
     A name for one kind of thing, in whatever style that kind uses.
 
     `fallback` is the map's own style, used when the role has no entry - so a
-    writer who never touches the roles still gets a consistent world.
+    writer who never touches the roles still gets a consistent world. Give a
+    `seed` and the same seed always gives the same name.
     """
     style = NAME_ROLES.get(role) or fallback
     if style not in NAME_SYLLABLES:
         style = fallback if fallback in NAME_SYLLABLES else ""
-    return generate_name(style or next(iter(NAME_SYLLABLES), "plain"))
+    return generate_name(style or next(iter(NAME_SYLLABLES), "plain"), seed)
 
 
 def load_name_styles(folder: Path | str) -> Path:

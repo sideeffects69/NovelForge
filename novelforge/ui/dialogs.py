@@ -31,6 +31,7 @@ from .widgets import (
     WritingCheck,
     add_editing_keys,
     center_window,
+    shell,
 )
 
 
@@ -50,10 +51,7 @@ class Dialog(tk.Toplevel):
         self.transient(parent)
         self.resizable(True, True)
 
-        container = ttk.Frame(self, padding=12)
-        container.grid(row=0, column=0, sticky="nsew")
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
+        container = shell(self, 12)
         container.rowconfigure(0, weight=1)
         container.columnconfigure(0, weight=1)
 
@@ -623,10 +621,7 @@ class ReportWindow(tk.Toplevel):
         self.title(title)
         theme = THEMES.get(settings["theme"], THEMES["warm"])
 
-        container = ttk.Frame(self, padding=8)
-        container.grid(row=0, column=0, sticky="nsew")
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
+        container = shell(self, 8)
         # `header` builds an optional block above the text (the About window's
         # logo); everything below it shifts down one row.
         top = 0
@@ -707,10 +702,7 @@ class SearchWindow(tk.Toplevel):
         self.on_open = on_open
         self.title("Find in Project")
 
-        container = ttk.Frame(self, padding=10)
-        container.grid(row=0, column=0, sticky="nsew")
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
+        container = shell(self, 10)
         container.rowconfigure(2, weight=1)
         container.columnconfigure(0, weight=1)
 
@@ -800,8 +792,7 @@ class SprintWindow(tk.Toplevel):
         self.running = True
         self._job: Optional[str] = None
 
-        container = ttk.Frame(self, padding=14)
-        container.grid(row=0, column=0, sticky="nsew")
+        container = shell(self, 14)
 
         self.clock = ttk.Label(container, text=self._format(self.remaining),
                                font=("Consolas", 30))
@@ -810,12 +801,14 @@ class SprintWindow(tk.Toplevel):
         self.words = ttk.Label(container, text="0 words", style="Section.TLabel")
         self.words.grid(row=1, column=0, columnspan=3, pady=(4, 10))
 
-        self.pause_button = ttk.Button(container, text="Pause",
+        # Seven characters each: the default button is eleven wide, three of
+        # them do not fit a window this small, and it is meant to stay small.
+        self.pause_button = ttk.Button(container, text="Pause", width=7,
                                        command=self.toggle)
         self.pause_button.grid(row=2, column=0, padx=(0, 4))
-        ttk.Button(container, text="+5 min",
+        ttk.Button(container, text="+5 min", width=7,
                    command=lambda: self.extend(5)).grid(row=2, column=1, padx=4)
-        ttk.Button(container, text="Stop", command=self.stop).grid(
+        ttk.Button(container, text="Stop", width=7, command=self.stop).grid(
             row=2, column=2, padx=(4, 0))
 
         self.attributes("-topmost", True)
@@ -1025,12 +1018,13 @@ class OutlineWindow(tk.Toplevel):
         # selection events that causes are not mistaken for user edits.
         self._loading = False
 
-        container = ttk.Frame(self, padding=10)
-        container.grid(row=0, column=0, sticky="nsew")
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
+        container = shell(self, 10)
         container.rowconfigure(1, weight=1)
-        container.columnconfigure(0, weight=1)
+        # The beat list needs about 500px for its four columns. The detail side
+        # asks for far more than it needs (an 80-character text box), so left to
+        # itself it took the room and squeezed "Done" and "Scenes" off the list.
+        container.columnconfigure(0, weight=3, minsize=500)
+        container.columnconfigure(1, weight=2)
 
         # -- framework picker ------------------------------------------
         top = ttk.Frame(container)
@@ -1082,7 +1076,7 @@ class OutlineWindow(tk.Toplevel):
         self.beat_prompt.grid(row=1, column=0, sticky="w", pady=(4, 8))
         ttk.Label(right, text="Your plan for this beat").grid(
             row=2, column=0, sticky="w")
-        self.answer = ScrolledText(right, height=10, wrap="word")
+        self.answer = ScrolledText(right, height=10, width=36, wrap="word")
         self.answer.grid(row=3, column=0, sticky="nsew", pady=(2, 8))
         add_editing_keys(self.answer.text)
         self.answer.nf_check = WritingCheck(self.answer.text)
@@ -1099,7 +1093,7 @@ class OutlineWindow(tk.Toplevel):
         scene_holder.grid(row=6, column=0, sticky="ew")
         scene_holder.columnconfigure(0, weight=1)
         self.scene_list = tk.Listbox(scene_holder, selectmode="extended",
-                                     height=7, exportselection=False,
+                                     height=7, width=36, exportselection=False,
                                      activestyle="none")
         self.scene_list.grid(row=0, column=0, sticky="ew")
         scene_bar = AutoScrollbar(scene_holder, orient="vertical",
@@ -1260,10 +1254,7 @@ class TimelineWindow(tk.Toplevel):
         self.on_change = on_change
         self.title("Timeline")
 
-        container = ttk.Frame(self, padding=10)
-        container.grid(row=0, column=0, sticky="nsew")
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
+        container = shell(self, 10)
         container.rowconfigure(1, weight=1)
         container.columnconfigure(0, weight=1)
 
@@ -1431,10 +1422,7 @@ class BackupsWindow(tk.Toplevel):
         self.project = project
         self.title("Backups")
 
-        container = ttk.Frame(self, padding=10)
-        container.grid(row=0, column=0, sticky="nsew")
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
+        container = shell(self, 10)
         container.rowconfigure(1, weight=1)
         container.columnconfigure(0, weight=1)
 
