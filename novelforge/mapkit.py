@@ -30,6 +30,7 @@ Rules this module keeps, and callers may rely on:
 
 from __future__ import annotations
 
+import bisect
 import heapq
 import math
 import random
@@ -1460,4 +1461,196 @@ def hex_distance(a: Tuple[int, int], b: Tuple[int, int]) -> int:
     return max(abs(ax - bx), abs(ay - by), abs(az - bz))
 
 
-# @@APPEND@@
+# ---------------------------------------------------------------------------
+# Polylines
+# ---------------------------------------------------------------------------
+
+def polyline_length(pts: Sequence[Point], closed: bool = False) -> float:
+    """Total length of the path (with the closing edge if ``closed``)."""
+    n = len(pts)
+    total = sum(dist(pts[i], pts[i + 1]) for i in range(n - 1))
+    if closed and n > 1:
+        total += dist(pts[-1], pts[0])
+    return total
+
+
+def polyline_cumulative(pts: Sequence[Point], closed: bool = False) -> List[float]:
+    """Distance travelled along the path at each vertex: ``[0, d1, d2, ...]``.
+    With ``closed`` there is one extra entry, the full perimeter, for the
+    return to the first point. Hand it to ``point_at`` to place many points
+    on one path without re-measuring it."""
+    out = [0.0]
+    for i in range(len(pts) - 1):
+        out.append(out[-1] + dist(pts[i], pts[i + 1]))
+    if closed and len(pts) > 1:
+        out.append(out[-1] + dist(pts[-1], pts[0]))
+    return out
+
+
+def point_at(pts: Sequence[Point], distance: float, closed: bool = False,
+             cumulative: Optional[Sequence[float]] = None) -> Tuple[Point, float]:
+    """The point ``distance`` along the path and the direction of travel there.
+
+    Returns ``(point, tangent_angle)``, the angle in radians as ``atan2(dy,
+    dx)`` of the segment the point is on (at a vertex, the segment leaving
+    it). An open path clamps ``distance`` to its ends; a closed one wraps
+    round. Zero-length segments are skipped. A path with no length answers
+    ``(pts[0], 0.0)``. Pass ``cumulative=polyline_cumulative(pts, closed)`` when
+    calling repeatedly.
+    """
+    n = len(pts)
+    if n == 0:
+        raise ValueError("point_at needs at least one point")
+    if n == 1:
+        return (pts[0], 0.0)
+    cum = cumulative if cumulative is not None else polyline_cumulative(pts, closed)
+    total = cum[-1]
+    if total <= 0.0:
+        return (pts[0], 0.0)
+    if closed:
+        distance = distance % total
+    else:
+        distance = 0.0 if distance < 0.0 else total if distance > total else distance
+    last = len(cum) - 2                                     # index of the final segment
+    i = min(bisect.bisect_right(cum, distance) - 1, last)
+    while i > 0 and cum[i + 1] - cum[i] <= 0.0:             # step back off a zero-length end
+        i -= 1
+    a = pts[i]
+    b = pts[(i + 1) % n]
+    seg = cum[i + 1] - cum[i]
+    if seg <= 0.0:
+        return (a, 0.0)
+    t = (distance - cum[i]) / seg
+    t = 0.0 if t < 0.0 else 1.0 if t > 1.0 else t
+    return ((a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t),
+            math.atan2(b[1] - a[1], b[0] - a[0]))
+
+
+def chaikin(pts: Sequence[Point], iterations: int = 2, closed: bool = False) -> List[Point]:
+    """Chaikin corner cutting: every corner is replaced by two points a
+    quarter of the way along each neighbouring segment, ``iterations`` times.
+    The curve converges on a smooth quadratic B-spline that stays inside the
+    convex hull of the points. An open path keeps its two end points, giving
+    ``2n - 2`` points per pass; a closed one gives ``2n``."""
+    cur: List[Point] = [(float(x), float(y)) for x, y in pts]
+    for _ in range(max(0, iterations)):
+        n = len(cur)
+        if n < 3:
+            break
+        out: List[Point] = []
+        span = n if closed else n - 1
+        for i in range(span):
+            p, q = cur[i], cur[(i + 1) % n]
+            if closed or i > 0:
+                out.append((0.75 * p[0] + 0.25 * q[0], 0.75 * p[1] + 0.25 * q[1]))
+            if closed or i < span - 1:
+                out.append((0.25 * p[0] + 0.75 * q[0], 0.25 * p[1] + 0.75 * q[1]))
+        cur = [cur[0]] + out + [cur[-1]] if not closed else out
+    return cur
+
+
+def catmull_rom(pts: Sequence[Point], samples_per_seg: int = 8, closed: bool = False,
+                alpha: float = 0.5) -> List[Point]:
+    """A smooth curve through every point (Catmull-Rom spline), sampled.
+
+    ``alpha=0.5`` (centripetal) never makes loops or cusps within a segment,
+    unlike the uniform variant, so it suits roads and journeys. Returns
+    ``(n - 1) * samples_per_seg + 1`` points for an open path (the last one is
+    the final input point) and ``n * samples_per_seg`` for a closed one. Every
+    input point appears in the output. Consecutive duplicate points are
+    dropped first.
+    """
+    base: List[Point] = []
+    for p in pts:
+        if not base or dist(p, base[-1]) > EPS:
+            base.append((float(p[0]), float(p[1])))
+    if closed and len(base) > 1 and dist(base[0], base[-1]) <= EPS:
+        base.pop()
+    n = len(base)
+    samples = max(1, int(samples_per_seg))
+    if n < 2:
+        return base
+    if n == 2 and not closed:
+        line = [lerp(base[0], base[1], s / samples) for s in range(samples)]
+        return line + [base[1]]                 # the last point exactly, not by rounding
+    if closed:
+        ext = [base[-1]] + base + [base[0], base[1]]
+        segs = n
+    else:
+        head = (2 * base[0][0] - base[1][0], 2 * base[0][1] - base[1][1])
+        tail = (2 * base[-1][0] - base[-2][0], 2 * base[-1][1] - base[-2][1])
+        ext = [head] + base + [tail]
+        segs = n - 1
+    out: List[Point] = []
+    for i in range(segs):
+        p0, p1, p2, p3 = ext[i], ext[i + 1], ext[i + 2], ext[i + 3]
+        t0 = 0.0
+        t1 = t0 + dist(p0, p1) ** alpha
+        t2 = t1 + dist(p1, p2) ** alpha
+        t3 = t2 + dist(p2, p3) ** alpha
+        for s in range(samples):
+            if s == 0:
+                out.append(p1)                      # the knot itself, exactly
+                continue
+            t = t1 + (t2 - t1) * s / samples
+
+            def mix(a: Point, b: Point, ta: float, tb: float) -> Point:
+                w = (t - ta) / (tb - ta)
+                return (a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w)
+
+            a1, a2, a3 = mix(p0, p1, t0, t1), mix(p1, p2, t1, t2), mix(p2, p3, t2, t3)
+            b1, b2 = mix(a1, a2, t0, t2), mix(a2, a3, t1, t3)
+            out.append(mix(b1, b2, t1, t2))
+    if not closed:
+        out.append(base[-1])
+    return out
+
+
+def simplify(pts: Sequence[Point], tolerance: float) -> List[Point]:
+    """Douglas-Peucker: drop points until none is more than ``tolerance`` from
+    the simplified path. The end points are always kept, and every original
+    point lies within ``tolerance`` of the result. For a ring, pass
+    ``ring + [ring[0]]`` and drop the last point of the answer."""
+    n = len(pts)
+    if n < 3:
+        return list(pts)
+    keep = [False] * n
+    keep[0] = keep[-1] = True
+    stack = [(0, n - 1)]
+    while stack:
+        lo, hi = stack.pop()
+        a, b = pts[lo], pts[hi]
+        far, far_i = -1.0, -1
+        for i in range(lo + 1, hi):
+            d = point_segment_distance(pts[i], a, b)
+            if d > far:
+                far, far_i = d, i
+        if far > tolerance:
+            keep[far_i] = True
+            stack.append((lo, far_i))
+            stack.append((far_i, hi))
+    return [p for p, k in zip(pts, keep) if k]
+
+
+def resample(pts: Sequence[Point], step: float, closed: bool = False) -> List[Point]:
+    """Points spaced ``step`` apart *along* the path, starting at its first
+    point. An open path also ends at its last point (the final gap may be
+    shorter); a closed one does not repeat its start. Use it to put arrows or
+    day markers on a route at even intervals."""
+    if step <= 0.0:
+        raise ValueError("resample needs a positive step")
+    n = len(pts)
+    if n < 2:
+        return [(float(x), float(y)) for x, y in pts]
+    cum = polyline_cumulative(pts, closed)
+    total = cum[-1]
+    if total <= 0.0:
+        return [pts[0]]
+    out: List[Point] = []
+    k = 0
+    while k * step < total - EPS:
+        out.append(point_at(pts, k * step, closed, cum)[0])
+        k += 1
+    if not closed:
+        out.append((float(pts[-1][0]), float(pts[-1][1])))
+    return out

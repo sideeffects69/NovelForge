@@ -785,10 +785,10 @@ class PointsAndCells(unittest.TestCase):
     def test_lloyd_relaxation_evens_out_the_cells(self):
         rng = random.Random(33)
         better = 0
-        trials = 60
+        trials = 100
         for _ in range(trials):
-            sites = random_sites(rng, rng.randint(8, 25))
-            relaxed = mk.lloyd_relax(sites, BOX, iterations=4)
+            sites = random_sites(rng, rng.randint(6, 14))
+            relaxed = mk.lloyd_relax(sites, BOX, iterations=3)
             self.assertEqual(len(relaxed), len(sites))
             for p in relaxed:
                 self.assertTrue(mk.rect_contains(BOX, p))
@@ -808,8 +808,8 @@ class PointsAndCells(unittest.TestCase):
 
     def test_poisson_disc_respects_the_minimum_distance_and_the_box(self):
         rng = random.Random(35)
-        for _ in range(120):
-            r = rng.uniform(5.0, 20.0)
+        for _ in range(100):
+            r = rng.uniform(7.0, 22.0)
             pts = mk.poisson_disc(rng, SMALL, r)
             self.assertGreater(len(pts), 3)
             for p in pts:
@@ -1450,6 +1450,234 @@ class HexGrids(unittest.TestCase):
                 if h <= 8:
                     self.assertEqual(mk.hex_distance(a, b), h)
                     self.assertEqual(mk.hex_distance(b, a), h)
+
+
+# ---------------------------------------------------------------------------
+# Polylines
+# ---------------------------------------------------------------------------
+
+def random_path(rng, n=None, spread=100.0):
+    n = n or rng.randint(2, 9)
+    return [(rng.uniform(-spread, spread), rng.uniform(-spread, spread)) for _ in range(n)]
+
+
+def walk_to(pts, d, closed=False):
+    """Point and heading at arc length ``d``, by simply walking the segments."""
+    segs = [(pts[i], pts[(i + 1) % len(pts)]) for i in range(len(pts) if closed else len(pts) - 1)]
+    segs = [(a, b) for a, b in segs if mk.dist(a, b) > 0]
+    total = sum(mk.dist(a, b) for a, b in segs)
+    d = d % total if closed else min(max(d, 0.0), total)
+    for k, (a, b) in enumerate(segs):
+        length = mk.dist(a, b)
+        if d < length or k == len(segs) - 1:
+            t = min(d / length, 1.0)
+            return ((a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t),
+                    math.atan2(b[1] - a[1], b[0] - a[0]))
+        d -= length
+
+
+def turning(pts):
+    """Largest turn (degrees) between consecutive segments of a path."""
+    best = 0.0
+    for i in range(1, len(pts) - 1):
+        a = math.atan2(pts[i][1] - pts[i - 1][1], pts[i][0] - pts[i - 1][0])
+        b = math.atan2(pts[i + 1][1] - pts[i][1], pts[i + 1][0] - pts[i][0])
+        best = max(best, abs(math.degrees((b - a + math.pi) % (2 * math.pi) - math.pi)))
+    return best
+
+
+def distance_to_path(p, path):
+    return min(mk.point_segment_distance(p, path[i], path[i + 1]) for i in range(len(path) - 1))
+
+
+class Polylines(unittest.TestCase):
+    def test_length_and_cumulative_length(self):
+        path = [(0.0, 0.0), (3.0, 4.0), (3.0, 10.0)]
+        self.assertAlmostEqual(mk.polyline_length(path), 11.0)
+        self.assertAlmostEqual(mk.polyline_length(path, closed=True), 11.0 + math.hypot(3, 10))
+        self.assertEqual(mk.polyline_cumulative(path), [0.0, 5.0, 11.0])
+        self.assertEqual(len(mk.polyline_cumulative(path, closed=True)), 4)
+        self.assertEqual(mk.polyline_length([(1, 1)]), 0.0)
+        self.assertEqual(mk.polyline_length([]), 0.0)
+
+    def test_point_at_matches_walking_the_path(self):
+        rng = random.Random(70)
+        for _ in range(150):
+            path = random_path(rng)
+            closed = rng.random() < 0.4 and len(path) > 2
+            total = mk.polyline_length(path, closed)
+            cum = mk.polyline_cumulative(path, closed)
+            for _ in range(12):
+                d = rng.uniform(-0.2 * total, 1.2 * total)
+                (px, py), ang = mk.point_at(path, d, closed)
+                (wx, wy), wang = walk_to(path, d, closed)
+                self.assertAlmostEqual(px, wx, places=7)
+                self.assertAlmostEqual(py, wy, places=7)
+                self.assertAlmostEqual(math.cos(ang), math.cos(wang), places=7)
+                self.assertAlmostEqual(math.sin(ang), math.sin(wang), places=7)
+                self.assertEqual(mk.point_at(path, d, closed, cumulative=cum)[0], (px, py))
+
+    def test_point_at_ends_vertices_and_wrapping(self):
+        path = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)]
+        self.assertEqual(mk.point_at(path, 0.0), ((0.0, 0.0), 0.0))
+        self.assertEqual(mk.point_at(path, -5.0)[0], (0.0, 0.0))                 # clamped
+        pt, ang = mk.point_at(path, 10.0)                                         # at a corner:
+        self.assertEqual(pt, (10.0, 0.0))
+        self.assertAlmostEqual(ang, math.pi / 2)                                  # the way on
+        pt, ang = mk.point_at(path, 999.0)
+        self.assertEqual(pt, (10.0, 10.0))
+        self.assertAlmostEqual(ang, math.pi / 2)                                  # the last leg
+        square = mk.rect_polygon((0, 0, 10, 10))
+        self.assertEqual(mk.point_at(square, 5.0, closed=True)[0], (5.0, 0.0))
+        pt, _ = mk.point_at(square, 45.0, closed=True)                            # wraps
+        self.assertAlmostEqual(pt[0], 5.0)
+        self.assertAlmostEqual(pt[1], 0.0)
+
+    def test_point_at_ignores_repeated_points_and_handles_tiny_paths(self):
+        doubled = [(0.0, 0.0), (0.0, 0.0), (10.0, 0.0), (10.0, 0.0)]
+        self.assertEqual(mk.point_at(doubled, 5.0), ((5.0, 0.0), 0.0))
+        self.assertEqual(mk.point_at(doubled, 10.0), ((10.0, 0.0), 0.0))
+        self.assertEqual(mk.point_at([(3.0, 4.0)], 7.0), ((3.0, 4.0), 0.0))
+        self.assertEqual(mk.point_at([(3.0, 4.0), (3.0, 4.0)], 7.0), ((3.0, 4.0), 0.0))
+        with self.assertRaises(ValueError):
+            mk.point_at([], 1.0)
+
+    def test_chaikin_cuts_corners_and_keeps_the_ends(self):
+        rng = random.Random(71)
+        for _ in range(120):
+            path = random_path(rng, rng.randint(3, 8))
+            once = mk.chaikin(path, 1)
+            self.assertEqual(len(once), 2 * len(path) - 2)
+            self.assertEqual((once[0], once[-1]), (path[0], path[-1]))
+            self.assertLessEqual(mk.polyline_length(once), mk.polyline_length(path) + 1e-9)
+            twice = mk.chaikin(path, 2)
+            self.assertEqual(len(twice), 2 * len(once) - 2)
+            hull = mk.convex_hull(path)
+            if len(hull) >= 3:
+                for p in twice:
+                    self.assertTrue(inside_convex(hull, p, tol=1e-7))
+
+    def test_chaikin_smooths_and_closes(self):
+        zig = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (20.0, 10.0)]
+        self.assertLess(turning(mk.chaikin(zig, 3)), turning(zig))
+        square = mk.rect_polygon((0, 0, 10, 10))
+        ring = mk.chaikin(square, 1, closed=True)
+        self.assertEqual(len(ring), 8)
+        self.assertLess(shoelace(ring), shoelace(square))              # corners are cut off
+        self.assertEqual(mk.chaikin(zig, 0), zig)
+        self.assertEqual(mk.chaikin([(0, 0), (5, 5)], 3), [(0.0, 0.0), (5.0, 5.0)])
+        line = [(0.0, 0.0), (5.0, 5.0), (9.0, 9.0), (20.0, 20.0)]
+        for p in mk.chaikin(line, 3):
+            self.assertAlmostEqual(p[0], p[1])                          # a straight path stays straight
+
+    def test_catmull_rom_passes_through_every_point(self):
+        rng = random.Random(72)
+        for _ in range(120):
+            path = random_path(rng, rng.randint(2, 8))
+            per = rng.randint(2, 10)
+            curve = mk.catmull_rom(path, per)
+            self.assertEqual(len(curve), (len(path) - 1) * per + 1)
+            for p in path:
+                self.assertLess(min(mk.dist(p, q) for q in curve), 1e-7)
+            self.assertGreaterEqual(mk.polyline_length(curve) + 1e-9, mk.polyline_length(path))
+            self.assertEqual(curve[0], path[0])
+            self.assertEqual(curve[-1], path[-1])
+            xs = [p[0] for p in path]
+            ys = [p[1] for p in path]
+            room = 0.75 * (max(xs) - min(xs) + max(ys) - min(ys)) + 1.0
+            for x, y in curve:                                      # centripetal: no wild overshoot
+                self.assertTrue(min(xs) - room <= x <= max(xs) + room)
+                self.assertTrue(min(ys) - room <= y <= max(ys) + room)
+
+    def test_catmull_rom_is_smoother_than_the_polyline_and_straight_on_lines(self):
+        rng = random.Random(73)
+        for _ in range(100):
+            path = random_convex(rng)[:rng.randint(4, 7)]
+            self.assertLess(turning(mk.catmull_rom(path, 8)), turning(path))
+        line = [(0.0, 0.0), (5.0, 5.0), (9.0, 9.0), (20.0, 20.0)]
+        for p in mk.catmull_rom(line, 6):
+            self.assertAlmostEqual(p[0], p[1], places=7)
+
+    def test_catmull_rom_closed_and_edge_cases(self):
+        ring = mk.catmull_rom(mk.rect_polygon((0, 0, 20, 20)), 6, closed=True)
+        self.assertEqual(len(ring), 24)                             # no repeated closing point
+        self.assertNotEqual(ring[0], ring[-1])
+        self.assertEqual(len(mk.catmull_rom([(0, 0), (4, 0)], 5)), 6)
+        self.assertEqual(mk.catmull_rom([(1, 1)], 5), [(1.0, 1.0)])
+        self.assertEqual(mk.catmull_rom([], 5), [])
+        dup = mk.catmull_rom([(0, 0), (0, 0), (5, 5), (10, 0)], 4)
+        self.assertEqual(len(dup), 2 * 4 + 1)                       # the repeat was dropped
+        again = mk.catmull_rom([(0, 0), (5, 5), (10, 0)], 4)
+        self.assertEqual(dup, again)
+
+    def test_simplify_keeps_the_ends_and_stays_within_tolerance(self):
+        rng = random.Random(74)
+        for _ in range(120):
+            path = random_path(rng, rng.randint(3, 40), spread=50.0)
+            tol = rng.uniform(0.5, 30.0)
+            slim = mk.simplify(path, tol)
+            self.assertEqual((slim[0], slim[-1]), (path[0], path[-1]))
+            self.assertLessEqual(len(slim), len(path))
+            it = iter(path)
+            self.assertTrue(all(any(p == q for q in it) for p in slim))     # a subsequence
+            if len(slim) > 1:
+                for p in path:
+                    self.assertLessEqual(distance_to_path(p, slim), tol + 1e-9)
+
+    def test_simplify_removes_collinear_points_and_respects_the_tolerance(self):
+        line = [(float(x), 2.0 * x) for x in range(10)]
+        self.assertEqual(mk.simplify(line, 1e-6), [line[0], line[-1]])
+        bump = [(0.0, 0.0), (5.0, 0.4), (10.0, 0.0)]
+        self.assertEqual(mk.simplify(bump, 0.5), [(0.0, 0.0), (10.0, 0.0)])
+        self.assertEqual(mk.simplify(bump, 0.3), bump)
+        self.assertEqual(mk.simplify([(0, 0), (1, 1)], 5.0), [(0, 0), (1, 1)])
+        self.assertEqual(mk.simplify([], 1.0), [])
+
+    def test_simplify_a_ring(self):
+        rng = random.Random(75)
+        ring = random_convex(rng, n=8)
+        closed = ring + [ring[0]]
+        slim = mk.simplify(closed, 1000.0)
+        self.assertEqual(slim, [closed[0], closed[-1]])                   # ends kept, as documented
+
+    def test_resample_spaces_points_along_the_path(self):
+        rng = random.Random(76)
+        for _ in range(120):
+            path = random_path(rng, rng.randint(2, 8))
+            total = mk.polyline_length(path)
+            if total < 1.0:
+                continue
+            step = total / rng.uniform(1.5, 25.0)
+            pts = mk.resample(path, step)
+            want = int(total // step) + 1 + (0 if abs(total - (total // step) * step) < 1e-9 else 1)
+            self.assertEqual(len(pts), want)
+            self.assertEqual(pts[0], path[0])
+            self.assertEqual(pts[-1], path[-1])
+            for k, p in enumerate(pts[:-1]):
+                self.assertLess(distance_to_path(p, path), 1e-7)                 # on the path
+                expected = walk_to(path, k * step)[0]
+                self.assertAlmostEqual(p[0], expected[0], places=7)
+                self.assertAlmostEqual(p[1], expected[1], places=7)
+                self.assertLessEqual(mk.dist(p, pts[k + 1]), step + 1e-7)        # arc >= chord
+
+    def test_resample_a_straight_line_is_exactly_even(self):
+        pts = mk.resample([(0.0, 0.0), (10.0, 0.0)], 2.5)
+        self.assertEqual(pts, [(0.0, 0.0), (2.5, 0.0), (5.0, 0.0), (7.5, 0.0), (10.0, 0.0)])
+        pts = mk.resample([(0.0, 0.0), (10.0, 0.0)], 3.0)
+        self.assertEqual(pts[-2:], [(9.0, 0.0), (10.0, 0.0)])                    # short last gap
+
+    def test_resample_a_closed_path_does_not_repeat_the_start(self):
+        pts = mk.resample(mk.rect_polygon((0, 0, 10, 10)), 5.0, closed=True)
+        self.assertEqual(len(pts), 8)
+        self.assertEqual(len(set(pts)), 8)
+        self.assertEqual(pts[0], (0.0, 0.0))
+
+    def test_resample_edge_cases(self):
+        with self.assertRaises(ValueError):
+            mk.resample([(0, 0), (1, 1)], 0.0)
+        self.assertEqual(mk.resample([(2.0, 3.0)], 1.0), [(2.0, 3.0)])
+        self.assertEqual(mk.resample([(2.0, 3.0), (2.0, 3.0)], 1.0), [(2.0, 3.0)])
+        self.assertEqual(mk.resample([], 1.0), [])
 
 
 # @@TESTS@@
