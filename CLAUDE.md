@@ -536,11 +536,18 @@ GPTBot, ChatGPT-User, OAI-SearchBot, ClaudeBot, PerplexityBot, Google-Extended,
 Applebot-Extended, CCBot and others; `llms.txt` is a short plain-text summary.
 **But crawlers only read `robots.txt` and `llms.txt` at the root of a host**, and
 this is a *project* page under `/NovelForge/`, so those two files inside `site/`
-are not found by anything on their own. The fix is a repository named exactly
-`sideeffects69.github.io`; `tools/site-root/` holds the ready-made files (also
-generated) and a README with the steps. **Creating that repository was offered to
-the user, not done** - it is a new public repo under their account. Sitemap
-submission in Search Console works regardless of location.
+are not found by anything on their own; what counts is the host's root.
+**That root belongs to another project** (checked 2026-09-20): the repository
+`sideeffects69/sideeffects69.github.io` was created on 2026-09-19 for the owner's
+other site, *Magic Apply - Jobs*. Its `robots.txt` already allows every crawler, so
+NovelForge is crawlable and there is nothing to create - but its `Sitemap:` line
+and its `llms.txt` name only Magic Apply. **Never create that repository and never
+push anything over it.** Adding
+`Sitemap: https://sideeffects69.github.io/NovelForge/sitemap.xml` to its
+`robots.txt`, and a NovelForge line to its `llms.txt`, would help; that is a change
+to another project's public repo, so it was offered to the user, not done.
+`tools/site-root/README.md` (generated) says the same. Sitemap submission in
+Search Console works regardless of location.
 
 **Google Search Console** is a URL-prefix property for the project page, verified
 by the `google-site-verification` meta tag on the home page (it is in
@@ -750,8 +757,7 @@ change it.
    the new tag (that is the site's Download button); the Pages run for the push
    must be green (`api.github.com/repos/sideeffects69/NovelForge/actions/runs`);
    and the live screenshots must be byte-identical to `site/assets/screenshots/`.
-   Then download the tag's source zip into a short path (`C:
-f_rel`) and run
+   Then download the tag's source zip into a short path (`C:\nf_rel`) and run
    the test suite from *that* - it proves the published copy is complete
    (nothing needed is gitignored), which the working folder cannot.
 
@@ -785,6 +791,12 @@ python tools/build_site.py            # regenerate site/ (and tools/site-root/)
 python tools/build_site.py --check    # is it current?
 python -m http.server 8000 --directory site   # then open localhost:8000
 ```
+**After regenerating, `git status` may list every generated `site/` file as modified
+when nothing changed:** the generator writes LF and this machine has
+`core.autocrlf=true`. `git diff --stat -- site` is the truth (empty means only line
+endings differ); if it is empty, `git checkout -- site` puts the files back as git
+had them. Never run that with a non-empty diff.
+
 Deploys automatically on every push to `main` that touches `site/**`
 (`.github/workflows/deploy-pages.yml`) to
 https://sideeffects69.github.io/NovelForge/ - no manual deploy step. `Write.bat`
