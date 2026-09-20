@@ -212,6 +212,22 @@ PIN_KINDS: Dict[str, str] = {
     "portal": "Portal",
 }
 
+#: Pin kinds only the generators place (star maps, gates). The editor's own list
+#: is `PIN_KINDS`, which stays the twenty a writer places by hand; a map of any
+#: kind can still hold and draw these. `pin_kinds_for` says which suit a map.
+EXTRA_PIN_KINDS: Dict[str, str] = {
+    "star": "Star",
+    "planet": "Planet",
+    "station": "Station",
+    "gate": "Gate",
+}
+
+
+def pin_kind_label(kind: str) -> str:
+    """What a pin kind is called, whether the writer places it or a generator does."""
+    return PIN_KINDS.get(kind) or EXTRA_PIN_KINDS.get(kind) or kind
+
+
 MAP_KINDS = {
     "world": "World",
     "continent": "Continent",
@@ -1098,7 +1114,8 @@ def cell_units(gm: Any) -> float:
     return bar.units_per_pixel * float(getattr(gm, "grid_size", 0) or 0)
 
 
-def _label_fingerprint(gm: GameMap, visible: set) -> tuple:
+def _label_fingerprint(gm: GameMap, visible: set,
+                       reserved: Sequence[Box] = ()) -> tuple:
     """
     Everything `layout_pin_labels` actually reads, rounded to a tenth of a
     map unit. Panning and zooming touch none of this, so a redraw triggered
@@ -1109,6 +1126,7 @@ def _label_fingerprint(gm: GameMap, visible: set) -> tuple:
     return (
         gm.title_on_map, gm.name, gm.compass, gm.width, gm.height,
         gm.scale_text, gm.scale_px, gm.hide_colliding_labels, frozenset(visible),
+        tuple(tuple(round(v, 1) for v in box) for box in reserved),
         tuple(
             (l.layer, round(l.x, 1), round(l.y, 1), l.text, l.size, l.tracking)
             for l in gm.labels
@@ -1125,42 +1143,57 @@ def _label_fingerprint(gm: GameMap, visible: set) -> tuple:
     )
 
 
-def _cached_label_placement(gm: GameMap, visible: set
+def _cached_label_placement(gm: GameMap, visible: set,
+                            reserved: Sequence[Box] = ()
                             ) -> Dict[str, Tuple[str, bool]]:
-    fingerprint = _label_fingerprint(gm, visible)
+    fingerprint = _label_fingerprint(gm, visible, reserved)
     cached = gm._label_cache
     if cached is not None and cached[0] == fingerprint:
         return cached[1]
-    placement = layout_pin_labels(gm, visible)
+    placement = layout_pin_labels(gm, visible, list(reserved))
     gm._label_cache = (fingerprint, placement)
     return placement
 
 
-def layout_pin_labels(gm: GameMap, visible: Optional[set] = None
+def furniture_boxes(gm: GameMap) -> List[Box]:
+    """
+    The space the map's own furniture takes - title, compass, scale bar - which
+    names, and the legend, must keep clear of.
+    """
+    boxes: List[Box] = []
+    if gm.title_on_map and gm.name.strip():
+        size = max(18, int(gm.height * 0.038))
+        boxes.append(text_box(gm.width / 2.0, gm.height * 0.062,
+                              gm.name.upper(), size, "center", size * 0.14))
+    if gm.compass:
+        r = min(gm.width, gm.height) * 0.055
+        cx, cy = gm.width - r * 2.1, gm.height - r * 2.1
+        boxes.append((cx - r * 1.5, cy - r * 1.8, cx + r * 1.5, cy + r * 1.5))
+    bar = scale_bar(gm)
+    if bar.label:
+        boxes.append(bar.area)
+    return boxes
+
+
+def layout_pin_labels(gm: GameMap, visible: Optional[set] = None,
+                      reserved: Optional[Sequence[Box]] = None
                       ) -> Dict[str, Tuple[str, bool]]:
     """
     Choose a side for every pin label and decide which ones must be dropped.
 
     Returns {pin_id: (side, show)}. Reserved first, in order: the map title,
-    compass and scale bar; then free-standing text labels; then every pin's own
-    glyph, so a name never sits on top of a marker.
+    compass and scale bar, and the legend; then free-standing text labels; then
+    every pin's own glyph, so a name never sits on top of a marker. `reserved`
+    adds boxes to keep clear of; left as None, the legend's own box is used when
+    the map shows one.
     """
     if visible is None:
         visible = gm.visible_layers()
-    placed: List[Box] = []
-
-    # Furniture.
-    if gm.title_on_map and gm.name.strip():
-        size = max(18, int(gm.height * 0.038))
-        placed.append(text_box(gm.width / 2.0, gm.height * 0.062,
-                               gm.name.upper(), size, "center", size * 0.14))
-    if gm.compass:
-        r = min(gm.width, gm.height) * 0.055
-        cx, cy = gm.width - r * 2.1, gm.height - r * 2.1
-        placed.append((cx - r * 1.5, cy - r * 1.8, cx + r * 1.5, cy + r * 1.5))
-    bar = scale_bar(gm)
-    if bar.label:
-        placed.append(bar.area)
+    placed: List[Box] = furniture_boxes(gm)
+    if reserved is None:
+        key = legend_layout(gm, visible) if gm.legend else None
+        reserved = [key.box] if key else []
+    placed.extend(reserved)
 
     # Free-standing labels (region and ocean names) always win.
     for label in gm.labels:
@@ -1591,6 +1624,278 @@ def _title_primitives(gm: GameMap) -> List[tuple]:
     ]
 
 
+# -- the legend ------------------------------------------------------------
+#
+# A key to the map: a small picture and a name for every kind of thing that is
+# actually drawn. It is made of the same polygons, lines and text as the rest of
+# the map, so the editor, the PNG and the SVG all draw it identically.
+
+#: What each kind of shape is called in a legend.
+LEGEND_NAMES = {
+    "land": "Land", "water": "Water", "forest": "Forest",
+    "mountains": "Mountains", "hills": "Hills", "desert": "Desert",
+    "swamp": "Marsh", "ice": "Ice and tundra", "region": "Border",
+    "river": "River", "road": "Road", "wall": "Wall", "route": "Route",
+    "building": "Building", "ward": "District", "plaza": "Plaza",
+    "street": "Street", "lane": "Lane", "room": "Room", "floor": "Floor",
+    "partition": "Interior wall", "door": "Door", "window": "Window",
+    "stairs": "Stairs", "cave": "Cave", "orbit": "Orbit",
+}
+
+#: The order a legend lists them in: ground first, then relief, then lines.
+LEGEND_ORDER = (
+    "land", "water", "forest", "desert", "swamp", "ice", "hills", "mountains",
+    "region", "river", "road", "wall", "route", "ward", "building", "plaza",
+    "street", "lane", "floor", "room", "cave", "stairs", "partition", "door",
+    "window", "orbit",
+)
+
+#: A legend lists at most this many kinds (the rarest markers are left out),
+#: and starts another column after this many rows.
+MAX_LEGEND_ENTRIES = 16
+LEGEND_ROWS = 8
+
+
+def legend_entries(gm: GameMap, visible: Optional[set] = None
+                   ) -> List[Tuple[str, str, str]]:
+    """
+    (group, kind, name) for everything the legend should list: the kinds of
+    shape and the kinds of pin actually on the layers that are shown.
+    """
+    if visible is None:
+        visible = gm.visible_layers()
+    shapes = {s.kind for s in gm.shapes if s.layer in visible and len(s.points) >= 2}
+    entries: List[Tuple[str, str, str]] = []
+    for kind in list(LEGEND_ORDER) + sorted(shapes - set(LEGEND_ORDER)):
+        if kind in shapes:
+            entries.append(("terrain", kind, LEGEND_NAMES.get(kind)
+                            or TERRAIN.get(kind, {}).get("label", kind)))
+    pins = {p.kind for p in gm.pins if p.layer in visible}
+    for kind in sorted(pins, key=lambda k: (LABEL_PRIORITY.get(k, 50), k)):
+        entries.append(("pin", kind, pin_kind_label(kind)))
+    return entries[:MAX_LEGEND_ENTRIES]
+
+
+@dataclass(frozen=True)
+class LegendLayout:
+    """Where a legend goes on the map and how it is laid out inside."""
+
+    box: Box
+    entries: Tuple[Tuple[str, str, str], ...]
+    columns: int
+    rows: int
+    size: float                  # lettering
+    row_h: float
+    pad: float
+    title_h: float
+    swatch_w: float
+    gap: float
+    column_x: Tuple[float, ...]  # where each column starts, from the box's inner left
+    corner: str                  # "tl", "tr", "bl" or "br"
+
+
+def _land_coverage(gm: GameMap, visible: set, boxes: Sequence[Box]) -> List[float]:
+    """
+    For each box, the fraction (0..1) of it that lies over drawn ground.
+
+    One small bitmap of every filled shape is painted and each box is averaged
+    from it, which costs a few milliseconds however many shapes there are -
+    testing points against polygons one by one did not.
+    """
+    try:
+        from PIL import Image, ImageDraw
+
+        step = max(2.0, min(gm.width, gm.height) / 200.0)
+        mask = Image.new("L", (int(gm.width / step) + 2, int(gm.height / step) + 2), 0)
+        draw = ImageDraw.Draw(mask)
+        for shape in gm.shapes:
+            spec = TERRAIN.get(shape.kind)
+            if (shape.layer not in visible or len(shape.points) < 3 or spec is None
+                    or not (spec["closed"] and shape.closed and spec.get("fill"))
+                    or shape.kind == "water"):
+                continue
+            draw.polygon([(x / step, y / step) for x, y in shape.points], fill=255)
+        out: List[float] = []
+        for x0, y0, x1, y1 in boxes:
+            area = mask.crop((int(x0 / step), int(y0 / step),
+                              max(int(x0 / step) + 1, int(x1 / step)),
+                              max(int(y0 / step) + 1, int(y1 / step))))
+            out.append(area.resize((1, 1), Image.BOX).getpixel((0, 0)) / 255.0)
+        return out
+    except Exception:
+        return [0.0 for _ in boxes]
+
+
+def _crowding(gm: GameMap, visible: set, box: Box, blocked: Sequence[Box],
+              coverage: float) -> float:
+    """How bad a place this is for the legend: furniture, then names, then ground."""
+    score = 100.0 * coverage
+    for other in blocked:
+        if boxes_overlap(box, other, 0.0):
+            score += 1000.0
+    for pin in gm.pins:
+        if pin.layer in visible:
+            reach = max(3.0, float(pin.size)) * 1.7
+            if boxes_overlap(box, (pin.x - reach, pin.y - reach,
+                                   pin.x + reach, pin.y + reach), 0.0):
+                score += 25.0
+    for label in gm.labels:
+        if label.layer in visible and label.text.strip() and boxes_overlap(
+                box, text_box(label.x, label.y, label.text, label.size, "center",
+                              label.tracking), 0.0):
+            score += 25.0
+    return score
+
+
+def legend_layout(gm: GameMap, visible: Optional[set] = None
+                  ) -> Optional[LegendLayout]:
+    """
+    Size the legend and choose its corner; None when it is off or has nothing to
+    list.
+
+    Of the four corners, it takes the one where it covers the least ground and
+    fewest names, and never one that would sit on the title, the compass or the
+    scale bar (unless every corner does). Ties go to the top left.
+    """
+    if not getattr(gm, "legend", False):
+        return None
+    if visible is None:
+        visible = gm.visible_layers()
+    entries = legend_entries(gm, visible)
+    if not entries:
+        return None
+    size = float(max(9, int(gm.height * 0.014)))
+    row_h, pad = size * 1.6, size * 0.8
+    swatch_w, gap = size * 2.0, size * 0.6
+    title_h = row_h * 1.15
+    columns = int(math.ceil(len(entries) / float(LEGEND_ROWS)))
+    rows = int(math.ceil(len(entries) / float(columns)))
+    column_x: List[float] = []
+    cursor = 0.0
+    for c in range(columns):
+        names = [e[2] for e in entries[c * rows:(c + 1) * rows]]
+        column_x.append(cursor)
+        cursor += swatch_w + gap + max(
+            text_box(0, 0, n, size, "w")[2] for n in names) + gap * 2.5
+    title_w = text_box(0, 0, "LEGEND", size, "w", size * 0.15)[2]
+    box_w = max(cursor - gap * 2.5, title_w) + pad * 2
+    box_h = pad * 2 + title_h + rows * row_h
+    edge = max(10.0, min(gm.width, gm.height) * 0.018) * 1.75 + size * 0.6
+    right, bottom = gm.width - edge - box_w, gm.height - edge - box_h
+    corners = (("tl", edge, edge), ("tr", right, edge),
+               ("bl", edge, bottom), ("br", right, bottom))
+    boxes = [(max(0.0, x), max(0.0, y), max(0.0, x) + box_w, max(0.0, y) + box_h)
+             for _n, x, y in corners]
+    blocked = furniture_boxes(gm)
+    covered = _land_coverage(gm, visible, boxes)
+    best = min(range(4), key=lambda i: (
+        _crowding(gm, visible, boxes[i], blocked, covered[i]), i))
+    return LegendLayout(box=boxes[best], entries=tuple(entries), columns=columns,
+                        rows=rows, size=size, row_h=row_h, pad=pad,
+                        title_h=title_h, swatch_w=swatch_w, gap=gap,
+                        column_x=tuple(column_x), corner=corners[best][0])
+
+
+def _legend_swatch(group: str, kind: str, x: float, y: float, w: float,
+                   size: float, palette: Dict[str, Any]) -> List[tuple]:
+    """A small picture of one kind of thing, in a space `w` wide centred on `y`."""
+    ink, light, paper = palette["ink"], palette["ink_light"], palette["paper"]
+    terrain: Dict[str, str] = palette.get("terrain", {}) or {}
+    land_tone = terrain.get("land") or paper
+    if group == "pin":
+        return pin_primitives(Pin(id="legend", x=x + w / 2.0, y=y, kind=kind,
+                                  size=size * 0.36), ink, paper,
+                              palette.get("accent") or ink)
+    h = size
+    right = x + w
+    spec = TERRAIN.get(kind, TERRAIN["land"])
+    out: List[tuple] = []
+    if kind == "mountains":
+        lit, shade, snow = _relief_tones(land_tone, ink)
+        for frac, height in ((0.3, h * 0.62), (0.68, h * 0.46)):
+            out.extend(_peak(x + w * frac, y + h * 0.3, height, ink, lit, shade, snow))
+    elif kind == "hills":
+        lit, shade, _snow = _relief_tones(land_tone, ink)
+        for frac in (0.3, 0.68):
+            cx, r = x + w * frac, h * 0.46
+            dome = [(cx + r * math.cos(math.pi * k / 8.0),
+                     y + h * 0.3 - r * 0.72 * math.sin(math.pi * k / 8.0))
+                    for k in range(9)]
+            out.append(("polygon", dome, lit, "", 0.0, False))
+            out.append(("line", dome, ink, 1.1, False))
+    elif kind == "region":
+        out.append(("line", [(x, y), (right, y)], light, 1.4, True))
+    elif kind == "river":
+        wave = [(x, y + 2), (x + w * 0.35, y - 2), (x + w * 0.7, y + 2), (right, y - 1)]
+        core = palette["water_deep"]
+        out.append(("line", wave, _mix(core, ink, 0.30), 4.4, False))
+        out.append(("line", wave, core, 3.0, False))
+    elif kind == "road":
+        out.append(("line", [(x, y), (right, y)], light, 1.6, True))
+    elif kind == "wall":
+        out.append(("line", [(x, y), (right, y)], ink, 3.4, False))
+        for k in range(1, 5):
+            tx = x + w * k / 5.0
+            out.append(("line", [(tx, y - 3.4), (tx, y + 3.4)], ink, 1.2, False))
+    elif kind == "route":
+        out.append(("line", [(x, y), (right, y)], ink, 1.8, True))
+        out.extend(_arrow_head([(x, y), (right, y)], ink, 1.8))
+    elif not spec["closed"]:
+        # any other line: a stroke in the colour that kind is drawn with
+        out.append(("line", [(x, y), (right, y)], terrain.get(kind) or ink, 2.2, False))
+    else:
+        fill = terrain.get(kind) or spec.get("fill") or ""
+        if kind == "water":
+            edge = _mix(ink, fill or paper, 0.5)
+        elif kind in BIOMES:
+            edge = _mix(fill or land_tone, ink, 0.22)
+        else:
+            edge = ink
+        rect = [(x, y - h / 2.0), (right, y - h / 2.0), (right, y + h / 2.0),
+                (x, y + h / 2.0)]
+        out.append(("polygon", rect, fill, edge if fill else ink, 1.0, False))
+        cx = x + w / 2.0
+        if kind == "forest":
+            r = h * 0.28
+            out.append(("polygon", [(cx - r, y + r * 0.9), (cx, y - r * 1.6),
+                                    (cx + r, y + r * 0.9)],
+                        _mix(fill or land_tone, ink, 0.34), ink, 0.9, False))
+        elif kind == "desert":
+            for dx, dy in ((-0.25, 0.12), (0.0, -0.18), (0.24, 0.1)):
+                px, py = x + w * (0.5 + dx), y + h * dy
+                out.append(("ellipse", px - 1.0, py - 1.0, px + 1.0, py + 1.0,
+                            light, light, 1.0))
+        elif kind == "swamp":
+            out.append(("line", [(cx - 6, y + 1), (cx - 2, y - 1.5), (cx + 2, y + 1),
+                                 (cx + 6, y - 1.5)], light, 1.2, False))
+    return out
+
+
+def _legend_primitives(gm: GameMap, layout: LegendLayout) -> List[tuple]:
+    """The legend as drawing primitives: a panel, a title, and a row per kind."""
+    palette = gm.palette()
+    ink, light, paper = palette["ink"], palette["ink_light"], palette["paper"]
+    terrain: Dict[str, str] = palette.get("terrain", {}) or {}
+    land_tone = terrain.get("land") or paper
+    x0, y0, x1, y1 = layout.box
+    out: List[tuple] = [
+        ("polygon", [(x0, y0), (x1, y0), (x1, y1), (x0, y1)],
+         _mix(land_tone, paper, 0.25), light, 1.0, False),
+        ("text", x0 + layout.pad, y0 + layout.pad + layout.title_h / 2.0, "LEGEND",
+         layout.size, ink, "w", False, True, layout.size * 0.15),
+    ]
+    top = y0 + layout.pad + layout.title_h
+    for i, (group, kind, name) in enumerate(layout.entries):
+        column, row = divmod(i, layout.rows)
+        left = x0 + layout.pad + layout.column_x[column]
+        y = top + row * layout.row_h + layout.row_h / 2.0
+        out.extend(_legend_swatch(group, kind, left, y, layout.swatch_w,
+                                  layout.size, palette))
+        out.append(("text", left + layout.swatch_w + layout.gap, y, name,
+                    layout.size, ink, "w", False, False, 0.0))
+    return out
+
+
 # -- the main builder ------------------------------------------------------
 
 
@@ -1610,7 +1915,7 @@ def _primitive_key(gm: GameMap, furniture: bool, visible: set) -> tuple:
     return (
         gm.style, gm.width, gm.height, gm.grid, gm.grid_size, gm.scale_text,
         gm.scale_px, gm.compass, gm.border, gm.title_on_map, gm.name, gm.seed,
-        gm.hide_colliding_labels, gm.auto_place_labels, furniture,
+        gm.hide_colliding_labels, gm.auto_place_labels, furniture, gm.legend,
         frozenset(visible),
         tuple((s.id, s.kind, s.layer, s.fill, s.outline, s.width, s.label,
                s.closed, _points_key(s.points)) for s in gm.shapes),
@@ -1786,7 +2091,10 @@ def _build_primitives(gm: GameMap, include_furniture: bool,
         del cache[slot]
 
     accent = palette.get("accent") or ink
-    placement = _cached_label_placement(gm, visible) if gm.auto_place_labels else {}
+    legend = legend_layout(gm, visible)
+    reserved = [legend.box] if legend else []
+    placement = (_cached_label_placement(gm, visible, reserved)
+                 if gm.auto_place_labels else {})
     label_size = max(9, int(gm.height * 0.0155))
     for pin in gm.pins:
         if pin.layer not in visible:
@@ -1817,6 +2125,8 @@ def _build_primitives(gm: GameMap, include_furniture: bool,
             out.extend(_compass_primitives(gm))
         out.extend(_scale_primitives(gm))
         out.extend(_title_primitives(gm))
+        if legend:
+            out.extend(_legend_primitives(gm, legend))
 
     return out
 
@@ -2395,8 +2705,7 @@ def render_docx(gm: GameMap, png_path: Optional[Path], out_path: Path,
             doc.add_heading("Legend", level=2)
             rows = []
             for pin in sorted(pins, key=lambda p: (p.kind, p.label.lower())):
-                row = [pin.label or "(unnamed)",
-                       PIN_KINDS.get(pin.kind, pin.kind)]
+                row = [pin.label or "(unnamed)", pin_kind_label(pin.kind)]
                 if not reader:
                     linked = ""
                     if pin.entity_id and location_lookup:

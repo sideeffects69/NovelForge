@@ -939,5 +939,218 @@ class EbookExport(unittest.TestCase):
         self.assertEqual(mm.export_ebook(gm, self.dir / "b.png", 99999).width_px, 6000)
 
 
+def keyed_map(**kw):
+    """
+    A map with a few kinds of thing on it and a legend switched on.
+
+    Base holds land, a forest, a river, a capital and a town. Secret (author
+    only) holds a mountain range and a ruin. Hidden (off) holds a desert.
+    """
+    gm = mm.GameMap(
+        name="Key", width=1200, height=825, legend=True, scale_text="20 miles",
+        layers=[mm.Layer(name="Base"), mm.Layer(name="Secret", author_only=True),
+                mm.Layer(name="Hidden", visible=False)], **kw)
+    gm.shapes = [
+        mm.Shape(kind="land", layer="Base", points=square(300, 200, 600)),
+        mm.Shape(kind="forest", layer="Base", points=square(380, 320, 160)),
+        mm.Shape(kind="river", layer="Base", closed=False,
+                 points=[(500, 220), (560, 400), (520, 640)]),
+        mm.Shape(kind="mountains", layer="Secret", closed=False,
+                 points=[(650, 260), (780, 300), (860, 380)]),
+        mm.Shape(kind="desert", layer="Hidden", points=square(700, 450, 120)),
+    ]
+    gm.pins = [
+        mm.Pin(x=450, y=500, kind="capital", label="Keep", layer="Base"),
+        mm.Pin(x=700, y=600, kind="town", label="Ford", layer="Base"),
+        mm.Pin(x=800, y=300, kind="ruin", label="Cairn", layer="Secret"),
+    ]
+    for i, item in enumerate(gm.shapes + gm.pins):
+        item.id = f"key_{i}"
+    return gm
+
+
+def legend_tail(prims):
+    """The legend's own primitives: its panel and everything drawn after it."""
+    start = next(i for i, p in enumerate(prims) if p[0] == "text" and p[3] == "LEGEND")
+    return prims[start - 1:]
+
+
+class Legend(unittest.TestCase):
+    def test_it_is_off_until_asked_for_and_then_it_is_a_key(self):
+        self.assertFalse(mm.GameMap().legend)
+        gm = keyed_map()
+        gm.legend = False
+        self.assertNotIn("LEGEND", texts(mm.build_primitives(gm)))
+        gm.legend = True
+        self.assertIn("LEGEND", texts(mm.build_primitives(gm)))
+        self.assertTrue(mm.GameMap.from_json(gm.to_json()).legend)
+
+    def test_it_lists_the_kinds_that_are_drawn_and_no_others(self):
+        # Breaking it: list every kind whether it is drawn or not.
+        names = [p[3] for p in legend_tail(mm.build_primitives(keyed_map()))
+                 if p[0] == "text"]
+        for shown in ("Land", "Forest", "River", "Mountains", "Capital city",
+                      "Town", "Ruin"):
+            self.assertEqual(names.count(shown), 1, shown)
+        for absent in ("Desert", "Road", "Wall", "Route", "Hills", "Castle / keep",
+                       "Marsh", "Water"):
+            self.assertNotIn(absent, names)
+
+    def test_it_lists_only_what_the_edition_shows(self):
+        gm = keyed_map()
+        author = [p[3] for p in legend_tail(mm.build_primitives(gm)) if p[0] == "text"]
+        reader = [p[3] for p in legend_tail(mm.build_primitives(gm, edition="reader"))
+                  if p[0] == "text"]
+        for secret in ("Mountains", "Ruin"):
+            self.assertIn(secret, author)
+            self.assertNotIn(secret, reader)
+        for name in ("Land", "Forest", "Capital city"):
+            self.assertIn(name, reader)
+        self.assertNotIn("Desert", author + reader)         # the layer is off
+
+    def test_a_swatch_is_the_colour_the_map_uses(self):
+        gm = keyed_map()
+        terrain = gm.palette()["terrain"]
+        fills = {p[2] for p in legend_tail(mm.build_primitives(gm))
+                 if p[0] == "polygon" and p[2]}
+        self.assertIn(terrain["land"], fills)
+        self.assertIn(terrain["forest"], fills)
+        gm.style = "print"
+        printed = {p[2] for p in legend_tail(mm.build_primitives(gm))
+                   if p[0] == "polygon" and p[2]}
+        for colour in printed:
+            r, g, b = hex_rgb(colour)
+            self.assertTrue(r == g == b, f"{colour} in a print legend is not a grey")
+
+    def test_every_primitive_is_the_kind_all_three_backends_already_draw(self):
+        for prim in legend_tail(mm.build_primitives(keyed_map())):
+            self.assertIn(prim[0], ("polygon", "line", "ellipse", "text"))
+            if prim[0] == "text":
+                self.assertIn(len(prim), (10, 11))
+            for value in prim[1:]:
+                if isinstance(value, str) and value.startswith("#"):
+                    self.assertRegex(value, r"^#[0-9a-f]{6}$")
+
+    def test_it_sits_in_a_corner_clear_of_the_title_compass_and_scale(self):
+        for gm in (keyed_map(), mapgen.generate(mapgen.preset("Classic fantasy world", 3))):
+            gm.legend = True
+            layout = mm.legend_layout(gm)
+            self.assertIsNotNone(layout)
+            x0, y0, x1, y1 = layout.box
+            self.assertTrue(0 <= x0 and 0 <= y0 and x1 <= gm.width and y1 <= gm.height)
+            for other in mm.furniture_boxes(gm):
+                self.assertFalse(mm.boxes_overlap(layout.box, other, 0.0),
+                                 f"{gm.name}: the legend is on top of the furniture")
+
+    def test_it_keeps_out_of_the_way_of_the_land(self):
+        # Breaking it: ignore what lies under each corner.
+        west = mm.GameMap(name="W", width=1200, height=825, legend=True,
+                          compass=False, title_on_map=False,
+                          layers=[mm.Layer(name="Base")])
+        west.shapes = [mm.Shape(id="w", kind="land", layer="Base",
+                                points=[(0, 0), (500, 0), (500, 825), (0, 825)])]
+        west.pins = [mm.Pin(id="p", x=200, y=400, kind="town", label="A")]
+        self.assertIn(mm.legend_layout(west).corner, ("tr", "br"))
+        east = mm.GameMap(name="E", width=1200, height=825, legend=True,
+                          compass=False, title_on_map=False,
+                          layers=[mm.Layer(name="Base")])
+        east.shapes = [mm.Shape(id="e", kind="land", layer="Base",
+                                points=[(700, 0), (1200, 0), (1200, 825), (700, 825)])]
+        east.pins = [mm.Pin(id="p", x=900, y=400, kind="town", label="A")]
+        self.assertEqual(mm.legend_layout(east).corner, "tl")
+        top = mm.GameMap(name="T", width=1200, height=825, legend=True,
+                         compass=False, title_on_map=False,
+                         layers=[mm.Layer(name="Base")])
+        top.shapes = [mm.Shape(id="t", kind="land", layer="Base",
+                               points=[(0, 0), (1200, 0), (1200, 400), (0, 400)])]
+        top.pins = [mm.Pin(id="p", x=600, y=200, kind="town", label="A")]
+        self.assertIn(mm.legend_layout(top).corner, ("bl", "br"))
+
+    def test_names_are_kept_off_it(self):
+        # Breaking it: stop reserving the legend's box when placing names.
+        gm = mm.GameMap(name="Key", width=1200, height=825, legend=True,
+                        compass=False, title_on_map=False,
+                        layers=[mm.Layer(name="Base")])
+        gm.shapes = [mm.Shape(id="l", kind="land", layer="Base",
+                              points=square(600, 300, 300))]
+        gm.pins = [mm.Pin(id="near", x=0, y=0, kind="town", label="Nearby",
+                          label_side="w")]
+        box = mm.legend_layout(gm).box
+        gm.pins[0].x, gm.pins[0].y = box[2] + 24, box[1] + 30       # just outside it
+        self.assertEqual(mm.legend_layout(gm).box, box)
+        gm.legend = False
+        self.assertEqual(mm.layout_pin_labels(gm)["near"], ("w", True))
+        gm.legend = True
+        side, shown = mm.layout_pin_labels(gm)["near"]
+        self.assertNotEqual((side, shown), ("w", True),
+                            "the name was placed on top of the legend")
+
+    def test_a_busy_world_gets_a_compact_legend(self):
+        gm = mapgen.generate(mapgen.preset("Classic fantasy world", 3))
+        gm.legend = True
+        layout = mm.legend_layout(gm)
+        self.assertLessEqual(len(layout.entries), mm.MAX_LEGEND_ENTRIES)
+        self.assertLessEqual(layout.rows, mm.LEGEND_ROWS)
+        x0, y0, x1, y1 = layout.box
+        self.assertLess((x1 - x0) * (y1 - y0), 0.3 * gm.width * gm.height)
+        crowded = keyed_map()
+        for i, kind in enumerate(list(mm.PIN_KINDS) + list(mm.EXTRA_PIN_KINDS)):
+            crowded.pins.append(mm.Pin(id=f"c{i}", x=310 + i * 20, y=700, kind=kind,
+                                       layer="Base"))
+        entries = mm.legend_entries(crowded)
+        self.assertEqual(len(entries), mm.MAX_LEGEND_ENTRIES)
+        self.assertEqual([e[0] for e in entries[:3]], ["terrain"] * 3)   # ground first
+
+    def test_an_empty_map_has_nothing_to_list(self):
+        gm = mm.GameMap(name="Blank", legend=True)
+        self.assertIsNone(mm.legend_layout(gm))
+        self.assertNotIn("LEGEND", texts(mm.build_primitives(gm)))
+
+    def test_switching_it_on_and_off_rebuilds_and_a_repeat_look_does_not(self):
+        # Breaking it: leave `legend` out of the display list's key.
+        gm = keyed_map()
+        gm.legend = False
+        without = mm.build_primitives(gm)
+        gm.legend = True
+        with_it = mm.build_primitives(gm)
+        self.assertNotEqual(without, with_it)
+        cached = gm._prim_cache
+        mm.build_primitives(gm)
+        self.assertIs(gm._prim_cache, cached, "a second look rebuilt everything")
+        gm.legend = False
+        self.assertEqual(mm.build_primitives(gm), without)
+
+    def test_the_svg_and_the_picture_carry_it_too(self):
+        from PIL import Image
+
+        gm = keyed_map()
+        with tempfile.TemporaryDirectory() as folder:
+            svg = mm.render_svg(gm, Path(folder) / "k.svg").read_text(encoding="utf-8")
+            for name in ("LEGEND", "Forest", "Capital city"):
+                self.assertIn(name, svg)
+            on = mm.render_png(gm, Path(folder) / "on.png", scale=0.5)
+            gm.legend = False
+            off = mm.render_png(gm, Path(folder) / "off.png", scale=0.5)
+            with Image.open(on) as a, Image.open(off) as b:
+                self.assertNotEqual(a.convert("RGB").tobytes(), b.convert("RGB").tobytes())
+
+    def test_working_out_the_legend_is_quick(self):
+        import time
+
+        gm = mapgen.generate(mapgen.preset("Classic fantasy world", 5))
+        gm.legend = True
+        started = time.perf_counter()
+        for _ in range(20):
+            mm.legend_layout(gm)
+        self.assertLess((time.perf_counter() - started) / 20, 0.05)
+
+    def test_a_legend_does_not_change_a_map_that_has_none(self):
+        gm = mapgen.generate(mapgen.preset("Classic fantasy world", 3))
+        before = mm.build_primitives(gm)
+        gm.legend = True
+        gm.legend = False
+        self.assertEqual(mm.build_primitives(gm), before)
+
+
 if __name__ == "__main__":
     unittest.main()
