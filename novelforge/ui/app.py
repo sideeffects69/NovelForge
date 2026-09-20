@@ -29,6 +29,7 @@ from .. import (
     compiler,
     diagnostics,
     docxio,
+    mentionindex,
     recovery,
     stats,
     structures,
@@ -53,7 +54,9 @@ from ..model import (
     now_iso,
 )
 from ..project import Project, ProjectError, list_projects
+from ..tags import TagsField
 from . import dialogs, styling
+from .connections import attach as _attach_connections
 from .goto import remember as _remember_visit
 from .writing import WritingIntelligence
 from .widgets import (
@@ -414,6 +417,8 @@ class App(WritingIntelligence, tk.Tk):
                                command=self.cmd_continuity)
         tools_menu.add_command(label="What Depends on This Scene?",
                                command=self.cmd_dependencies)
+        tools_menu.add_command(label="Scan for Mentions (Connections)",
+                               command=self.cmd_scan_mentions)
         tools_menu.add_separator()
         tools_menu.add_command(label="Rebuild This Sheet from Template",
                                command=self.cmd_rebuild_sheet)
@@ -1409,6 +1414,8 @@ class App(WritingIntelligence, tk.Tk):
         form.combo("Type", scene, "scene_type", SCENE_TYPES)
         form.check("Include when compiling", scene, "include_in_compile")
         form.integer("Word target", scene, "target_words")
+        form.entry("Tags", TagsField(scene), "tags")
+        form.hint("Separate with commas. A/b nests: searching for a finds a/b.")
 
         characters = [(e.id, e.name) for e in data.entities_of("character")]
         locations = [(e.id, e.name) for e in data.entities_of("location")]
@@ -1456,16 +1463,11 @@ class App(WritingIntelligence, tk.Tk):
         form.multiline("Scene notes", scene, "notes", height=4)
 
         drafts = self.project.list_drafts(scene.id)
-        research = self.project.notes_for(scene.id)
-        if len(drafts) > 1 or research:
+        if len(drafts) > 1:
             form.separator()
-            if len(drafts) > 1:
-                form.readonly("Draft",
-                              f"{scene.active_draft or 'Main'} "
-                              f"(of {len(drafts)})")
-            if research:
-                form.readonly("Research",
-                              ", ".join(n.title for n in research))
+            form.readonly("Draft",
+                          f"{scene.active_draft or 'Main'} "
+                          f"(of {len(drafts)})")
 
         form.button_row([
             ("Apply", self.cmd_apply_inspector),
@@ -1473,6 +1475,7 @@ class App(WritingIntelligence, tk.Tk):
             ("Drafts...", self.cmd_drafts),
             ("Open in Word", self.cmd_open_in_word),
         ])
+        _attach_connections(self, form, "scene", scene.id)
 
     # -- chapter --------------------------------------------------------
     def _render_chapter(self, chapter) -> None:
@@ -1540,7 +1543,6 @@ class App(WritingIntelligence, tk.Tk):
 
         self._show_detail(entity.name, "\n".join(lines), [
             ("Open in Word", self.cmd_open_in_word),
-            ("Where mentioned?", self.cmd_mentions),
             ("Rebuild sheet", self.cmd_rebuild_sheet),
         ])
         self.centre_meta.configure(text=f"{filled}/{len(fields)} fields")
@@ -1557,14 +1559,7 @@ class App(WritingIntelligence, tk.Tk):
             form.entry("Type", entity, "role")
         form.multiline("One-line summary", entity, "summary", height=3)
 
-        scenes_with = [
-            s for s in self.project.data.ordered_scenes()
-            if entity.id in (s.character_ids + s.location_ids + s.item_ids
-                             + s.faction_ids + s.thread_ids)
-            or s.pov_id == entity.id
-        ]
         form.separator()
-        form.readonly("Linked scenes", str(len(scenes_with)))
         if entity.type == "character":
             pov_scenes = [s for s in self.project.data.scenes
                           if s.pov_id == entity.id]
@@ -1573,13 +1568,11 @@ class App(WritingIntelligence, tk.Tk):
                           f"{sum(s.word_count for s in pov_scenes):,}")
         if entity.aliases:
             form.readonly("Aliases", ", ".join(entity.aliases))
-        research = self.project.notes_for(entity.id)
-        if research:
-            form.readonly("Research", ", ".join(n.title for n in research))
         form.button_row([
             ("Apply", self.cmd_apply_inspector),
             ("Open in Word", self.cmd_open_in_word),
         ])
+        _attach_connections(self, form, "entity", entity.id)
 
     # -- note -----------------------------------------------------------
     def _render_note(self, note) -> None:
@@ -1599,20 +1592,11 @@ class App(WritingIntelligence, tk.Tk):
         form.heading("Note")
         form.entry("Title", note, "title")
         form.combo("Kind", note, "kind", ["note", "research", "scratchpad"])
-        form.separator()
-        linked = [
-            (self.project.data.entity(t) or self.project.data.scene(t)
-             or self.project.data.chapter(t))
-            for t in (note.links or [])
-        ]
-        form.readonly(
-            "Linked to",
-            ", ".join(item.display for item in linked if item) or "nothing yet",
-        )
         form.button_row([
             ("Apply", self.cmd_apply_inspector),
             ("Link to...", self.cmd_note_links),
         ])
+        _attach_connections(self, form, "note", note.id)
 
     # -- plain document -------------------------------------------------
     def _render_document(self, relative: str) -> None:
@@ -1802,6 +1786,7 @@ class App(WritingIntelligence, tk.Tk):
             ("Apply", self.cmd_apply_inspector),
             ("Timeline window", self.cmd_timeline_window),
         ])
+        _attach_connections(self, form, "event", event.id)
 
     # -- view swapping --------------------------------------------------
     def _show_editor(self) -> None:
@@ -2088,6 +2073,7 @@ class App(WritingIntelligence, tk.Tk):
             return False
         self._editor_dirty = False
         self.status.set_state("saved")
+        mentionindex.update_scene(self.project, scene.id, body)
         if self.tracker:
             self.tracker.update(self.project.data.word_count, scene.id)
         item = f"scene:{scene.id}"
@@ -2732,6 +2718,30 @@ class App(WritingIntelligence, tk.Tk):
         self.project.save()
         self.render_selection()
         self.status.say(f"Rebuilt {path.name if path else 'sheet'}.", 6)
+
+    def cmd_scan_mentions(self) -> None:
+        """
+        Look through the manuscript for the names of everything in the story, so
+        Connections can show what is mentioned but not linked.
+
+        Only scenes edited since the last scan are opened, so this is quick after
+        the first time.
+        """
+        if not self.require_project():
+            return
+        self.commit_all()
+        from .connections import rebuild_inspector
+
+        def progress(done: int, total: int) -> None:
+            self.status.say(f"Looking for names in the manuscript ({done}/{total})...", 0)
+            self.update_idletasks()
+
+        with self._busy("Looking for names in the manuscript..."):
+            read, total = mentionindex.refresh(self.project, progress)
+        self.status.say(
+            f"Scanned {total} scene{'s' if total != 1 else ''}"
+            f" ({read} read; the rest had not changed).", 8)
+        rebuild_inspector(self)
 
     def cmd_mentions(self) -> None:
         if not self.require_project() or self.selection_kind != "entity":
@@ -4021,6 +4031,7 @@ Python {".".join(str(v) for v in __import__("sys").version_info[:3])}
                 settings["window_geometry"] = self.geometry()
             except tk.TclError:
                 pass
+            mentionindex.flush(self.project)
             try:
                 self.project.save(force=True)
             except Exception as exc:

@@ -116,6 +116,12 @@ def _compiled(project) -> Tuple[str, Dict[str, List[str]], Optional[re.Pattern]]
     return built
 
 
+def count_names(project, text: str) -> Dict[str, int]:
+    """{entity id: times named} in any text at all - an event's description, say."""
+    _key, lookup, pattern = _compiled(project)
+    return scan_text(pattern, lookup, text)[0]
+
+
 def scan_text(pattern: Optional[re.Pattern], lookup: Dict[str, List[str]],
               text: str) -> Tuple[Dict[str, int], Dict[str, List[int]]]:
     """Count the names in `text`: {entity: how many}, {entity: first offsets}."""
@@ -313,19 +319,25 @@ def update_scene(project, scene_id: str, text: str) -> bool:
     have changed since it was built: a count made against a different cast would
     sit next to counts made against the old one. A scan sorts that out.
     """
-    index = get(project)
-    scene = project.data.scene(scene_id)
-    if scene is None or not index.known:
+    try:
+        index = get(project)
+        scene = project.data.scene(scene_id)
+        if scene is None or not index.known:
+            return False
+        key, lookup, pattern = _compiled(project)
+        if index.names_key != key:
+            return False
+        counts, places = scan_text(pattern, lookup, text)
+        index.scenes[scene_id] = SceneEntry(_scene_mtime(project, scene), counts,
+                                            places)
+        index.dirty = True
+        if time.time() - index.last_write >= WRITE_EVERY:
+            flush(project)
+        return True
+    except Exception:
+        # Derived data: whatever goes wrong here must never get in the way of
+        # saving the writer's prose, which has already been written by now.
         return False
-    key, lookup, pattern = _compiled(project)
-    if index.names_key != key:
-        return False
-    counts, places = scan_text(pattern, lookup, text)
-    index.scenes[scene_id] = SceneEntry(_scene_mtime(project, scene), counts, places)
-    index.dirty = True
-    if time.time() - index.last_write >= WRITE_EVERY:
-        flush(project)
-    return True
 
 
 # ==========================================================================

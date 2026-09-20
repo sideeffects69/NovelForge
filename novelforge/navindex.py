@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .model import ENTITY_LABELS, ENTITY_TYPES
+# `a` matches the tag `a` and every tag beneath it (`a/b`), never `ab`.
+from .tags import matches as tag_matches
 
 #: Rows the switcher shows, and the last-visited list it opens with.
 MAX_ROWS = 60
@@ -201,18 +203,6 @@ def parse_query(text: str) -> Query:
         else:
             tokens.append(m.group(6))
     return Query(tokens, filters)
-
-
-def tag_matches(tags: Iterable[str], wanted: str) -> bool:
-    """`a` matches the tag `a` and every tag beneath it (`a/b`), never `ab`."""
-    wanted = wanted.strip().strip("#").lower().strip("/")
-    if not wanted:
-        return False
-    for tag in tags:
-        tag = tag.strip().strip("#").lower().strip("/")
-        if tag == wanted or tag.startswith(wanted + "/"):
-            return True
-    return False
 
 
 def _passes(target: Target, filters: Sequence[Tuple[str, str]]) -> bool:
