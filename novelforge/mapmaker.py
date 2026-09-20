@@ -3076,6 +3076,47 @@ def export_ebook(gm: GameMap, path: Path | str, width_px: int = 1800,
 
 
 # ==========================================================================
+# Maps inside maps
+#
+# A pin on a world map can open the map of the place itself (a village), and a
+# pin on that can open a floor plan. Only the links are stored here - no window,
+# no generator: `Pin.child_map_id` says which map is inside a pin, and
+# `GameMap.parent` says which pin of which map a map is inside. `mapstory` reads
+# them to draw the breadcrumb ("World > Harrowgate > The Gilded Stag").
+# ==========================================================================
+
+
+def child_seed(parent_seed: int, pin_id: str) -> int:
+    """
+    The seed for the map inside a pin: the same for the same place, always.
+
+    A CRC of the parent's seed and the pin's id, never `hash()` (Python salts
+    that differently in every process, so the village would look different each
+    time the book was opened). Moving the pin changes nothing; a different pin
+    gives a different village.
+    """
+    return zlib.crc32(f"{parent_seed}:{pin_id}".encode("utf-8")) & 0xFFFFFFFF
+
+
+def link_child(parent: GameMap, pin: Pin, child: GameMap) -> None:
+    """Make `child` the inside of `pin` on `parent`, recorded on both sides."""
+    if parent.pin(pin.id) is None:
+        raise ValueError("that pin is not on the parent map")
+    if child.id == parent.id:
+        raise ValueError("a map cannot be inside itself")
+    pin.child_map_id = child.id
+    child.parent = {"map_id": parent.id, "pin_id": pin.id}
+
+
+def unlink_child(parent: GameMap, pin: Pin, child: Optional[GameMap] = None) -> None:
+    """Undo `link_child`. The child keeps existing; it simply has no parent now."""
+    if child is not None and child.parent.get("pin_id") == pin.id \
+            and child.parent.get("map_id") == parent.id:
+        child.parent = {}
+    pin.child_map_id = ""
+
+
+# ==========================================================================
 # Persistence
 # ==========================================================================
 

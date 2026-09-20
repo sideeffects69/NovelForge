@@ -30,7 +30,7 @@ import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 from . import mapmaker as mm
 
@@ -118,6 +118,65 @@ def pin_index(project, maps: Optional[Sequence[Any]] = None
             if entity_id and entity_id not in index:
                 index[entity_id] = PinRef(pin, game_map.name, game_map.id)
     return index
+
+
+# --------------------------------------------------------------------------
+# Maps inside maps
+# --------------------------------------------------------------------------
+
+child_seed = mm.child_seed
+link_child = mm.link_child
+unlink_child = mm.unlink_child
+
+
+class Crumb(NamedTuple):
+    """One step of a breadcrumb: a map, and the pin (on the map before it) that opens it."""
+
+    map_id: str
+    name: str
+    #: The pin on the previous crumb's map that this map is inside; "" for the top.
+    pin_id: str = ""
+    pin_label: str = ""
+
+
+def breadcrumb(maps: Sequence[Any], game_map) -> List[Crumb]:
+    """
+    Where a map sits in the nest of maps, top first, ending with `game_map`:
+    World, then Harrowgate (a pin on it), then The Gilded Stag.
+
+    Follows each map's `parent` link up through `maps` (what `load_maps`
+    returns). A link to a map that no longer exists ends the chain there, and a
+    loop (which should never be saved) is cut rather than followed forever, so
+    this always returns something, at worst just `game_map` itself.
+    """
+    by_id = {getattr(m, "id", ""): m for m in maps}
+    chain = [game_map]
+    seen = {getattr(game_map, "id", "")}
+    current = game_map
+    while len(chain) < 32:
+        link = getattr(current, "parent", None) or {}
+        parent = by_id.get(link.get("map_id", ""))
+        if parent is None or getattr(parent, "id", "") in seen:
+            break
+        chain.append(parent)
+        seen.add(parent.id)
+        current = parent
+    chain.reverse()
+    crumbs: List[Crumb] = []
+    for i, item in enumerate(chain):
+        pin_id, pin_label = "", ""
+        if i:
+            pin_id = (getattr(item, "parent", None) or {}).get("pin_id", "")
+            pin = chain[i - 1].pin(pin_id) if pin_id else None
+            pin_label = getattr(pin, "label", "") or ""
+        crumbs.append(Crumb(getattr(item, "id", ""), getattr(item, "name", "") or "",
+                            pin_id, pin_label))
+    return crumbs
+
+
+def breadcrumb_text(maps: Sequence[Any], game_map, sep: str = " > ") -> str:
+    """The breadcrumb as one line: "World > Harrowgate > The Gilded Stag"."""
+    return sep.join(c.name or "(unnamed map)" for c in breadcrumb(maps, game_map))
 
 
 # --------------------------------------------------------------------------

@@ -1176,5 +1176,134 @@ class Legend(unittest.TestCase):
         self.assertEqual(mm.build_primitives(gm), before)
 
 
+def nested_maps():
+    """A world, a village on it, and an inn's floor plan inside the village."""
+    world = mm.GameMap(id="map_world", name="The Known World", seed=7,
+                       layers=[mm.Layer(name="Base")])
+    village = mm.GameMap(id="map_village", name="Harrowgate", seed=11, kind="city",
+                         layers=[mm.Layer(name="Base")])
+    inn = mm.GameMap(id="map_inn", name="The Gilded Stag, ground floor", seed=12,
+                     kind="building", layers=[mm.Layer(name="Base")])
+    world.pins.append(mm.Pin(id="pin_h", x=100, y=100, label="Harrowgate Town",
+                             kind="town"))
+    village.pins.append(mm.Pin(id="pin_i", x=50, y=50, label="Gilded Stag", kind="inn"))
+    mm.link_child(world, world.pins[0], village)
+    mm.link_child(village, village.pins[0], inn)
+    return world, village, inn
+
+
+class MapsInsideMaps(unittest.TestCase):
+    def test_a_child_seed_is_a_crc_of_the_parent_seed_and_the_pin(self):
+        # Breaking it: seed with hash(), which Python salts differently in every
+        # process, and the village looks different each time the book is opened.
+        self.assertEqual(mm.child_seed(7, "pin_abc"), 80623281)
+        self.assertEqual(mm.child_seed(2024, "pin_0001"), 3059890015)
+        self.assertEqual(mm.child_seed(7, "pin_abc"),
+                         zlib.crc32(b"7:pin_abc") & 0xFFFFFFFF)
+        seeds = {mm.child_seed(s, p) for s in (1, 2, 3) for p in ("a", "b", "c")}
+        self.assertEqual(len(seeds), 9)                    # a different place, a different map
+        self.assertTrue(all(isinstance(s, int) and 0 <= s < 2 ** 32 for s in seeds))
+        self.assertIs(mapstory.child_seed, mm.child_seed)
+
+    def test_it_is_the_same_in_every_process(self):
+        import os
+        import subprocess
+        import sys
+
+        from tests import REPO, SANDBOX
+
+        code = ("import sys; sys.path.insert(0, sys.argv[1]); "
+                "from novelforge import mapmaker as mm; "
+                "print(mm.child_seed(7, 'pin_abc'), mm.child_seed(99, 'x'))")
+        answers = set()
+        for salt in ("1", "2", "random"):
+            env = dict(os.environ, PYTHONHASHSEED=salt,
+                       NOVELFORGE_SETTINGS=str(SANDBOX / "s.json"),
+                       NOVELFORGE_PROJECTS=str(SANDBOX / "p"))
+            done = subprocess.run([sys.executable, "-c", code, str(REPO)], env=env,
+                                  capture_output=True, text=True, timeout=60)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            answers.add(done.stdout.strip())
+        self.assertEqual(len(answers), 1, answers)
+        self.assertEqual(answers.pop().split()[0], "80623281")
+
+    def test_moving_or_renaming_a_pin_does_not_change_the_map_inside_it(self):
+        pin = mm.Pin(id="pin_x", x=10, y=10, label="Old name")
+        first = mm.child_seed(7, pin.id)
+        pin.x, pin.y, pin.label, pin.kind = 400, 300, "New name", "city"
+        self.assertEqual(mm.child_seed(7, pin.id), first)
+
+    def test_the_links_are_saved_and_come_back_and_old_files_do_not_mind(self):
+        world, village, inn = nested_maps()
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            for gm in (world, village, inn):
+                mm.save_map(folder, gm)
+            again = {m.id: m for m in (mm.load_map(p) for _n, p in mm.list_maps(folder))}
+        self.assertEqual(again["map_world"].pins[0].child_map_id, "map_village")
+        self.assertEqual(again["map_village"].parent,
+                         {"map_id": "map_world", "pin_id": "pin_h"})
+        self.assertEqual(again["map_inn"].parent,
+                         {"map_id": "map_village", "pin_id": "pin_i"})
+        self.assertEqual(again["map_world"].parent, {})
+        old_pin = mm.GameMap.from_json({"pins": [{"id": "p", "x": 1, "y": 2}]}).pins[0]
+        self.assertEqual(old_pin.child_map_id, "")
+        self.assertEqual(mm.GameMap.from_json({"parent": "garbage"}).parent, {})
+        self.assertEqual(mm.GameMap().parent, {})
+
+    def test_two_new_maps_never_share_a_parent_dict(self):
+        a, b = mm.GameMap(), mm.GameMap()
+        a.parent["map_id"] = "x"
+        self.assertEqual(b.parent, {})
+
+    def test_linking_records_both_sides_and_unlinking_undoes_it(self):
+        world, village, _inn = nested_maps()
+        pin = world.pins[0]
+        self.assertEqual(pin.child_map_id, village.id)
+        self.assertEqual(village.parent, {"map_id": world.id, "pin_id": pin.id})
+        mm.unlink_child(world, pin, village)
+        self.assertEqual((pin.child_map_id, village.parent), ("", {}))
+        with self.assertRaises(ValueError):
+            mm.link_child(world, mm.Pin(id="stranger"), village)   # not on that map
+        with self.assertRaises(ValueError):
+            mm.link_child(world, pin, world)                       # inside itself
+
+    def test_the_breadcrumb_runs_from_the_top_down_to_this_map(self):
+        # Breaking it: build the chain bottom-up.
+        world, village, inn = nested_maps()
+        maps = [inn, world, village]                       # any order
+        crumbs = mapstory.breadcrumb(maps, inn)
+        self.assertEqual([c.name for c in crumbs],
+                         ["The Known World", "Harrowgate",
+                          "The Gilded Stag, ground floor"])
+        self.assertEqual([c.map_id for c in crumbs],
+                         ["map_world", "map_village", "map_inn"])
+        self.assertEqual([c.pin_id for c in crumbs], ["", "pin_h", "pin_i"])
+        self.assertEqual([c.pin_label for c in crumbs],
+                         ["", "Harrowgate Town", "Gilded Stag"])
+        self.assertEqual(mapstory.breadcrumb_text(maps, inn),
+                         "The Known World > Harrowgate > The Gilded Stag, ground floor")
+        self.assertEqual(mapstory.breadcrumb_text(maps, village, " / "),
+                         "The Known World / Harrowgate")
+        self.assertEqual([c.name for c in mapstory.breadcrumb(maps, world)],
+                         ["The Known World"])
+
+    def test_a_missing_parent_or_a_loop_still_gives_a_breadcrumb(self):
+        world, village, inn = nested_maps()
+        # the world map was deleted: the chain starts at the village
+        self.assertEqual([c.name for c in mapstory.breadcrumb([village, inn], inn)],
+                         ["Harrowgate", "The Gilded Stag, ground floor"])
+        # a map that is not in the list at all (never saved) is its own top
+        stranger = mm.GameMap(id="map_new", name="Unsaved")
+        self.assertEqual([c.name for c in mapstory.breadcrumb([world], stranger)],
+                         ["Unsaved"])
+        # a loop, however it got there, is cut
+        world.parent = {"map_id": "map_inn", "pin_id": "x"}
+        names = [c.name for c in mapstory.breadcrumb([world, village, inn], inn)]
+        self.assertEqual(sorted(names), sorted(["The Known World", "Harrowgate",
+                                                "The Gilded Stag, ground floor"]))
+        self.assertEqual(len(names), 3)
+
+
 if __name__ == "__main__":
     unittest.main()
