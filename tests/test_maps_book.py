@@ -1085,6 +1085,30 @@ class Legend(unittest.TestCase):
         self.assertNotEqual((side, shown), ("w", True),
                             "the name was placed on top of the legend")
 
+    def test_the_remembered_name_placement_notices_a_legend_arriving(self):
+        # Breaking it: leave the legend's box out of the placement memo's key -
+        # switching the legend on then serves the old, overlapping placement.
+        gm = mm.GameMap(name="Key", width=1200, height=825, legend=False,
+                        compass=False, title_on_map=False,
+                        layers=[mm.Layer(name="Base")])
+        gm.shapes = [mm.Shape(id="l", kind="land", layer="Base",
+                              points=square(600, 300, 300))]
+        gm.pins = [mm.Pin(id="near", x=0, y=0, kind="town", label="Nearby",
+                          label_side="w")]
+        gm.legend = True
+        box = mm.legend_layout(gm).box
+        gm.legend = False
+        gm.pins[0].x, gm.pins[0].y = box[2] + 24, box[1] + 30
+
+        def nearby(prims):
+            return [(p[1], p[2], p[6]) for p in prims
+                    if p[0] == "text" and p[3] == "Nearby"]
+
+        before = nearby(mm.build_primitives(gm))
+        self.assertEqual(before[0][2], "e")                # west of the pin
+        gm.legend = True
+        self.assertNotEqual(nearby(mm.build_primitives(gm)), before)
+
     def test_a_busy_world_gets_a_compact_legend(self):
         gm = mapgen.generate(mapgen.preset("Classic fantasy world", 3))
         gm.legend = True
