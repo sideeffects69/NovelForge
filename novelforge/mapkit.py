@@ -26,6 +26,34 @@ Rules this module keeps, and callers may rely on:
   ``edges_to_wadj`` build them from edge lists.
 * **Tolerances** are absolute (``EPS`` = 1e-9), sized for maps whose
   coordinates run from a few units to a few thousand.
+* **Nothing is changed in place**; every function returns new lists. **Failure
+  is a value, not an exception:** an empty polygon is ``[]``, a shrink that
+  leaves nothing is ``None`` (``inset_polygon``), a missing route is ``None``.
+  Exceptions are only for misuse (a zero ``min_leaf``, negative weights).
+
+What is here, by need:
+
+* seeding - ``stable_seed``, ``sub_rng``
+* polygons - ``polygon_area``, ``polygon_centroid``, ``is_ccw``, ``ensure_ccw``,
+  ``polygon_bbox``, ``point_in_polygon``, ``polygon_edges``,
+  ``segments_intersect``, ``polygon_is_simple``, ``is_convex``,
+  ``polygon_contains_polygon``, ``convex_hull``
+* cutting and shrinking - ``clip_halfplane``, ``clip_convex``,
+  ``inset_polygon``, ``offset_polygon``, ``bisect_polygon``
+* points and cells - ``sunflower``, ``voronoi_cells``, ``lloyd_relax``,
+  ``poisson_disc``
+* graphs - ``mst``, ``gabriel_edges``, ``dijkstra``, ``multi_source_dijkstra``,
+  ``bfs_reachable``, ``connected_components``, ``farthest_pair``
+* rectangles and grids - ``bsp_split``, ``squarify``, ``shared_walls``,
+  ``cells_outline``, ``hex_center``, ``hex_corners``, ``hex_neighbors``,
+  ``hex_distance``
+* paths - ``chaikin``, ``catmull_rom``, ``simplify``, ``resample``,
+  ``polyline_length``, ``point_at``
+
+Licence note: everything here is written from the published ideas (Sutherland-
+Hodgman clipping, Bridson sampling, Bruls squarified treemaps, Lloyd
+relaxation, Douglas-Peucker, Chaikin, centripetal Catmull-Rom); no code was
+ported from GPL projects such as TownGeneratorOS.
 """
 
 from __future__ import annotations
