@@ -1061,4 +1061,395 @@ class Graphs(unittest.TestCase):
         self.assertEqual(set(mk.farthest_pair(big)), {0, 400})
 
 
+# ---------------------------------------------------------------------------
+# Rectangles and grids
+# ---------------------------------------------------------------------------
+
+def rect_area(r):
+    return (r[2] - r[0]) * (r[3] - r[1])
+
+
+def rect_overlap_area(a, b):
+    w = min(a[2], b[2]) - max(a[0], b[0])
+    h = min(a[3], b[3]) - max(a[1], b[1])
+    return w * h if w > 0 and h > 0 else 0.0
+
+
+def contact_length(a, b, delta=1e-4):
+    """Length of the wall two rectangles share, found by a different route
+    from the kit's: grow one by a hair and see how much of the other it covers."""
+    grown = (a[0] - delta, a[1] - delta, a[2] + delta, a[3] + delta)
+    return rect_overlap_area(grown, b) / delta
+
+
+class RectangleSplitting(unittest.TestCase):
+    def test_bsp_leaves_tile_the_rectangle_and_cannot_be_cut_further(self):
+        rng = random.Random(50)
+        for _ in range(120):
+            rect = (rng.uniform(-20, 20), rng.uniform(-20, 20), 0.0, 0.0)
+            rect = (rect[0], rect[1], rect[0] + rng.uniform(20, 120), rect[1] + rng.uniform(20, 90))
+            m = rng.uniform(4.0, 12.0)
+            leaves = mk.bsp_split(rect, rng, m)
+            self.assertAlmostEqual(sum(rect_area(l) for l in leaves), rect_area(rect), places=6)
+            for i, l in enumerate(leaves):
+                self.assertGreaterEqual(l[2] - l[0], m - 1e-9)
+                self.assertGreaterEqual(l[3] - l[1], m - 1e-9)
+                self.assertTrue(l[0] >= rect[0] - 1e-9 and l[2] <= rect[2] + 1e-9
+                                and l[1] >= rect[1] - 1e-9 and l[3] <= rect[3] + 1e-9)
+                # cut all the way down: no leaf is big enough to cut in two
+                self.assertTrue(l[2] - l[0] < 2 * m and l[3] - l[1] < 2 * m)
+                for other in leaves[:i]:
+                    self.assertLess(rect_overlap_area(l, other), 1e-9)
+
+    def test_bsp_max_leaf_stops_the_cutting_early(self):
+        rng = random.Random(51)
+        for _ in range(100):
+            m = rng.uniform(4.0, 8.0)
+            big = rng.uniform(2.5 * m, 5 * m)
+            leaves = mk.bsp_split((0.0, 0.0, 120.0, 90.0), rng, m, max_leaf=big)
+            self.assertAlmostEqual(sum(rect_area(l) for l in leaves), 120.0 * 90.0, places=6)
+            for l in leaves:
+                w, h = l[2] - l[0], l[3] - l[1]
+                self.assertTrue((w <= big and h <= big) or (w < 2 * m and h < 2 * m))
+                self.assertGreaterEqual(min(w, h), m - 1e-9)
+
+    def test_bsp_integer_mode_cuts_on_whole_numbers(self):
+        rng = random.Random(52)
+        for _ in range(100):
+            leaves = mk.bsp_split((0, 0, 64, 48), rng, 10, integer=True)
+            self.assertEqual(sum(int(rect_area(l)) for l in leaves), 64 * 48)
+            self.assertGreater(len(leaves), 4)
+            for l in leaves:
+                self.assertTrue(all(float(v).is_integer() for v in l), l)
+                self.assertGreaterEqual(min(l[2] - l[0], l[3] - l[1]), 10)
+        # without integer=True the cuts are free to land between the lines
+        loose = mk.bsp_split((0, 0, 64, 48), random.Random(1), 10)
+        self.assertFalse(all(float(v).is_integer() for l in loose for v in l))
+        # fractional leaf size with whole-number cuts
+        for l in mk.bsp_split((0, 0, 40, 31), random.Random(2), 6.5, integer=True):
+            self.assertTrue(all(float(v).is_integer() for v in l), l)
+            self.assertGreaterEqual(min(l[2] - l[0], l[3] - l[1]), 6.5)
+
+    def test_bsp_is_deterministic_and_handles_small_inputs(self):
+        a = mk.bsp_split((0, 0, 100, 80), random.Random(9), 8)
+        self.assertEqual(a, mk.bsp_split((0, 0, 100, 80), random.Random(9), 8))
+        self.assertNotEqual(a, mk.bsp_split((0, 0, 100, 80), random.Random(10), 8))
+        self.assertEqual(mk.bsp_split((0, 0, 10, 10), random.Random(1), 8),
+                         [(0.0, 0.0, 10.0, 10.0)])
+        with self.assertRaises(ValueError):
+            mk.bsp_split((0, 0, 10, 10), random.Random(1), 0)
+
+
+class Treemap(unittest.TestCase):
+    def random_items(self, rng, rect):
+        n = rng.randint(1, 14)
+        weights = [rng.uniform(0.2, 10.0) for _ in range(n)]
+        total = sum(weights)
+        area = rect_area(rect)
+        return [("room%d" % i, w / total * area) for i, w in enumerate(weights)]
+
+    def test_squarify_fills_the_rectangle_with_the_requested_areas(self):
+        rng = random.Random(60)
+        for _ in range(150):
+            x0, y0 = rng.uniform(-30, 30), rng.uniform(-30, 30)
+            rect = (x0, y0, x0 + rng.uniform(15, 150), y0 + rng.uniform(15, 100))
+            items = self.random_items(rng, rect)
+            out = mk.squarify(items, rect)
+            self.assertEqual(list(out), [k for k, _ in items])            # input order kept
+            for key, area in items:
+                self.assertAlmostEqual(rect_area(out[key]), area, places=6)
+            self.assertAlmostEqual(sum(rect_area(r) for r in out.values()),
+                                   rect_area(rect), places=6)
+            rects = list(out.values())
+            for i, r in enumerate(rects):
+                self.assertTrue(r[0] >= rect[0] - 1e-9 and r[2] <= rect[2] + 1e-9
+                                and r[1] >= rect[1] - 1e-9 and r[3] <= rect[3] + 1e-9)
+                self.assertGreaterEqual(r[2] - r[0], -1e-12)
+                for other in rects[:i]:
+                    self.assertLess(rect_overlap_area(r, other), 1e-7)
+
+    def test_squarify_makes_squarer_rooms_than_one_long_strip(self):
+        rng = random.Random(61)
+        better = tried = 0
+        for _ in range(100):
+            rect = (0.0, 0.0, rng.uniform(40, 120), rng.uniform(30, 90))
+            items = self.random_items(rng, rect)
+            if len(items) < 5:
+                continue
+            tried += 1
+
+            def aspect(r):
+                w, h = r[2] - r[0], r[3] - r[1]
+                return max(w / h, h / w) if min(w, h) > 0 else 1e9
+
+            strip = sum(aspect((0, 0, rect[2] * a / rect_area(rect), rect[3]))
+                        for _, a in items) / len(items)
+            squares = sum(aspect(r) for r in mk.squarify(items, rect).values()) / len(items)
+            better += squares < strip
+        self.assertGreater(tried, 50)
+        self.assertGreaterEqual(better, tried - 2)
+
+    def test_squarify_scales_requests_that_do_not_add_up(self):
+        out = mk.squarify([("a", 1.0), ("b", 3.0)], (0, 0, 20, 10))       # 4 units -> 200
+        self.assertAlmostEqual(rect_area(out["a"]), 50.0)
+        self.assertAlmostEqual(rect_area(out["b"]), 150.0)
+
+    def test_squarify_edge_cases(self):
+        self.assertEqual(mk.squarify([], (0, 0, 10, 10)), {})
+        self.assertEqual(mk.squarify([("only", 5.0)], (0, 0, 10, 4)), {"only": (0, 0, 10, 4)})
+        out = mk.squarify([("a", 30.0), ("nothing", 0.0), ("b", 10.0)], (0, 0, 8, 5))
+        self.assertEqual(rect_area(out["nothing"]), 0.0)
+        self.assertAlmostEqual(rect_area(out["a"]) + rect_area(out["b"]), 40.0)
+        with self.assertRaises(ValueError):
+            mk.squarify([("a", 1.0), ("a", 2.0)], (0, 0, 5, 5))
+        with self.assertRaises(ValueError):
+            mk.squarify([("a", -1.0)], (0, 0, 5, 5))
+
+    def test_squarify_is_deterministic_with_equal_areas(self):
+        items = [("r%d" % i, 10.0) for i in range(8)]
+        self.assertEqual(mk.squarify(items, (0, 0, 20, 4)), mk.squarify(items, (0, 0, 20, 4)))
+
+
+class SharedWalls(unittest.TestCase):
+    def test_two_rooms_side_by_side(self):
+        walls = mk.shared_walls([(0, 0, 10, 10), (10, 2, 20, 8)])
+        self.assertEqual(walls, {(0, 1): ((10, 2), (10, 8))})
+        self.assertEqual(mk.shared_walls([(0, 0, 10, 10), (10, 2, 20, 8)], min_len=7.0), {})
+        stacked = mk.shared_walls([(0, 0, 10, 10), (3, 10, 25, 20)])
+        self.assertEqual(stacked, {(0, 1): ((3, 10), (10, 10))})
+
+    def test_corner_contact_and_gaps_are_not_walls(self):
+        self.assertEqual(mk.shared_walls([(0, 0, 10, 10), (10, 10, 20, 20)]), {})
+        self.assertEqual(mk.shared_walls([(0, 0, 10, 10), (11, 0, 20, 10)]), {})
+
+    def test_shared_walls_match_the_grow_and_overlap_measure(self):
+        rng = random.Random(62)
+        for _ in range(120):
+            rect = (0.0, 0.0, rng.uniform(30, 100), rng.uniform(30, 80))
+            items = [("r%d" % i, rng.uniform(1, 10)) for i in range(rng.randint(3, 12))]
+            rooms = list(mk.squarify(items, rect).values())
+            min_len = rng.choice([0.0, 2.0, 5.0])
+            walls = mk.shared_walls(rooms, min_len=min_len)
+            threshold = max(min_len, 1e-3)
+            for i in range(len(rooms)):
+                for j in range(i + 1, len(rooms)):
+                    length = contact_length(rooms[i], rooms[j])
+                    if abs(length - threshold) < 2e-3:
+                        continue                          # too close to the cut-off to judge
+                    self.assertEqual((i, j) in walls, length > threshold, (i, j, length))
+                    if (i, j) in walls:
+                        (px, py), (qx, qy) = walls[(i, j)]
+                        self.assertAlmostEqual(mk.dist((px, py), (qx, qy)), length, places=2)
+            for (i, j), (p, q) in walls.items():
+                self.assertLess(i, j)
+                for r in (rooms[i], rooms[j]):
+                    for pt in (p, q):
+                        self.assertTrue(mk.rect_contains(r, pt, 1e-6))
+
+
+def flood(cells, neighbours):
+    """Connected components of a set of grid cells, by a plain flood fill."""
+    remaining, groups = set(cells), []
+    while remaining:
+        start = remaining.pop()
+        group, stack = {start}, [start]
+        while stack:
+            c, r = stack.pop()
+            for dc, dr in neighbours:
+                nb = (c + dc, r + dr)
+                if nb in remaining:
+                    remaining.discard(nb)
+                    group.add(nb)
+                    stack.append(nb)
+        groups.append(group)
+    return groups
+
+
+FOUR = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+EIGHT = FOUR + [(1, 1), (1, -1), (-1, 1), (-1, -1)]
+
+
+def covered(entry, pt):
+    outer, holes = entry
+    return mk.point_in_polygon(pt, outer) and not any(mk.point_in_polygon(pt, h) for h in holes)
+
+
+class GridOutlines(unittest.TestCase):
+    def test_simple_shapes(self):
+        (outer, holes), = mk.cells_outline([(3, 4)])
+        self.assertEqual(holes, [])
+        self.assertAlmostEqual(shoelace(outer), 1.0)
+        self.assertEqual(sorted(outer), [(3.0, 4.0), (3.0, 5.0), (4.0, 4.0), (4.0, 5.0)])
+        (strip, _), = mk.cells_outline([(0, 0), (1, 0), (2, 0)])
+        self.assertEqual(len(strip), 4)                       # collinear points merged
+        self.assertAlmostEqual(shoelace(strip), 3.0)
+        (ell, _), = mk.cells_outline([(0, 0), (1, 0), (0, 1)])
+        self.assertEqual(len(ell), 6)
+        self.assertAlmostEqual(shoelace(ell), 3.0)
+        self.assertEqual(mk.cells_outline([]), [])
+
+    def test_a_ring_of_cells_has_one_hole(self):
+        ring = [(c, r) for c in range(3) for r in range(3) if (c, r) != (1, 1)]
+        (outer, holes), = mk.cells_outline(ring)
+        self.assertAlmostEqual(shoelace(outer), 9.0)
+        self.assertEqual(len(holes), 1)
+        self.assertAlmostEqual(shoelace(holes[0]), -1.0)      # holes wind the other way
+
+    def test_an_island_inside_a_hole_is_its_own_shape(self):
+        ring = [(c, r) for c in range(5) for r in range(5) if (c, r) != (2, 2)
+                and not (1 <= c <= 3 and 1 <= r <= 3)] + [(2, 2)]
+        entries = mk.cells_outline(ring)
+        self.assertEqual(len(entries), 2)
+        by_area = sorted(entries, key=lambda e: shoelace(e[0]))
+        self.assertAlmostEqual(shoelace(by_area[0][0]), 1.0)
+        self.assertEqual(by_area[0][1], [])
+        self.assertEqual(len(by_area[1][1]), 1)
+        self.assertAlmostEqual(shoelace(by_area[1][1][0]), -9.0)
+
+    def test_cells_touching_only_at_a_corner_are_separate_shapes(self):
+        for cells in ([(0, 0), (1, 1)], [(1, 0), (0, 1)]):
+            entries = mk.cells_outline(cells)
+            self.assertEqual(len(entries), 2)
+            for outer, holes in entries:
+                self.assertEqual(len(outer), 4)
+                self.assertAlmostEqual(shoelace(outer), 1.0)
+                self.assertTrue(mk.polygon_is_simple(outer))
+        checker = [(c, r) for c in range(4) for r in range(4) if (c + r) % 2 == 0]
+        entries = mk.cells_outline(checker)
+        self.assertEqual(len(entries), 8)                     # every cell on its own
+
+    def test_a_notch_plugged_only_at_the_corners_is_not_a_hole(self):
+        # a C whose opening is filled by a cell that meets both tips only
+        # diagonally: two separate shapes, and no ring closes round the notch
+        cells = [(0, 0), (1, 0), (2, 0), (0, 1), (0, 2), (1, 2), (2, 2), (3, 1)]
+        entries = mk.cells_outline(cells)
+        self.assertEqual(sum(len(h) for _, h in entries), 0)
+        self.assertEqual(len(entries), 2)
+        for outer, _ in entries:
+            self.assertTrue(mk.polygon_is_simple(outer))
+
+    def test_a_pocket_joined_to_the_outside_at_one_corner_becomes_a_hole(self):
+        # a 3x3 ring with one corner cell missing: the empty middle cell touches
+        # the missing corner only diagonally; the ring must not visit that
+        # corner twice, so the middle is cut out as a hole that meets the outline
+        cells = [(c, r) for c in range(3) for r in range(3) if (c, r) not in ((1, 1), (0, 0))]
+        (outer, holes), = mk.cells_outline(cells)
+        self.assertTrue(mk.polygon_is_simple(outer))
+        self.assertAlmostEqual(shoelace(outer), 8.0)
+        self.assertEqual(len(outer), 6)
+        self.assertEqual(len(holes), 1)
+        self.assertAlmostEqual(shoelace(holes[0]), -1.0)
+        self.assertIn((1.0, 1.0), outer)
+        self.assertIn((1.0, 1.0), holes[0])                  # they meet at that corner
+
+    def test_random_grids_are_traced_faithfully(self):
+        rng = random.Random(63)
+        for _ in range(150):
+            cols, rows = rng.randint(3, 9), rng.randint(3, 8)
+            density = rng.uniform(0.2, 0.95)
+            cells = {(c, r) for c in range(cols) for r in range(rows) if rng.random() < density}
+            if not cells:
+                continue
+            entries = mk.cells_outline(cells)
+            # the areas add up to the cell count (holes are negative)
+            total = sum(shoelace(o) + sum(shoelace(h) for h in hs) for o, hs in entries)
+            self.assertAlmostEqual(total, float(len(cells)), places=9)
+            # one entry per 4-connected group of cells
+            self.assertEqual(len(entries), len(flood(cells, FOUR)))
+            for outer, holes in entries:
+                self.assertGreater(shoelace(outer), 0.0)
+                for ring in [outer] + holes:
+                    self.assertTrue(mk.polygon_is_simple(ring))
+                    n = len(ring)
+                    for i in range(n):
+                        a, b, c = ring[i - 1], ring[i], ring[(i + 1) % n]
+                        self.assertTrue(float(b[0]).is_integer() and float(b[1]).is_integer())
+                        self.assertTrue(a[0] == b[0] or a[1] == b[1])           # rectilinear
+                        self.assertNotEqual((b[0] - a[0]) * (c[1] - b[1])
+                                            - (b[1] - a[1]) * (c[0] - b[0]), 0)  # no collinear
+                for hole in holes:
+                    self.assertLess(shoelace(hole), 0.0)
+            # every filled cell is covered by exactly one entry, every empty one by none
+            for c in range(-1, cols + 1):
+                for r in range(-1, rows + 1):
+                    centre = (c + 0.5, r + 0.5)
+                    hits = sum(covered(e, centre) for e in entries)
+                    self.assertEqual(hits, 1 if (c, r) in cells else 0, (c, r))
+
+    def test_size_scales_the_outline_and_the_result_is_deterministic(self):
+        cells = [(0, 0), (1, 0), (1, 1), (5, 5)]
+        small = mk.cells_outline(cells)
+        big = mk.cells_outline(cells, size=10.0)
+        self.assertEqual(small, mk.cells_outline(cells))
+        self.assertEqual(big, [([(x * 10, y * 10) for x, y in o],
+                                [[(x * 10, y * 10) for x, y in h] for h in hs])
+                               for o, hs in small])
+        self.assertEqual(mk.cells_outline(iter(cells)), small)              # any iterable
+
+
+class HexGrids(unittest.TestCase):
+    def test_neighbours_are_one_step_away_in_the_documented_directions(self):
+        rng = random.Random(64)
+        size = 7.0
+        for _ in range(150):
+            col, row = rng.randint(-8, 8), rng.randint(-8, 8)
+            cx, cy = mk.hex_center(col, row, size)
+            nbs = mk.hex_neighbors(col, row)
+            self.assertEqual(len(set(nbs)), 6)
+            for k, (nc, nr) in enumerate(nbs):
+                nx, ny = mk.hex_center(nc, nr, size)
+                self.assertAlmostEqual(mk.dist((cx, cy), (nx, ny)), math.sqrt(3) * size, places=9)
+                angle = math.degrees(math.atan2(ny - cy, nx - cx))
+                turn = (angle - (30 + 60 * k) + 180) % 360 - 180        # wrapped difference
+                self.assertAlmostEqual(turn, 0.0, places=6)
+                self.assertIn((col, row), mk.hex_neighbors(nc, nr))          # symmetric
+                self.assertEqual(mk.hex_distance((col, row), (nc, nr)), 1)
+
+    def test_corners_form_a_regular_hexagon_that_meets_its_neighbours(self):
+        rng = random.Random(65)
+        size = 5.0
+        for _ in range(100):
+            col, row = rng.randint(-6, 6), rng.randint(-6, 6)
+            corners = mk.hex_corners(col, row, size)
+            centre = mk.hex_center(col, row, size)
+            self.assertEqual(len(corners), 6)
+            self.assertTrue(all(abs(mk.dist(c, centre) - size) < 1e-9 for c in corners))
+            self.assertAlmostEqual(shoelace(corners), 1.5 * math.sqrt(3) * size * size)
+            for k, (nc, nr) in enumerate(mk.hex_neighbors(col, row)):
+                theirs = mk.hex_corners(nc, nr, size)
+                mine = {(round(x, 6), round(y, 6)) for x, y in (corners[k], corners[(k + 1) % 6])}
+                shared = {(round(x, 6), round(y, 6)) for x, y in theirs} & mine
+                self.assertEqual(shared, mine)             # the edge k is theirs too
+
+    def test_hexes_tile_the_plane(self):
+        rng = random.Random(66)
+        size = 6.0
+        for _ in range(150):
+            p = (rng.uniform(0, 100), rng.uniform(0, 100))
+            cells = [(c, r) for c in range(-2, 18) for r in range(-2, 15)]
+            nearest = min(cells, key=lambda cr: mk.dist(p, mk.hex_center(cr[0], cr[1], size)))
+            self.assertTrue(mk.point_in_polygon(p, mk.hex_corners(nearest[0], nearest[1], size))
+                            or mk.distance_to_boundary(
+                                p, mk.hex_corners(nearest[0], nearest[1], size)) < 1e-9)
+
+    def test_hex_distance_is_the_number_of_steps(self):
+        rng = random.Random(67)
+        for _ in range(60):
+            a = (rng.randint(-6, 6), rng.randint(-6, 6))
+            hops = {a: 0}
+            frontier = [a]
+            for step in range(1, 9):
+                nxt = []
+                for cell in frontier:
+                    for nb in mk.hex_neighbors(*cell):
+                        if nb not in hops:
+                            hops[nb] = step
+                            nxt.append(nb)
+                frontier = nxt
+            for b, h in hops.items():
+                if h <= 8:
+                    self.assertEqual(mk.hex_distance(a, b), h)
+                    self.assertEqual(mk.hex_distance(b, a), h)
+
+
 # @@TESTS@@

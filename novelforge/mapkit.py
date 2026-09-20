@@ -1131,4 +1131,333 @@ def gabriel_edges(points: Sequence[Point]) -> List[Tuple[int, int]]:
     return edges
 
 
+# ---------------------------------------------------------------------------
+# Rectangles and grids
+# ---------------------------------------------------------------------------
+
+def bsp_split(rect: Rect, rng: random.Random, min_leaf: float,
+              ratio_range: Tuple[float, float] = (0.35, 0.65),
+              max_leaf: Optional[float] = None, integer: bool = False) -> List[Rect]:
+    """Binary space partition: cut ``rect`` into leaf rectangles.
+
+    A rectangle is cut across its longer side (either, at random, when it is
+    nearly square) at a fraction of its length drawn from ``ratio_range``,
+    then each half is cut in turn. Every leaf is at least ``min_leaf`` on
+    both sides; a rectangle is left whole once it cannot be cut that way, or
+    once both its sides are at most ``max_leaf`` (leave it None to cut down
+    as far as ``min_leaf`` allows). With ``integer=True`` every cut lands on
+    a whole number, for grid maps. The leaves tile ``rect`` exactly and come
+    out in a fixed order for a given ``rng``.
+    """
+    if min_leaf <= 0.0:
+        raise ValueError("bsp_split needs a positive min_leaf")
+    lo_r, hi_r = ratio_range
+    out: List[Rect] = []
+    stack: List[Rect] = [(float(rect[0]), float(rect[1]), float(rect[2]), float(rect[3]))]
+
+    def cut_range(a: float, b: float) -> Optional[Tuple[float, float]]:
+        lo, hi = a + min_leaf, b - min_leaf
+        if integer:
+            lo, hi = math.ceil(lo - EPS), math.floor(hi + EPS)
+        return (lo, hi) if lo <= hi + EPS else None
+
+    while stack:
+        x0, y0, x1, y1 = stack.pop()
+        w, h = x1 - x0, y1 - y0
+        cx, cy = cut_range(x0, x1), cut_range(y0, y1)
+        if max_leaf is not None and w <= max_leaf and h <= max_leaf:
+            cx = cy = None
+        if cx is None and cy is None:
+            out.append((x0, y0, x1, y1))
+            continue
+        if cx is not None and cy is not None:
+            if w > 1.25 * h:
+                across_x = True
+            elif h > 1.25 * w:
+                across_x = False
+            else:
+                across_x = rng.random() < 0.5
+        else:
+            across_x = cx is not None
+        ratio = rng.uniform(lo_r, hi_r)
+        if across_x:
+            lo, hi = cx
+            cut = min(max(x0 + w * ratio, lo), hi)
+            if integer:
+                cut = min(max(float(round(cut)), lo), hi)
+            stack.append((cut, y0, x1, y1))
+            stack.append((x0, y0, cut, y1))
+        else:
+            lo, hi = cy
+            cut = min(max(y0 + h * ratio, lo), hi)
+            if integer:
+                cut = min(max(float(round(cut)), lo), hi)
+            stack.append((x0, cut, x1, y1))
+            stack.append((x0, y0, x1, cut))
+    return out
+
+
+def _worst_ratio(row: Sequence[float], side: float) -> float:
+    """Worst aspect ratio in a treemap row laid along a side of length ``side``."""
+    total = sum(row)
+    lo = min(row)
+    if lo <= 0.0 or total <= 0.0:
+        return math.inf
+    return max(side * side * max(row) / (total * total),
+               total * total / (side * side * lo))
+
+
+def squarify(items: Sequence[Tuple[Hashable, float]], rect: Rect
+             ) -> Dict[Hashable, Rect]:
+    """Squarified treemap: fill ``rect`` with one rectangle per item, each as
+    close to square as the areas allow (Bruls, Huizing and van Wijk).
+
+    ``items`` is ``[(key, area), ...]``; the result maps each key to its
+    rectangle, in the same order as ``items``. Requested areas are scaled by
+    one common factor so the rectangles fill ``rect`` exactly (when they
+    already add up to its area, nothing is scaled and each rectangle has the
+    area asked for). A zero-area item gets a zero-size rectangle. Keys must
+    be distinct; areas must not be negative.
+    """
+    x0, y0, x1, y1 = rect
+    keys = [k for k, _ in items]
+    if len(set(keys)) != len(keys):
+        raise ValueError("squarify keys must be distinct")
+    areas = [float(a) for _, a in items]
+    if any(a < 0.0 for a in areas):
+        raise ValueError("squarify areas must not be negative")
+    if not items:
+        return {}
+    total = sum(areas)
+    if total <= 0.0 or x1 - x0 <= 0.0 or y1 - y0 <= 0.0:
+        return {k: (x0, y0, x0, y0) for k in keys}
+    scale = (x1 - x0) * (y1 - y0) / total
+    order = sorted(range(len(items)), key=lambda i: (-areas[i], i))
+    scaled = [areas[i] * scale for i in order]
+    placed: Dict[Hashable, Rect] = {}
+    n = len(order)
+    start = 0
+    while start < n:
+        fw, fh = x1 - x0, y1 - y0
+        if scaled[start] <= 0.0:                    # only zero-area items are left
+            for j in range(start, n):
+                placed[keys[order[j]]] = (x0, y0, x0, y0)
+            break
+        side = min(fw, fh)
+        end = start + 1
+        current = _worst_ratio(scaled[start:end], side)
+        while end < n:
+            trial = _worst_ratio(scaled[start:end + 1], side)
+            if trial > current:
+                break
+            end, current = end + 1, trial
+        row_sum = sum(scaled[start:end])
+        if end == n:                                # last row takes what is left
+            strip = fw if fw >= fh else fh
+        elif fw >= fh:
+            strip = row_sum / fh                    # a column on the left
+        else:
+            strip = row_sum / fw                    # a band along the top
+        if fw >= fh:
+            y = y0
+            for j in range(start, end):
+                nxt = y1 if j == end - 1 else y + scaled[j] / strip
+                placed[keys[order[j]]] = (x0, y, x0 + strip, nxt)
+                y = nxt
+            x0 += strip
+        else:
+            x = x0
+            for j in range(start, end):
+                nxt = x1 if j == end - 1 else x + scaled[j] / strip
+                placed[keys[order[j]]] = (x, y0, nxt, y0 + strip)
+                x = nxt
+            y0 += strip
+        start = end
+    return {k: placed[k] for k in keys}
+
+
+def shared_walls(rects: Sequence[Rect], min_len: float = 0.0, tol: float = 1e-6
+                 ) -> Dict[Tuple[int, int], Tuple[Point, Point]]:
+    """Which axis-aligned rectangles share a wall, and where.
+
+    Returns ``{(i, j): (p, q)}`` with ``i < j`` for every pair whose edges
+    lie along a common line and overlap for at least ``min_len``; ``p`` to
+    ``q`` is the shared stretch (left to right, or bottom to top). Corner
+    contact does not count. Feed ``result`` keys to ``edges_to_adj`` for the
+    room graph, and put doors on the stretch (keep ``min_len`` at least a
+    door's width plus its margins so a door always fits).
+    """
+    out: Dict[Tuple[int, int], Tuple[Point, Point]] = {}
+    n = len(rects)
+    for i in range(n):
+        ax0, ay0, ax1, ay1 = rects[i]
+        for j in range(i + 1, n):
+            bx0, by0, bx1, by1 = rects[j]
+            if abs(ax1 - bx0) <= tol or abs(bx1 - ax0) <= tol:
+                x = ax1 if abs(ax1 - bx0) <= tol else ax0
+                lo, hi = max(ay0, by0), min(ay1, by1)
+                if hi - lo > tol and hi - lo >= min_len - tol:
+                    out[(i, j)] = ((x, lo), (x, hi))
+                    continue
+            if abs(ay1 - by0) <= tol or abs(by1 - ay0) <= tol:
+                y = ay1 if abs(ay1 - by0) <= tol else ay0
+                lo, hi = max(ax0, bx0), min(ax1, bx1)
+                if hi - lo > tol and hi - lo >= min_len - tol:
+                    out[(i, j)] = ((lo, y), (hi, y))
+    return out
+
+
+def cells_outline(cells: Iterable[Tuple[int, int]], size: float = 1.0
+                  ) -> List[Tuple[Polygon, List[Polygon]]]:
+    """Trace a set of grid cells into rectilinear polygons.
+
+    ``cells`` are integer ``(col, row)`` pairs, each the unit square from
+    ``(col, row)`` to ``(col + 1, row + 1)`` (scaled by ``size``). Returns one
+    ``(outer_ring, [hole_rings, ...])`` per 4-connected group of cells: outer
+    rings run counter-clockwise (positive area), holes clockwise, and
+    collinear vertices are merged, so a 3x1 strip is a 4-point rectangle.
+
+    Cells that touch only at a corner are not joined: two rooms meeting at a
+    corner come out as two shapes. Every ring is a simple polygon (it never
+    visits a vertex twice); where one shape wraps round a pocket and touches
+    itself at a corner, the pocket becomes a hole whose ring meets the outer
+    ring at that corner. Islands inside a hole are their own entries.
+    """
+    filled = {(int(c), int(r)) for c, r in cells}
+    if not filled:
+        return []
+    edge_cell: Dict[Tuple[Tuple[int, int], Tuple[int, int]], Tuple[int, int]] = {}
+    outgoing: Dict[Tuple[int, int], List[Tuple[int, int]]] = {}
+    for (c, r) in sorted(filled):
+        sides = (
+            ((c, r - 1), (c, r), (c + 1, r)),
+            ((c + 1, r), (c + 1, r), (c + 1, r + 1)),
+            ((c, r + 1), (c + 1, r + 1), (c, r + 1)),
+            ((c - 1, r), (c, r + 1), (c, r)),
+        )
+        for neighbour, a, b in sides:
+            if neighbour not in filled:               # boundary edge, cell on its left
+                edge_cell[(a, b)] = (c, r)
+                outgoing.setdefault(a, []).append(b)
+
+    def next_edge(a: Tuple[int, int], b: Tuple[int, int]) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+        """At b, leaving along an edge that came from a: turn left if you can."""
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        best, best_rank = None, 9
+        for c in outgoing[b]:
+            ex, ey = c[0] - b[0], c[1] - b[1]
+            turn = dx * ey - dy * ex
+            rank = 0 if turn > 0 else (1 if dx * ex + dy * ey > 0 else (2 if turn < 0 else 3))
+            if rank < best_rank:
+                best, best_rank = c, rank
+        return b, best
+
+    rings: List[Tuple[Tuple[int, int], List[Tuple[int, int]]]] = []
+    seen = set()
+    for edge in sorted(edge_cell):
+        if edge in seen:
+            continue
+        walk: List[Tuple[int, int]] = []
+        cur = edge
+        while cur not in seen:
+            seen.add(cur)
+            walk.append(cur[0])
+            cur = next_edge(*cur)
+        # A shape that wraps round a pocket of empty cells and touches itself
+        # at a corner visits that corner twice; cut the walk there so every
+        # ring is simple (the pocket becomes a hole that meets the outline
+        # at that one corner).
+        loops: List[List[Tuple[int, int]]] = []
+        stack: List[Tuple[int, int]] = []
+        where: Dict[Tuple[int, int], int] = {}
+        for v in walk:
+            if v in where:
+                i = where[v]
+                loops.append(stack[i:])
+                for w in stack[i + 1:]:
+                    del where[w]
+                del stack[i + 1:]
+            else:
+                where[v] = len(stack)
+                stack.append(v)
+        loops.append(stack)
+        for loop in loops:
+            pts = []                                  # merge collinear runs
+            m = len(loop)
+            for i in range(m):
+                p, q, s = loop[i - 1], loop[i], loop[(i + 1) % m]
+                if (q[0] - p[0]) * (s[1] - q[1]) - (q[1] - p[1]) * (s[0] - q[0]) != 0:
+                    pts.append(q)
+            rings.append((edge_cell[(loop[0], loop[1])], pts))
+
+    # 4-connected components of the filled cells decide which holes go where
+    comp: Dict[Tuple[int, int], int] = {}
+    firsts: List[Tuple[int, int]] = []
+    for start in sorted(filled, key=lambda cr: (cr[1], cr[0])):
+        if start in comp:
+            continue
+        comp[start] = len(firsts)
+        firsts.append(start)
+        queue = deque([start])
+        while queue:
+            c, r = queue.popleft()
+            for nb in ((c + 1, r), (c - 1, r), (c, r + 1), (c, r - 1)):
+                if nb in filled and nb not in comp:
+                    comp[nb] = comp[start]
+                    queue.append(nb)
+    outers: Dict[int, List[Polygon]] = {i: [] for i in range(len(firsts))}
+    holes: Dict[int, List[Polygon]] = {i: [] for i in range(len(firsts))}
+    for cell, pts in rings:
+        poly = [(float(x * size), float(y * size)) for x, y in pts]
+        if polygon_area(poly) > 0.0:
+            outers[comp[cell]].append(poly)
+        else:
+            holes[comp[cell]].append(poly)
+    result: List[Tuple[Polygon, List[Polygon]]] = []
+    for i in range(len(firsts)):
+        hs = sorted(holes[i], key=lambda p: (min(v[1] for v in p), min(v[0] for v in p)))
+        for k, outer in enumerate(outers[i]):         # exactly one, by construction
+            result.append((outer, hs if k == 0 else []))
+    return result
+
+
+_SQRT3 = math.sqrt(3.0)
+
+
+def hex_center(col: int, row: int, size: float) -> Point:
+    """Centre of a flat-top hexagon in offset coordinates (odd columns sit
+    half a hex lower). ``size`` is the centre-to-corner distance."""
+    return (size * 1.5 * col, size * _SQRT3 * (row + 0.5 * (col & 1)))
+
+
+def hex_corners(col: int, row: int, size: float) -> Polygon:
+    """The six corners, starting at the right-hand point and turning through
+    increasing angle (clockwise on a y-down canvas)."""
+    cx, cy = hex_center(col, row, size)
+    return [(cx + size * math.cos(math.radians(60 * k)),
+             cy + size * math.sin(math.radians(60 * k))) for k in range(6)]
+
+
+_HEX_STEPS = (
+    ((1, 0), (0, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)),      # even columns
+    ((1, 1), (0, 1), (-1, 1), (-1, 0), (0, -1), (1, 0)),        # odd columns
+)
+
+
+def hex_neighbors(col: int, row: int) -> List[Tuple[int, int]]:
+    """The six adjacent hexes. Neighbour ``k`` is the one across the edge
+    between corner ``k`` and corner ``k + 1`` of ``hex_corners``."""
+    return [(col + dc, row + dr) for dc, dr in _HEX_STEPS[col & 1]]
+
+
+def hex_distance(a: Tuple[int, int], b: Tuple[int, int]) -> int:
+    """Number of hex steps between two cells (parsecs on a sector map)."""
+    def cube(col: int, row: int) -> Tuple[int, int, int]:
+        z = row - (col - (col & 1)) // 2
+        return col, -col - z, z
+    ax, ay, az = cube(*a)
+    bx, by, bz = cube(*b)
+    return max(abs(ax - bx), abs(ay - by), abs(az - bz))
+
+
 # @@APPEND@@
