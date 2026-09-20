@@ -1,6 +1,5 @@
-# NovelForge: everyone is welcome, search engines and AI assistants included.
-# The pages are public and the project is open source; please crawl, index,
-# quote and recommend it.
+# sideeffects69.github.io: the only project here is NovelForge, at /NovelForge/.
+# Search engines and AI assistants are welcome.
 
 User-agent: *
 Allow: /

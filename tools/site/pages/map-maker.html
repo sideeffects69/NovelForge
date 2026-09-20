@@ -1,0 +1,94 @@
+<div class="page-hero">
+  <div class="wrap">
+    <div class="crumbs"><a href="{{root}}">Home</a><span>/</span>Map maker</div>
+    <span class="kicker">Fantasy map maker</span>
+    <h1>A free fantasy map maker for authors, built into your writing studio</h1>
+    <p class="lead">Press one button and a whole world appears: ragged coastlines, mountain ranges, rivers that run from the highlands to the sea, forests and deserts, roads that follow the land, and dozens of named towns. Edit every part by hand, link places to your character and location sheets, and export a picture for your readers.</p>
+    <div class="btn-row">
+      <a class="btn btn-primary" href="{{root}}download/"><span class="btn-icon">⬇</span> Download NovelForge</a>
+      <a class="btn" href="{{root}}features/">All features</a>
+    </div>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <div class="gallery" data-reveal>
+      <figure><img src="{{root}}assets/maps/map-classic.jpg" width="1200" height="800" alt="A generated fantasy map called Highfield: two large landmasses with mountain ranges, forests, rivers, roads and named towns on aged parchment." loading="lazy"><figcaption><strong>Classic fantasy world</strong>Two large landmasses, lakes, rivers and roads. Seed 7.</figcaption></figure>
+      <figure><img src="{{root}}assets/maps/map-archipelago.jpg" width="1200" height="800" alt="A generated island archipelago map with several irregular islands, shallows around each coast, and named settlements." loading="lazy"><figcaption><strong>Island archipelago</strong>Chains of islands with pale shallows and ripples. Seed 3.</figcaption></figure>
+      <figure><img src="{{root}}assets/maps/map-inland-sea.jpg" width="1200" height="800" alt="A generated fantasy map of land wrapped around a large inland sea, with forests, mountains, rivers and cities." loading="lazy"><figcaption><strong>Inland sea</strong>Kingdoms around a central sea, with rivers draining into it. Seed 5.</figcaption></figure>
+    </div>
+    <p class="compat-note">Every map above was made by NovelForge with a single click and nothing edited by hand. The place names are generated too, and can be replaced with your own.</p>
+  </div>
+</section>
+
+<section class="alt-bg">
+  <div class="wrap">
+    <div class="prose">
+      <h2>How a world is built</h2>
+      <p>A map that only looks random makes a poor setting. The generator builds the land the way land forms, so the pieces make sense together, and that is what lets a writer trust it when a character walks from one city to another.</p>
+      <ol>
+        <li><strong>The land.</strong> Each continent is a cluster of overlapping lobes, bent by a warp field and roughened with fractal noise, so coasts wander and form bays, headlands and islands instead of ovals. A percentile picks the sea level, so “30% land” really gives 30% land on every seed.</li>
+        <li><strong>Relief.</strong> Ridged noise lays mountains along crests, so they form <em>chains</em> and massifs rather than lumps.</li>
+        <li><strong>Coastlines.</strong> Smooth outlines exact to a fraction of a cell (marching squares), with the holes in a landmass becoming inland seas and lakes.</li>
+        <li><strong>Rivers.</strong> Every basin is flooded so that water always has a way to the sea. Rivers are traced <em>upstream</em> from their mouths along the biggest catchment, so each starts in the hills and ends at the water, with tributaries.</li>
+        <li><strong>Biomes.</strong> Forest, desert, marsh and ice come from temperature, altitude and moisture, blended so they form soft patches rather than pixel blobs.</li>
+        <li><strong>Settlements.</strong> Every site is scored for harbours, fresh water and gentle ground, and the best are taken with a minimum spacing so cities are not all in one corner.</li>
+        <li><strong>Roads.</strong> Routed by pathfinding across the land: never through the sea, avoiding steep ground, crossing rivers at a cost, and merging into roads that already exist the way trunk roads do.</li>
+        <li><strong>Names.</strong> Regions are labelled where the land is deepest and the ocean where the water is widest. Names come from editable, per-culture lists.</li>
+      </ol>
+      <p>The same seed and settings always rebuild the identical world, <strong>names included</strong>, so a world you love can be shared or regenerated exactly. The seed is stored on the map.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head" data-reveal>
+      <span class="kicker">The editor</span>
+      <h2>Then make it yours</h2>
+      <p>Nothing is locked. Generated maps are made of the same shapes the drawing tools make, so every tool works on both.</p>
+    </div>
+    <figure class="shot" data-reveal>
+      <div class="window-chrome"><div class="chrome-bar"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span><span class="chrome-title">Map Maker — Highfield</span></div>
+      <img src="{{root}}assets/screenshots/map-maker.png" width="1340" height="680" loading="lazy" alt="The map maker window: tool rail, terrain and layer palettes, the map on a desk, and a properties panel."></div>
+    </figure>
+    <div class="cards" style="margin-top: 34px;">
+      <div class="card" data-reveal><h3>Draw by hand</h3><p>Freehand coastlines, click-to-place shapes, an eraser and a pan tool. Thirteen terrain types: land, sea and lake, forest, mountain range, hills, desert, marsh, ice, region border, river, road, wall and route.</p></div>
+      <div class="card" data-reveal data-reveal-delay="1"><h3>Twenty kinds of pin</h3><p>Capitals, cities, towns, villages, castles, temples, ports, ruins, caves, dungeons, mines, camps, bridges, inns, battle sites, dangers, treasure, portals and more, each with its own icon and an automatic label placer that hides a name rather than print it on top of another.</p></div>
+      <div class="card" data-reveal data-reveal-delay="2"><h3>Linked to your story</h3><p>Pins link straight to your Location sheets: double-click a pin to open its sheet in Word. Layers show and hide independently, so you can keep a secret map of the villain's plans.</p></div>
+      <div class="card" data-reveal><h3>Four art styles</h3><p>Aged parchment, ink on white, dark atlas and treasure map. Same map, different mood; switch at any time.</p></div>
+      <div class="card" data-reveal data-reveal-delay="1"><h3>Names in your own voice</h3><p>Settlements, realms, regions, seas and rivers can each sound different. Edit the name lists in a plain JSON file, and the next world uses them.</p></div>
+      <div class="card" data-reveal data-reveal-delay="2"><h3>What you see is what you export</h3><p>One drawing list feeds the editor, the PNG and the SVG, so an export is never a different picture from the one you were looking at.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="alt-bg">
+  <div class="wrap">
+    <div class="prose">
+      <h2>Export it</h2>
+      <ul>
+        <li><strong>PNG</strong> for your website, your newsletter or a print-ready picture.</li>
+        <li><strong>SVG</strong>, a true vector drawing you can scale to a poster or open in a vector editor.</li>
+        <li><strong>Word</strong>, a document with the map and a legend of every pin, so it sits with the rest of your project.</li>
+      </ul>
+      <p>The maps you make are yours to use in your own books, on your site and anywhere else. NovelForge is MIT-licensed software and places no restrictions on the images it produces.</p>
+
+      <div class="callout">
+        <p><strong>Honest limits.</strong> Only world-style maps are generated for you. City, building, dungeon and battle maps start from a blank grid that you draw by hand. There is no brush for stamping single trees or castles: terrain is drawn as areas and ridge lines, and the mountain, tree and hill stamps are placed for you.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="big-cta">
+  <div class="wrap" data-reveal>
+    <h2>Build your world in one click.</h2>
+    <p>The map maker is part of NovelForge, which is free for Windows 10 and 11.</p>
+    <div class="btn-row btn-row-center">
+      <a class="btn btn-primary" href="{{root}}download/"><span class="btn-icon">⬇</span> Download NovelForge</a>
+      <a class="btn" href="{{root}}faq/">Read the FAQ</a>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,76 @@
+<div class="page-hero">
+  <div class="wrap">
+    <div class="crumbs"><a href="{{root}}">Home</a><span>/</span>Download</div>
+    <span class="kicker">Download</span>
+    <h1>Download NovelForge, free for Windows 10 and 11</h1>
+    <p class="lead">Version {{version}}. There is no installer and no account: you install Python once, unzip a folder, and double-click one file. It takes about five minutes.</p>
+    <div class="btn-row">
+      <a class="btn btn-primary" href="{{repo}}/releases/latest" rel="noopener"><span class="btn-icon">⬇</span> Get the latest release</a>
+      <a class="btn" href="{{repo}}" rel="noopener">View the source</a>
+    </div>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <div class="section-head" data-reveal>
+      <span class="kicker">Getting it running</span>
+      <h2>Install in four steps</h2>
+    </div>
+    <div class="install-steps four">
+      <div class="step" data-reveal><span class="num">1</span><h3>Install Python</h3><p>Free, from <a href="https://www.python.org/downloads/" rel="noopener">python.org</a>. Choose <strong>3.13 or newer</strong> and tick <strong>“Add python.exe to PATH”</strong> in the installer. Or, in a terminal: <code>winget install Python.Python.3.13</code></p></div>
+      <div class="step" data-reveal data-reveal-delay="1"><span class="num">2</span><h3>Download the zip</h3><p>Open the <a href="{{repo}}/releases/latest" rel="noopener">latest release</a>, scroll to Assets and download <strong>Source code (zip)</strong>. Unzip it anywhere: Desktop or Documents is fine.</p></div>
+      <div class="step" data-reveal data-reveal-delay="2"><span class="num">3</span><h3>Double-click Write.bat</h3><p>The first time, it installs two small libraries (python-docx and Pillow). That needs the internet once, and takes under a minute.</p></div>
+      <div class="step" data-reveal data-reveal-delay="3"><span class="num">4</span><h3>Start a novel</h3><p>In the app choose <strong>File → New Novel</strong>, give it a title and a word target, and press OK. Then open the first scene and type.</p></div>
+    </div>
+    <p class="compat-note" data-reveal>Want a shortcut on your Desktop with the NovelForge icon? Double-click <code>Make Desktop Shortcut.bat</code> in the folder.</p>
+  </div>
+</section>
+
+<section class="alt-bg">
+  <div class="wrap">
+    <div class="prose">
+      <h2>What you need</h2>
+      <ul>
+        <li><strong>Windows 10 or 11.</strong> On Windows 11 the title bar also takes on the theme's colour. macOS and Linux are not supported yet; the engine is plain Python, but the interface has only been built and tested on Windows.</li>
+        <li><strong>Python 3.13 or newer.</strong></li>
+        <li><strong>Two Python libraries</strong>, <code>python-docx</code> (writes the Word files) and <code>Pillow</code> (draws the map images). <code>Write.bat</code> installs them for you; to do it yourself, run <code>python -m pip install -r requirements.txt</code> in the folder.</li>
+        <li>The download itself is about 6 MB. A screen of 1366 × 768 or larger works well. No graphics card is needed, and no internet connection after the first run.</li>
+      </ul>
+
+      <h2>Where your work lives</h2>
+      <p>Your novels are stored in the <code>Projects</code> folder next to <code>Write.bat</code>, one sub-folder per book, and your preferences in <code>novelforge-settings.json</code>. Everything inside a project is an ordinary file: scenes and reference sheets are Word documents, maps are images and small JSON files. Nothing is hidden in a database. Back the folder up any way you like, or use the built-in verified backup (<kbd>Ctrl</kbd>+<kbd>B</kbd>).</p>
+
+      <h2>Upgrading to a new version</h2>
+      <p>Download the new release, unzip it to a new folder, then <strong>copy your <code>Projects</code> folder and <code>novelforge-settings.json</code> from the old folder into the new one</strong> before you start it. Your novels and Word documents are never changed by an upgrade. Keep the old folder until you have checked that everything is there.</p>
+
+      <h2>Troubleshooting</h2>
+      <h3>“Python was not found”</h3>
+      <p>Install Python from python.org and, on the first screen of the installer, tick <strong>Add python.exe to PATH</strong>. Then double-click <code>Write.bat</code> again. If you already installed it without that box ticked, run the installer again and choose Modify.</p>
+      <h3>Windows asks whether I trust the file</h3>
+      <p>Windows marks files from the internet, and may show “Windows protected your PC” or an “Open File” warning for <code>Write.bat</code>. It is a short plain-text script; you can open it in Notepad and read it. If you are happy with it, choose <strong>More info → Run anyway</strong> (or Open). The whole program is Python source you can read on GitHub.</p>
+      <h3>The libraries could not be installed</h3>
+      <p>The first run needs an internet connection. Connect, then double-click <code>Write.bat</code> again. If a work network blocks it, download the libraries elsewhere or ask your IT department to allow pip.</p>
+      <h3>Nothing appears when I double-click</h3>
+      <p>Open a Command Prompt in the folder and run <code>python -m novelforge</code>. Any error is printed there. If it shows a message you cannot solve, please <a href="{{repo}}/issues" rel="noopener">open an issue</a> with the text.</p>
+
+      <h2>Uninstalling</h2>
+      <p>There is nothing to uninstall: delete the folder. <strong>Copy your <code>Projects</code> folder out first</strong> if you want to keep your novels, because they live inside it.</p>
+
+      <div class="callout">
+        <p><strong>Is it safe?</strong> NovelForge is open source under the MIT licence, makes no network connections while you write, has no telemetry and asks for no account. You can read every line of it on <a href="{{repo}}" rel="noopener">GitHub</a>, and the test suite that opens every window and clicks every button ships in the same folder.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="big-cta">
+  <div class="wrap" data-reveal>
+    <h2>Five minutes from now, you could be writing.</h2>
+    <p>Free, offline, and your book stays in Word files you own.</p>
+    <div class="btn-row btn-row-center">
+      <a class="btn btn-primary" href="{{repo}}/releases/latest" rel="noopener"><span class="btn-icon">⬇</span> Get the latest release</a>
+      <a class="btn" href="{{root}}faq/">Read the FAQ</a>
+    </div>
+  </div>
+</section>

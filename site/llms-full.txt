@@ -1,0 +1,939 @@
+# NovelForge: full site text
+
+> NovelForge is a free, open-source novel-writing studio for Windows. Every scene, character sheet and map it creates is a real Microsoft Word (.docx) file in a folder on your own disk. It has a binder and corkboard, nine outline frameworks, a timeline, a story graph that checks continuity, a procedural fantasy map maker and offline prose diagnostics. There is no account, no cloud, no subscription, no telemetry and no generative AI.
+
+This file is the readable text of every page on https://sideeffects69.github.io/NovelForge/, generated from the site itself (version 2.2.0, 2026-09-20).
+
+
+---
+
+<!-- Source: https://sideeffects69.github.io/NovelForge/ -->
+
+Free & open source
+MIT licensed
+No account, ever
+100% offline
+
+# Free novel writing software that keeps your book in real Word files
+
+NovelForge is a free, open-source novel-writing studio for Windows. Every scene,
+character sheet and map is a real Microsoft Word document in a folder on your own
+disk: no subscription, no cloud, no account. Nine outline frameworks, a story graph
+that reads your actual prose, and a fantasy map maker that builds a whole world in one click.
+
+[⬇ Download for Windows](https://sideeffects69.github.io/NovelForge/download/)
+[See every feature](https://sideeffects69.github.io/NovelForge/features/)
+
+No telemetry. No internet connection required. Works on a laptop with the Wi-Fi off.
+
+The Ashfall Crown — NovelForge
+
+[Image: NovelForge's main writing window: a binder of chapters and scenes on the left, the scene editor in the middle, and a scene inspector with goal, conflict and disaster fields on the right.]
+
+9outline frameworks
+
+$0now and always
+
+15point continuity checker
+
+100%of your work on your own disk
+
+What is NovelForge? It is free, open-source novel writing software for Windows.
+It gives you a binder of chapters and scenes, a corkboard, nine outline frameworks, a timeline,
+reference sheets for characters and places, a story graph that checks continuity, a procedural
+fantasy map maker and offline prose diagnostics. Unlike most writing apps it stores your book as
+ordinary Microsoft Word (.docx) files, one per scene, so nothing is locked in a
+database and nothing is uploaded anywhere.
+
+Why writers choose it
+
+## Built for people who finish books
+
+A novel takes years. The tool you write it in should still open, exactly as readable, on the day you type the last line.
+
+◆
+
+### You own every file
+
+Real .docx documents in a plain folder. Open them in Word, back them up with anything, hand them to an editor. If NovelForge vanished tomorrow your novel would still be there.
+
+◇
+
+### Free, with no catch
+
+No trial, no subscription, no paywalled feature, no account. MIT-licensed source you can read, change and share.
+
+✦
+
+### Fully offline and private
+
+Nothing is sent anywhere, ever. There is no telemetry and no generative AI reading your manuscript. It works with the network unplugged.
+
+▤
+
+### Made for fiction
+
+Scene goal, conflict and disaster fields, nine story structures, a timeline that understands invented calendars, and reference sheets for characters, places, items and factions.
+
+⌘
+
+### Fast, and keyboard-first
+
+It opens in about a second. Press Ctrl+Shift+P and type what you want (“story graph”, “backup”, “theme”) and it runs.
+
+⛨
+
+### Hard to lose your work
+
+Atomic saves, a snapshot of every scene before each save, verified zip backups and a crash-recovery journal that asks before it restores anything.
+
+A tool built as a story, not a checklist
+
+## What it actually feels like to use
+
+Corkboard — The Ashfall Crown
+
+[Image: The corkboard: every scene as an index card, grouped by chapter and colour-coded by status, ready to drag into a new order.]
+
+Plan
+
+### Know where the story is going.
+
+Nine outline frameworks (Three-Act, Save the Cat, Snowflake, Seven-Point, Story Circle,
+Hero's Journey, Romancing the Beat, Mystery/Crime and Freytag) and you can switch between
+them freely: each one's answers are kept, so trying a different shape costs nothing. The
+corkboard shows every scene as an index card you can drag into a new order.
+
+[More about planning →](https://sideeffects69.github.io/NovelForge/features/#planning)
+
+Story Graph — The Ashfall Crown
+
+[Image: The story graph window listing every character, place, item and thread the manuscript mentions, and how connected each one is.]
+
+Understand
+
+### See what your manuscript knows.
+
+NovelForge reads your whole manuscript and builds a map of it: every character, place,
+object and thread, and every scene each one appears in. It finds them two ways, links you
+set by hand and names it spots in your actual prose, which is how it notices what you
+forgot to link. A 15-point continuity checker runs on the same graph: dropped plot threads,
+dates running backwards, a character who appears before they are born.
+
+[More about the story graph →](https://sideeffects69.github.io/NovelForge/features/#story-graph)
+
+Map Maker — Highfield
+
+[Image: The map maker: a tool rail, terrain and layer palettes, a generated fantasy world with mountain ranges, forests, rivers, roads and named towns, and a properties panel.]
+
+Build worlds
+
+### Draw the world behind the words.
+
+Press Surprise Me for a complete fantasy world: ragged coastlines, mountain
+ranges, rivers that run from the highlands to the sea, forests, deserts, roads that follow the
+land and dozens of named settlements. It comes with a seed you can save and regenerate
+exactly. Prefer to draw it yourself? Freehand coastlines, 13 terrain types and 20 pin types are
+there too, in four art styles.
+
+[Meet the map maker →](https://sideeffects69.github.io/NovelForge/map-maker/)
+
+◆
+
+Atomic writesEvery file is written to a temporary name and swapped in, so a crash mid-save cannot leave a half-written file.
+
+◆
+
+Version snapshotsEvery scene is copied before each save. Restore any of them without losing the current version.
+
+◆
+
+Verified backupsA zip of the whole project, opened again and checksum-verified before it is trusted.
+
+◆
+
+Crash recoveryA journal that asks before it restores anything, and never silently overwrites what you have.
+
+Protect your work
+
+### Your novel stays yours.
+
+Nothing here depends on a server staying online, a company staying in business or a
+subscription staying paid. Full undo and redo covers structural edits too: delete a chapter,
+get it back, files included. That is the whole reason NovelForge writes real Word documents in
+the first place.
+
+How it compares
+
+## Where NovelForge fits
+
+Scrivener and Atticus are excellent, mature tools; this is not a claim to beat them at everything. Here is the short version.
+
+| | NovelForge | Scrivener | Atticus | Obsidian |
+
+| Price | Free | Paid licence | Paid licence | Free |
+
+| Where your book lives | Real .docx files | Project file | Cloud-synced project | Markdown files |
+
+| Built-in outline frameworks | 9 | Templates | Not built in | Via plugins |
+
+| Story graph and continuity checks | Yes | No | No | Note graph, not story-aware |
+
+| Procedural fantasy map maker | Yes | No | No | No |
+
+| Open source | Yes (MIT) | No | No | No |
+
+| Runs on | Windows | Windows, Mac, iOS | Desktop and web | Windows, Mac, Linux, mobile |
+
+Prices and features are as we understand them in September 2026; please check each vendor. [Read the full, honest comparison, including when to pick something else →](https://sideeffects69.github.io/NovelForge/compare/)
+
+Getting started
+
+## Four steps, no technical background needed
+
+NovelForge runs on Windows 10 and 11. There is no installer: you unzip a folder and double-click one file.
+
+1
+
+### Install Python
+
+Free, from [python.org](https://www.python.org/downloads/). Version 3.13 or newer; tick “Add python.exe to PATH”.
+
+2
+
+### Download NovelForge
+
+Get the latest release’s Source code (zip) from GitHub and unzip it anywhere.
+
+3
+
+### Double-click Write.bat
+
+It finds Python and, the first time only, installs the two small libraries NovelForge needs. That needs the internet once.
+
+4
+
+### Start writing
+
+Choose File → New Novel, give it a title and a word target, and type. It saves itself.
+
+[⬇ Full download instructions](https://sideeffects69.github.io/NovelForge/download/)
+[Latest release on GitHub](https://github.com/sideeffects69/NovelForge/releases/latest)
+
+Windows 10 and 11 only for now. The engine is plain Python, but the interface has only ever been tested on Windows. macOS and Linux are a possibility, not a promise.
+
+Questions
+
+## Quick answers
+
+Is NovelForge really free?
+
+Yes. It is free and open source under the MIT licence. There is no trial period, no subscription, no locked feature and no account. If it helps you, a donation is welcome but never expected.
+
+Does NovelForge work offline?
+
+Completely. It never connects to the internet: no telemetry, no update check, no cloud. The only time you need a connection is to download it and, on first run, to fetch two small Python libraries once.
+
+Where are my files stored?
+
+In a normal folder on your own computer, Projects\Your Novel\. Every scene is its own Word (.docx) file. A small project.json remembers only ordering, links and word counts, never your prose.
+
+Does it use AI?
+
+No. There is no generative AI in NovelForge and nothing reads your manuscript except the program on your machine. The prose checks are ordinary offline rules that point at problems; they never rewrite your text.
+
+Does it work on Mac or Linux?
+
+Not yet. The engine is plain Python, but the interface has only been built and tested on Windows 10 and 11. If Mac or Linux support would get you using it, please [say so on GitHub](https://github.com/sideeffects69/NovelForge/issues).
+
+Can I bring in a manuscript I have already written?
+
+Yes. Copy your existing .docx files into a chapter folder and choose Manuscript → Import Loose .docx Files. Each file becomes a scene with its word count read in.
+
+Is it good for fantasy worldbuilding?
+
+It was built for it. Reference sheets for characters, places, items and factions, a timeline that sorts invented calendars correctly, and a map maker that generates whole worlds you can then edit and link back to your Location sheets. [See the map maker](https://sideeffects69.github.io/NovelForge/map-maker/).
+
+[All the questions and answers →](https://sideeffects69.github.io/NovelForge/faq/)
+
+## Start your next chapter in files you own.
+
+Free for Windows 10 and 11. No account, no cloud, no catch.
+
+[⬇ Download NovelForge](https://sideeffects69.github.io/NovelForge/download/)
+[View the source](https://github.com/sideeffects69/NovelForge)
+
+---
+
+<!-- Source: https://sideeffects69.github.io/NovelForge/features/ -->
+
+[Home](https://sideeffects69.github.io/NovelForge/)/Features
+Features
+
+# Everything a novelist needs, in one free, offline studio
+
+A binder and corkboard, nine outline frameworks, a story graph that checks continuity, a fantasy map maker, offline prose diagnostics and a compiler that produces a standard manuscript. All of it reads and writes ordinary Word files on your own disk.
+
+[⬇ Download for Windows](https://sideeffects69.github.io/NovelForge/download/)
+[Compare with Scrivener and others](https://sideeffects69.github.io/NovelForge/compare/)
+
+- [Writing](#writing)
+
+- [Planning and structure](#planning)
+
+- [Reference sheets](#reference)
+
+- [Story graph and continuity](#story-graph)
+
+- [Maps and worldbuilding](#maps)
+
+- [Compiling](#compile)
+
+- [Diagnostics](#diagnostics)
+
+- [Statistics](#stats)
+
+- [Never losing work](#safety)
+
+- [Speed and keyboard](#speed)
+
+## Writing: stay inside the story
+
+The editor is deliberately quiet. Every scene is its own real .docx file, which you can open and edit in Microsoft Word or in NovelForge, in either direction, and the two always stay in sync.
+
+- Focus mode, distraction-free mode and typewriter scrolling take the interface out of your way.
+
+- Ghost mode hides your text as you type, for the perfectionist who cannot stop editing a sentence they have not finished.
+
+- A sprint timer counts the words you write in a fixed slice of time, and tells you your pace.
+
+- Live spelling and grammar marks and word completion are tuned to your manuscript's own names and invented words, not a generic dictionary, so “Kessa Ren” is not flagged on every page.
+
+- Drafting anyway: type [check the tide timing] and keep going. Later, one command collects every bracket tag in the book into a single document with its surrounding context.
+
+The Ashfall Crown — NovelForge
+
+[Image: The main window: chapter and scene binder, the manuscript editor with a centred page, and the scene inspector.]
+
+## Planning and structure
+
+Know where the story is going without being forced into one shape.
+
+- Nine outline frameworks are built in: Three-Act, Save the Cat, Snowflake, Seven-Point, Story Circle, Hero's Journey, Romancing the Beat, Mystery/Crime and Freytag. Switch between them freely; each framework's answers are kept, so trying another costs nothing.
+
+- The corkboard shows every scene as an index card, colour-coded by status, and you drag cards to reorder the book. The character-relationship web is one click away.
+
+- A free-text timeline sorts invented calendars correctly, so “the third moon of Harrowmere” lands where it should.
+
+- Scene and sequel structure after Dwight Swain, with a value-shift check that asks whether anything actually changed in the scene.
+
+- Reverse outline: build an outline from what you really wrote, then compare it with the one you planned. It is the fastest structural edit there is.
+
+- Drafts let you try a scene another way without losing the original, and an idea inbox suggests where a stray thought belongs by matching it against your own scenes and characters.
+
+Story structure — The Ashfall Crown
+
+[Image: The outline window showing a story framework's beats with the writer's answers filled in.]
+
+### Structure that bends to you.
+
+A framework is a set of questions, not a straitjacket. Fill in what serves the story, leave the rest, and swap frameworks whenever the book tells you it wants a different shape.
+
+Corkboard — The Ashfall Crown
+
+[Image: The corkboard with scene index cards grouped under chapter headings.]
+
+### See the whole book at once.
+
+Every scene is a card with its synopsis and status. Drag one onto another to reorder; the Word files and the outline follow.
+
+## Reference sheets that are real Word documents
+
+Characters, locations, items, factions and plot threads each get a Word reference sheet. A character sheet has roughly 90 fields, including a Ghost / Lie / Truth / Want-versus-Need arc framework. Fill in what serves the story; NovelForge reads back whatever you typed. Because they are ordinary .docx files, your editor, your co-writer or your future self can open them without NovelForge at all.
+
+Research notes can be linked to the scenes and characters they are for, so they show up on them, in the inspector and in the story bible, instead of living in a folder you forget.
+
+## The story graph and continuity checker
+
+Press Ctrl+G and NovelForge reads your whole manuscript and builds a living map of it: every character, place, object and thread, and every scene each one appears in.
+
+- It finds entities two ways: links you set by hand, and names it spots in your actual prose. That is how it notices the character you mentioned in chapter nine but never linked.
+
+- A 15-point continuity checker runs on the same graph: dropped plot threads, dates that run backwards, a character who appears before they are born.
+
+- “What depends on this scene?” shows what would break before you delete something.
+
+- One-click Story Bible: a complete Word reference of the book, always current because it is built from the manuscript itself.
+
+Story Graph — The Ashfall Crown
+
+[Image: The story graph window with characters, places, items and threads ranked by how many scenes mention them.]
+
+## Maps and worldbuilding
+
+Press Surprise Me and a whole fantasy world appears: coastlines, mountain ranges, forests and deserts, rivers that run from the highlands to the sea, roads that follow the land, and dozens of named settlements, all reproducible from a seed. Everything is editable afterwards, and pins link straight to your Location sheets. Export as PNG, SVG or a Word document with a legend.
+
+[Read more about the map maker →](https://sideeffects69.github.io/NovelForge/map-maker/)
+
+Map Maker — Highfield
+
+[Image: The map maker with a generated world open and the tool rail, palettes and properties panel around it.]
+
+## Compiling to a standard manuscript
+
+One key (F5) gathers every scene into a single Word document in standard manuscript format:
+
+- US Letter, one-inch margins, 12-point, double spaced, half-inch first-line indent
+
+- A title page with your contact block and a rounded word count
+
+- A running header (Surname / TITLE / page) from page two, each chapter on a fresh page, # between scenes and THE END at the close
+
+- An optional table of contents; also plain-text export and a treatment (every synopsis in reading order, which reads like a pitch document)
+
+Italics and bold survive; everything else is normalised. That is the point of compiling.
+
+## Offline prose diagnostics
+
+Roughly twenty checks, all heuristic, all local, none of them ever rewriting your words: -ly adverbs, filler and filter words, passive constructions and stock phrases, dialogue-tag problems, sentence rhythm and over-long sentences, word echoes and repeated openings, dialogue-to-narration ratio, which of the five senses appear, and reading level. They are worded as observations, not corrections, because your voice beats every rule in the list.
+
+There is also a five-question writer's-block diagnostic that asks the causes in order of how common they are, because the fixes for them contradict each other.
+
+## Statistics that respect revision
+
+The dashboard (F9) shows progress against your target, your streak, your pace and a projected finish date, plus a 30-day sparkline, a per-chapter breakdown, point-of-view balance, and plot-thread coverage. It keeps two numbers, added and net, so a revision day where you cut 800 words and wrote 600 counts as real work instead of “−200”.
+
+Dashboard — The Ashfall Crown
+
+[Image: The statistics dashboard: progress against the word target, streak, pace and projected finish date.]
+
+## Never losing your work
+
+- Atomic writes: each file is written under a temporary name and swapped in, so a crash mid-save cannot leave a half-written document. This also works safely inside OneDrive folders.
+
+- Version snapshots: every scene is copied before each save; restore any of them without losing the current version.
+
+- Verified backups: Ctrl+B zips the whole project, then reopens the zip and checks its checksums before reporting success.
+
+- Crash recovery: a journal that asks before it restores anything.
+
+- Undo and redo for structural edits: delete a chapter, get it back, files included.
+
+- Verify this project (F4) reports what is in the project and anything broken (missing files, links to things you deleted, map pins pointing at deleted places), with a health score.
+
+## Fast, and driven by the keyboard
+
+NovelForge opens in about a second, never asks you to sign in, and never does work on a timer behind your back. Press Ctrl+Shift+P to open the command palette, type what you want (“story graph”, “backup”, “theme”) and press Enter. It searches every command in every menu, so it can never fall out of date. There are four themes, including a dark navy “Premium” one, and the interface adapts to scaled high-DPI displays (tested at 125%).
+
+Command palette
+
+[Image: The command palette open over the main window, filtering every menu command as you type.]
+
+## Try it. It costs nothing.
+
+Free for Windows 10 and 11. Your novel stays in Word files you own.
+
+[⬇ Download NovelForge](https://sideeffects69.github.io/NovelForge/download/)
+[Read the FAQ](https://sideeffects69.github.io/NovelForge/faq/)
+
+---
+
+<!-- Source: https://sideeffects69.github.io/NovelForge/map-maker/ -->
+
+[Home](https://sideeffects69.github.io/NovelForge/)/Map maker
+Fantasy map maker
+
+# A free fantasy map maker for authors, built into your writing studio
+
+Press one button and a whole world appears: ragged coastlines, mountain ranges, rivers that run from the highlands to the sea, forests and deserts, roads that follow the land, and dozens of named towns. Edit every part by hand, link places to your character and location sheets, and export a picture for your readers.
+
+[⬇ Download NovelForge](https://sideeffects69.github.io/NovelForge/download/)
+[All features](https://sideeffects69.github.io/NovelForge/features/)
+
+[Image: A generated fantasy map called Highfield: two large landmasses with mountain ranges, forests, rivers, roads and named towns on aged parchment.]
+
+Classic fantasy worldTwo large landmasses, lakes, rivers and roads. Seed 7.
+
+[Image: A generated island archipelago map with several irregular islands, shallows around each coast, and named settlements.]
+
+Island archipelagoChains of islands with pale shallows and ripples. Seed 3.
+
+[Image: A generated fantasy map of land wrapped around a large inland sea, with forests, mountains, rivers and cities.]
+
+Inland seaKingdoms around a central sea, with rivers draining into it. Seed 5.
+
+Every map above was made by NovelForge with a single click and nothing edited by hand. The place names are generated too, and can be replaced with your own.
+
+## How a world is built
+
+A map that only looks random makes a poor setting. The generator builds the land the way land forms, so the pieces make sense together, and that is what lets a writer trust it when a character walks from one city to another.
+
+- The land. Each continent is a cluster of overlapping lobes, bent by a warp field and roughened with fractal noise, so coasts wander and form bays, headlands and islands instead of ovals. A percentile picks the sea level, so “30% land” really gives 30% land on every seed.
+
+- Relief. Ridged noise lays mountains along crests, so they form chains and massifs rather than lumps.
+
+- Coastlines. Smooth outlines exact to a fraction of a cell (marching squares), with the holes in a landmass becoming inland seas and lakes.
+
+- Rivers. Every basin is flooded so that water always has a way to the sea. Rivers are traced upstream from their mouths along the biggest catchment, so each starts in the hills and ends at the water, with tributaries.
+
+- Biomes. Forest, desert, marsh and ice come from temperature, altitude and moisture, blended so they form soft patches rather than pixel blobs.
+
+- Settlements. Every site is scored for harbours, fresh water and gentle ground, and the best are taken with a minimum spacing so cities are not all in one corner.
+
+- Roads. Routed by pathfinding across the land: never through the sea, avoiding steep ground, crossing rivers at a cost, and merging into roads that already exist the way trunk roads do.
+
+- Names. Regions are labelled where the land is deepest and the ocean where the water is widest. Names come from editable, per-culture lists.
+
+The same seed and settings always rebuild the identical world, names included, so a world you love can be shared or regenerated exactly. The seed is stored on the map.
+
+The editor
+
+## Then make it yours
+
+Nothing is locked. Generated maps are made of the same shapes the drawing tools make, so every tool works on both.
+
+Map Maker — Highfield
+
+[Image: The map maker window: tool rail, terrain and layer palettes, the map on a desk, and a properties panel.]
+
+### Draw by hand
+
+Freehand coastlines, click-to-place shapes, an eraser and a pan tool. Thirteen terrain types: land, sea and lake, forest, mountain range, hills, desert, marsh, ice, region border, river, road, wall and route.
+
+### Twenty kinds of pin
+
+Capitals, cities, towns, villages, castles, temples, ports, ruins, caves, dungeons, mines, camps, bridges, inns, battle sites, dangers, treasure, portals and more, each with its own icon and an automatic label placer that hides a name rather than print it on top of another.
+
+### Linked to your story
+
+Pins link straight to your Location sheets: double-click a pin to open its sheet in Word. Layers show and hide independently, so you can keep a secret map of the villain's plans.
+
+### Four art styles
+
+Aged parchment, ink on white, dark atlas and treasure map. Same map, different mood; switch at any time.
+
+### Names in your own voice
+
+Settlements, realms, regions, seas and rivers can each sound different. Edit the name lists in a plain JSON file, and the next world uses them.
+
+### What you see is what you export
+
+One drawing list feeds the editor, the PNG and the SVG, so an export is never a different picture from the one you were looking at.
+
+## Export it
+
+- PNG for your website, your newsletter or a print-ready picture.
+
+- SVG, a true vector drawing you can scale to a poster or open in a vector editor.
+
+- Word, a document with the map and a legend of every pin, so it sits with the rest of your project.
+
+The maps you make are yours to use in your own books, on your site and anywhere else. NovelForge is MIT-licensed software and places no restrictions on the images it produces.
+
+Honest limits. Only world-style maps are generated for you. City, building, dungeon and battle maps start from a blank grid that you draw by hand. There is no brush for stamping single trees or castles: terrain is drawn as areas and ridge lines, and the mountain, tree and hill stamps are placed for you.
+
+## Build your world in one click.
+
+The map maker is part of NovelForge, which is free for Windows 10 and 11.
+
+[⬇ Download NovelForge](https://sideeffects69.github.io/NovelForge/download/)
+[Read the FAQ](https://sideeffects69.github.io/NovelForge/faq/)
+
+---
+
+<!-- Source: https://sideeffects69.github.io/NovelForge/compare/ -->
+
+[Home](https://sideeffects69.github.io/NovelForge/)/Compare
+Honest comparison
+
+# NovelForge vs Scrivener, Atticus, Obsidian and Microsoft Word
+
+Scrivener, Atticus and Word are excellent, mature tools, and Obsidian is a superb notebook. This is not a claim that NovelForge beats them at everything. It is a plain account of where each one is strongest, so you can pick the right one, even when that is not us.
+
+| | NovelForge | Scrivener | Atticus | Obsidian | Microsoft Word |
+
+| Price | Free | One-time purchase | One-time purchase | Free (paid sync and publish) | Subscription or one-time |
+
+| Open source | Yes (MIT) | No | No | No | No |
+
+| Platforms | Windows 10/11 | Windows, Mac, iOS | Desktop and web | Desktop and mobile | Desktop, web, mobile |
+
+| Account needed | Never | No | Yes (a login) | No (for the app) | Usually (a Microsoft account) |
+
+| Works fully offline | Yes, always | Yes | See vendor | Yes | Yes (desktop) |
+
+| Where your book lives | Real .docx files, one per scene | One project file | Cloud-synced project | Markdown files | One .docx file |
+
+| Chapter and scene binder | Yes | Yes | Yes | By hand | Navigation pane |
+
+| Corkboard | Yes | Yes | Not built in | Via plugins | No |
+
+| Built-in outline frameworks | 9 | Templates | Not built in | Via plugins | No |
+
+| Story graph and continuity checks | Yes (15-point) | No | No | Note graph, not story-aware | No |
+
+| Procedural fantasy map maker | Yes | No | No | No | No |
+
+| Offline prose diagnostics | About 20 checks | No | See vendor | No | Spelling and grammar |
+
+| Compiles a standard manuscript | Yes (Word) | Yes | Yes | No | By hand |
+
+| Ebook and print typesetting | No | Yes | Yes, its specialty | No | By hand |
+
+| Real-time collaboration | No | No | See vendor | Not built in | Yes |
+
+Prices and features are as we understand them in September 2026. Vendors change things, so please confirm on their own sites before you decide. Corrections are welcome: [open an issue](https://github.com/sideeffects69/NovelForge/issues).
+
+## When NovelForge is the right choice
+
+- You want to own your files as ordinary Word documents, with no proprietary project format between you and your book.
+
+- You want no subscription, no account and no cloud, and nothing leaving your machine.
+
+- You write fiction with a world in it: many characters and places, invented calendars, a map to draw, and continuity to keep straight across a long manuscript.
+
+- You like a tool that is quick and keyboard-driven, and you use Windows.
+
+- You would like a tool whose source you can read and change.
+
+## When to pick something else
+
+- You are on a Mac, Linux or a phone. NovelForge is Windows-only for now. Scrivener (Mac and iOS) or Obsidian (everywhere) will serve you better today.
+
+- You need to typeset an ebook or a print interior. That is Atticus's specialty, and Scrivener's compile options go deep. NovelForge compiles a standard manuscript in Word; you would format it elsewhere.
+
+- You co-write live with another person. Word or Google Docs are built for that. NovelForge is a single-writer tool.
+
+- You already love Scrivener. If it works for you, keep using it. There is no import from Scrivener projects, though anything you can export to .docx can be brought in.
+
+## How each tool sees a book
+
+### Scrivener
+
+The long-standing standard for long-form writers: a binder, corkboard, split editor, snapshots and a powerful compile system. It stores a book as a project bundle, so you work through Scrivener (or export) to get your words out. It has no continuity checker or map maker.
+
+### Atticus
+
+A writing and formatting tool aimed at authors who publish their own books; its strength is turning a manuscript into polished ebook and print files. Its focus is formatting rather than planning structure or tracking a story's continuity.
+
+### Obsidian
+
+A general-purpose notebook that stores plain Markdown and links notes into a graph. Many novelists use it for worldbuilding, and it has a huge plugin ecosystem. It is not fiction-specific, so scene structure, outlines and continuity checking are yours to assemble.
+
+### Microsoft Word
+
+Where most manuscripts end up, and the format editors and agents expect. Word is excellent at a single document and awkward at a whole book of scenes. NovelForge leans on it deliberately: every scene is a Word file, so the two work together rather than competing.
+
+### NovelForge
+
+Free, offline and made for fiction, with the planning, world and continuity tools a novelist otherwise pieces together from several apps, and a folder of ordinary Word files at the end of it.
+
+## Decide by trying it.
+
+It is free and there is no account to create. You can walk away with your files at any time, because they are just Word documents.
+
+[⬇ Download NovelForge](https://sideeffects69.github.io/NovelForge/download/)
+[See the features](https://sideeffects69.github.io/NovelForge/features/)
+
+---
+
+<!-- Source: https://sideeffects69.github.io/NovelForge/download/ -->
+
+[Home](https://sideeffects69.github.io/NovelForge/)/Download
+Download
+
+# Download NovelForge, free for Windows 10 and 11
+
+Version 2.2.0. There is no installer and no account: you install Python once, unzip a folder, and double-click one file. It takes about five minutes.
+
+[⬇ Get the latest release](https://github.com/sideeffects69/NovelForge/releases/latest)
+[View the source](https://github.com/sideeffects69/NovelForge)
+
+Getting it running
+
+## Install in four steps
+
+1
+
+### Install Python
+
+Free, from [python.org](https://www.python.org/downloads/). Choose 3.13 or newer and tick “Add python.exe to PATH” in the installer. Or, in a terminal: winget install Python.Python.3.13
+
+2
+
+### Download the zip
+
+Open the [latest release](https://github.com/sideeffects69/NovelForge/releases/latest), scroll to Assets and download Source code (zip). Unzip it anywhere: Desktop or Documents is fine.
+
+3
+
+### Double-click Write.bat
+
+The first time, it installs two small libraries (python-docx and Pillow). That needs the internet once, and takes under a minute.
+
+4
+
+### Start a novel
+
+In the app choose File → New Novel, give it a title and a word target, and press OK. Then open the first scene and type.
+
+Want a shortcut on your Desktop with the NovelForge icon? Double-click Make Desktop Shortcut.bat in the folder.
+
+## What you need
+
+- Windows 10 or 11. On Windows 11 the title bar also takes on the theme's colour. macOS and Linux are not supported yet; the engine is plain Python, but the interface has only been built and tested on Windows.
+
+- Python 3.13 or newer.
+
+- Two Python libraries, python-docx (writes the Word files) and Pillow (draws the map images). Write.bat installs them for you; to do it yourself, run python -m pip install -r requirements.txt in the folder.
+
+- The download itself is about 6 MB. A screen of 1366 × 768 or larger works well. No graphics card is needed, and no internet connection after the first run.
+
+## Where your work lives
+
+Your novels are stored in the Projects folder next to Write.bat, one sub-folder per book, and your preferences in novelforge-settings.json. Everything inside a project is an ordinary file: scenes and reference sheets are Word documents, maps are images and small JSON files. Nothing is hidden in a database. Back the folder up any way you like, or use the built-in verified backup (Ctrl+B).
+
+## Upgrading to a new version
+
+Download the new release, unzip it to a new folder, then copy your Projects folder and novelforge-settings.json from the old folder into the new one before you start it. Your novels and Word documents are never changed by an upgrade. Keep the old folder until you have checked that everything is there.
+
+## Troubleshooting
+
+### “Python was not found”
+
+Install Python from python.org and, on the first screen of the installer, tick Add python.exe to PATH. Then double-click Write.bat again. If you already installed it without that box ticked, run the installer again and choose Modify.
+
+### Windows asks whether I trust the file
+
+Windows marks files from the internet, and may show “Windows protected your PC” or an “Open File” warning for Write.bat. It is a short plain-text script; you can open it in Notepad and read it. If you are happy with it, choose More info → Run anyway (or Open). The whole program is Python source you can read on GitHub.
+
+### The libraries could not be installed
+
+The first run needs an internet connection. Connect, then double-click Write.bat again. If a work network blocks it, download the libraries elsewhere or ask your IT department to allow pip.
+
+### Nothing appears when I double-click
+
+Open a Command Prompt in the folder and run python -m novelforge. Any error is printed there. If it shows a message you cannot solve, please [open an issue](https://github.com/sideeffects69/NovelForge/issues) with the text.
+
+## Uninstalling
+
+There is nothing to uninstall: delete the folder. Copy your Projects folder out first if you want to keep your novels, because they live inside it.
+
+Is it safe? NovelForge is open source under the MIT licence, makes no network connections while you write, has no telemetry and asks for no account. You can read every line of it on [GitHub](https://github.com/sideeffects69/NovelForge), and the test suite that opens every window and clicks every button ships in the same folder.
+
+## Five minutes from now, you could be writing.
+
+Free, offline, and your book stays in Word files you own.
+
+[⬇ Get the latest release](https://github.com/sideeffects69/NovelForge/releases/latest)
+[Read the FAQ](https://sideeffects69.github.io/NovelForge/faq/)
+
+---
+
+<!-- Source: https://sideeffects69.github.io/NovelForge/faq/ -->
+
+[Home](https://sideeffects69.github.io/NovelForge/)/FAQ
+Questions and answers
+
+# Is NovelForge free, offline and private? Your questions, answered
+
+Short, honest answers about price, privacy, files, platforms, importing your work, and what NovelForge can and cannot do.
+
+What is NovelForge?
+
+NovelForge is free, open-source novel writing software for Windows. It combines a binder of chapters and scenes, a corkboard, nine outline frameworks, a timeline, reference sheets for characters and places, a story graph that checks continuity, a procedural fantasy map maker and offline prose diagnostics. Every scene it creates is a real Microsoft Word (.docx) file in a folder on your own disk.
+
+Is NovelForge really free?
+
+Yes. It is released under the MIT licence: free to use, copy, change and share. There is no trial, no subscription, no locked feature and no account. If it helps you and you would like to say thank you, you can [donate](https://sideeffects69.github.io/NovelForge/support/), but you never have to.
+
+Is it the best free novel writing software?
+
+That depends on what you value, so we would rather show than claim. If you want a free, offline studio that stores your book as ordinary Word files and includes planning, worldbuilding and continuity tools made for fiction, NovelForge is built for exactly that. If you need ebook and print typesetting, live co-writing or a Mac or phone app, another tool will suit you better. Our [honest comparison](https://sideeffects69.github.io/NovelForge/compare/) lays it out.
+
+Does NovelForge work offline?
+
+Completely. It never connects to the internet while you write: no telemetry, no update check, no cloud. You need a connection only to download it and, the first time you run it, to fetch two small Python libraries.
+
+Where are my files stored?
+
+In a normal folder on your computer, Projects\Your Novel\, next to Write.bat. Every scene, character sheet and location sheet is its own Word (.docx) file. A small project.json remembers ordering, links and word counts, and never holds your prose. You can open the folder in Explorer at any time (File → Open Project Folder).
+
+What happens to my novel if NovelForge disappears?
+
+Nothing. Your scenes are ordinary Word documents, readable in Word, LibreOffice or Google Docs today and in twenty years. The source code is public, so anyone can keep the program alive. That is the reason the files are .docx and not a private database.
+
+Does it use AI?
+
+No. There is no generative AI in NovelForge, nothing is sent to any service, and nothing reads your manuscript except the program on your own machine. The prose diagnostics are ordinary offline rules that point at possible problems (adverbs, filter words, passive voice, sentence rhythm, word echoes). They never rewrite your text.
+
+Is my writing private?
+
+Yes. NovelForge has no accounts, no cloud storage and no telemetry, and it makes no network connections while you work. Your manuscript exists only where you put it. The only local server in the code binds to your own machine and is used only by an unfinished experimental interface you never see.
+
+Does it work on Mac or Linux?
+
+Not yet. The engine is plain Python, but the interface has only been built and tested on Windows 10 and 11. Support elsewhere is possible but not promised. If it would get you using NovelForge, please [say so on GitHub](https://github.com/sideeffects69/NovelForge/issues). Because the files are Word documents, you can always take your book to another tool.
+
+Do I need to know how to code or use a terminal?
+
+No. The steps are: install Python from python.org, unzip the download, and double-click Write.bat. The first run installs two small libraries by itself. The [download page](https://sideeffects69.github.io/NovelForge/download/) covers the common problems.
+
+Can I import a manuscript I have already written?
+
+Yes. Copy your existing .docx files into a chapter folder under 00 Manuscript\ and choose Manuscript → Import Loose .docx Files. Each file becomes a scene with its word count read in. There is no direct import of Scrivener project files; export from Scrivener to .docx first.
+
+Can I get my book out to send to an agent, editor or publisher?
+
+Yes. Press F5 and NovelForge compiles every scene into one Word document in standard manuscript format: US Letter, one-inch margins, 12-point, double spaced, a title page, a running header, each chapter on a fresh page and THE END at the close. It also exports plain text and a treatment (every synopsis in reading order). It does not typeset ebooks or print interiors.
+
+How does the map maker work? Can I use the maps in my book?
+
+One button builds a whole world: coastlines, mountain ranges, rivers that run from the highlands to the sea, forests, deserts, roads and named settlements, all editable afterwards. You can export PNG, SVG or a Word document. The maps you make are yours to use in your own books and anywhere else, since NovelForge is MIT-licensed and places no restrictions on the images it produces. [More about the map maker](https://sideeffects69.github.io/NovelForge/map-maker/).
+
+Will the same seed always give me the same world?
+
+Yes. The same seed and settings rebuild the identical world, place names included, on any machine. The seed is recorded on the map, so a world you like can be shared or regenerated exactly.
+
+How do I back up my novel?
+
+Press Ctrl+B. NovelForge zips the whole project into a _Backups folder, then reopens the zip and checks its checksums before it tells you it worked. It also keeps a snapshot of every scene before each save, writes files atomically so a crash cannot leave half a file, and keeps a recovery journal that asks before it restores anything. You are also free to copy the folder anywhere you like, since it is just files.
+
+Can I edit the scenes in Word as well?
+
+Yes. Open a scene in Word, edit and save, and NovelForge picks up the change; edit in NovelForge and Word sees it. The two stay in sync in either direction. Italics and bold are preserved; other formatting is normalised when you compile, which is the point of compiling.
+
+Does it work with OneDrive or Dropbox?
+
+Yes. Files are written safely (to a temporary name, then swapped in) so a sync client never catches a half-written document, and NovelForge itself is developed inside a OneDrive folder. You can keep your Projects folder in a synced folder if you like.
+
+How do I report a bug or ask for a feature?
+
+Open an issue on [GitHub](https://github.com/sideeffects69/NovelForge/issues). You do not need to explain the technical cause: “it felt glitchy when I did this” is a complete bug report. Code contributions are welcome too; see [CONTRIBUTING.md](https://github.com/sideeffects69/NovelForge/blob/main/CONTRIBUTING.md).
+
+Not answered here? [Ask on GitHub](https://github.com/sideeffects69/NovelForge/issues). We read everything.
+
+## Ready to try it?
+
+Free for Windows 10 and 11. Your novel stays in Word files you own.
+
+[⬇ Download NovelForge](https://sideeffects69.github.io/NovelForge/download/)
+[See the features](https://sideeffects69.github.io/NovelForge/features/)
+
+---
+
+<!-- Source: https://sideeffects69.github.io/NovelForge/changelog/ -->
+
+[Home](https://sideeffects69.github.io/NovelForge/)/Changelog
+Changelog
+
+# What is new in NovelForge
+
+Every release, newest first. Your novels and Word documents are never changed by an upgrade; releases change the program, not your files. The full history, with downloads, is on [GitHub Releases](https://github.com/sideeffects69/NovelForge/releases).
+
+## Version 2.2.0
+
+Released 2026-09-20
+
+A rebuilt map maker, a more modern interface, and a website to match.
+
+### The map maker, rebuilt
+
+- Natural worlds. The generator was rewritten. Coasts now wander, with bays, headlands and irregular islands, instead of forming smooth blobs. Mountains form chains, forests and deserts form soft patches, and lakes fill real basins.
+
+- Rivers that make sense. Every river starts in the hills and runs to the sea (or a lake), with tributaries. Before, they were short stubs in the middle of nowhere.
+
+- Roads that follow the land. Routed by pathfinding: never through the sea, avoiding steep ground, merging into existing roads.
+
+- A better-looking map. Shaded, snow-capped mountains in ranges, tree stamps, riverbanks, pale shallows and ripples around every coast, softer biome edges, and place names with a halo so they stay readable over coasts and rivers.
+
+- The same seed always rebuilds the same world, names included. Before, the names were different every time.
+
+- A new window. A tool rail with icons, palette and properties cards, the map lying on a desk, a status strip with zoom, and Export and More menus in place of fifteen crowded buttons.
+
+- Much faster to use. The map is remembered between redraws, so zooming, selecting and panning no longer rebuild every tree, and the wheel zoom shows at once.
+
+- Fixed: a lake drawn on land used to vanish under the land; forests reshuffled every time a map was opened.
+
+### A more modern interface
+
+- Rounded buttons, fields, tabs and scroll bars in every theme, cards on a darker backdrop, a real type scale, and icons throughout.
+
+- The NovelForge logo is used everywhere: the window and taskbar icon, the welcome screen, the About box and the website.
+
+- Fixed: the Sprint and Corkboard windows on scaled displays.
+
+### Easier to install
+
+- Write.bat now installs the two small libraries NovelForge needs on first run, and explains plainly if Python is missing.
+
+- A Make Desktop Shortcut.bat puts a NovelForge icon on your Desktop.
+
+### The website
+
+- A full multi-page site with features, the map maker, an honest comparison, a FAQ, download help, and a plain-text summary for AI assistants.
+
+## Version 2.1.0
+
+Released 2026-09-19
+
+A refresh of how NovelForge looks and feels, plus a batch of fixes found by testing every button, menu and window.
+
+- A modern, flat look in every theme, and a Premium (dark navy) theme that is dark all the way across, including the title bar and menus.
+
+- A toolbar with icons, grouped by write, review and work, that shrinks to icons on a narrow window.
+
+- A command palette on Ctrl+Shift+P that searches every command in every menu.
+
+- A proper welcome screen, readable reports with real headings, and a status bar that tells you whether your writing is saved.
+
+- Works on scaled displays (125%), and the map maker opens fitted to the window.
+
+- An automated test suite that clicks every menu command, toolbar button and tool-window button.
+
+## Version 1.0.0
+
+Released 2026-09-18
+
+The first public release: real Word documents for every scene and sheet, the binder and corkboard, nine outline frameworks, the timeline, the story graph and continuity checker, the map maker, offline diagnostics, compile to manuscript format, and verified backups.
+
+---
+
+<!-- Source: https://sideeffects69.github.io/NovelForge/support/ -->
+
+[Home](https://sideeffects69.github.io/NovelForge/)/Support
+Support the project
+
+# NovelForge is free, and always will be
+
+No subscription, no paywalled feature, no account. If it is useful to you, a donation is welcome but never expected. There are other ways to help that cost nothing.
+
+## Say thank you
+
+Scan a code or follow a link. Every contribution helps keep NovelForge free.
+
+[Image: QR code for paypal.me/OmAbhyankar]
+
+### PayPal
+
+[paypal.me/OmAbhyankar](https://paypal.me/OmAbhyankar)
+
+[Image: QR code for UPI ID abhyankarom10@ybl]
+
+### UPI (India)
+
+abhyankarom10@ybl
+
+## Other ways to help
+
+- Tell a writer. The most useful thing you can do is mention NovelForge to someone who is trying to finish a book.
+
+- Star the project on [GitHub](https://github.com/sideeffects69/NovelForge); it helps other writers find it.
+
+- Report what feels wrong. “It felt glitchy when I did this” is a complete bug report. [Open an issue](https://github.com/sideeffects69/NovelForge/issues).
+
+- Ask for what you need. If Mac or Linux support, a new outline framework or a new map style would change how you write, say so.
+
+- Contribute. Code, tests, documentation and name lists are all welcome; see [CONTRIBUTING.md](https://github.com/sideeffects69/NovelForge/blob/main/CONTRIBUTING.md).
+
+NovelForge is built by one person, Om Abhyankar, who wanted a writing tool that would still open a novel in twenty years. Thank you for using it.

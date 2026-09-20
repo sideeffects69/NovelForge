@@ -1,0 +1,68 @@
+<div class="page-hero">
+  <div class="wrap">
+    <div class="crumbs"><a href="{{root}}">Home</a><span>/</span>Changelog</div>
+    <span class="kicker">Changelog</span>
+    <h1>What is new in NovelForge</h1>
+    <p class="lead">Every release, newest first. Your novels and Word documents are never changed by an upgrade; releases change the program, not your files. The full history, with downloads, is on <a href="{{repo}}/releases" rel="noopener">GitHub Releases</a>.</p>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <div class="prose">
+
+      <div class="release">
+        <h2>Version {{version}}</h2>
+        <time datetime="{{released}}">Released {{released}}</time>
+        <p>A rebuilt map maker, a more modern interface, and a website to match.</p>
+        <h3>The map maker, rebuilt</h3>
+        <ul>
+          <li><strong>Natural worlds.</strong> The generator was rewritten. Coasts now wander, with bays, headlands and irregular islands, instead of forming smooth blobs. Mountains form chains, forests and deserts form soft patches, and lakes fill real basins.</li>
+          <li><strong>Rivers that make sense.</strong> Every river starts in the hills and runs to the sea (or a lake), with tributaries. Before, they were short stubs in the middle of nowhere.</li>
+          <li><strong>Roads that follow the land.</strong> Routed by pathfinding: never through the sea, avoiding steep ground, merging into existing roads.</li>
+          <li><strong>A better-looking map.</strong> Shaded, snow-capped mountains in ranges, tree stamps, riverbanks, pale shallows and ripples around every coast, softer biome edges, and place names with a halo so they stay readable over coasts and rivers.</li>
+          <li><strong>The same seed always rebuilds the same world, names included.</strong> Before, the names were different every time.</li>
+          <li><strong>A new window.</strong> A tool rail with icons, palette and properties cards, the map lying on a desk, a status strip with zoom, and Export and More menus in place of fifteen crowded buttons.</li>
+          <li><strong>Much faster to use.</strong> The map is remembered between redraws, so zooming, selecting and panning no longer rebuild every tree, and the wheel zoom shows at once.</li>
+          <li><strong>Fixed:</strong> a lake drawn on land used to vanish under the land; forests reshuffled every time a map was opened.</li>
+        </ul>
+        <h3>A more modern interface</h3>
+        <ul>
+          <li>Rounded buttons, fields, tabs and scroll bars in every theme, cards on a darker backdrop, a real type scale, and icons throughout.</li>
+          <li>The NovelForge logo is used everywhere: the window and taskbar icon, the welcome screen, the About box and the website.</li>
+          <li><strong>Fixed:</strong> the Sprint and Corkboard windows on scaled displays.</li>
+        </ul>
+        <h3>Easier to install</h3>
+        <ul>
+          <li><code>Write.bat</code> now installs the two small libraries NovelForge needs on first run, and explains plainly if Python is missing.</li>
+          <li>A <code>Make Desktop Shortcut.bat</code> puts a NovelForge icon on your Desktop.</li>
+        </ul>
+        <h3>The website</h3>
+        <ul>
+          <li>A full multi-page site with features, the map maker, an honest comparison, a FAQ, download help, and a plain-text summary for AI assistants.</li>
+        </ul>
+      </div>
+
+      <div class="release">
+        <h2>Version 2.1.0</h2>
+        <time datetime="2026-09-19">Released 2026-09-19</time>
+        <p>A refresh of how NovelForge looks and feels, plus a batch of fixes found by testing every button, menu and window.</p>
+        <ul>
+          <li>A modern, flat look in every theme, and a Premium (dark navy) theme that is dark all the way across, including the title bar and menus.</li>
+          <li>A toolbar with icons, grouped by write, review and work, that shrinks to icons on a narrow window.</li>
+          <li>A command palette on <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> that searches every command in every menu.</li>
+          <li>A proper welcome screen, readable reports with real headings, and a status bar that tells you whether your writing is saved.</li>
+          <li>Works on scaled displays (125%), and the map maker opens fitted to the window.</li>
+          <li>An automated test suite that clicks every menu command, toolbar button and tool-window button.</li>
+        </ul>
+      </div>
+
+      <div class="release">
+        <h2>Version 1.0.0</h2>
+        <time datetime="2026-09-18">Released 2026-09-18</time>
+        <p>The first public release: real Word documents for every scene and sheet, the binder and corkboard, nine outline frameworks, the timeline, the story graph and continuity checker, the map maker, offline diagnostics, compile to manuscript format, and verified backups.</p>
+      </div>
+
+    </div>
+  </div>
+</section>

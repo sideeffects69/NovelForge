@@ -1,8 +1,9 @@
 name: Deploy the NovelForge website to GitHub Pages
 
-# site/ is the project's marketing/landing page - plain static HTML/CSS, no
-# build step. This publishes only that folder: the desktop app's Python
-# code and the unfinished web/ redesign never leave the repo.
+# site/ is the project's public website - plain static HTML/CSS. It is generated
+# from tools/site/ by tools/build_site.py and the output is committed, so there
+# is nothing to build here. This publishes only that folder: the desktop app's
+# Python code and the unfinished web/ redesign never leave the repo.
 on:
   push:
     branches: [main]
