@@ -7,104 +7,135 @@ updated: 2026-09-20
 since: 2.2.0
 image: assets/brand/og-image.jpg
 -->
-<header class="hero">
-  <div class="hero-glow" aria-hidden="true"></div>
-  <div class="wrap hero-inner">
-    <div class="hero-badges">
-      <span class="pill">Free &amp; open source</span>
-      <span class="pill">MIT licensed</span>
-      <span class="pill">No account, ever</span>
-      <span class="pill">100% offline</span>
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="kicker">Free and open source, for Windows 10 and 11</p>
+      <h1>Free novel writing software that keeps your book in <span class="hl">real Word files</span></h1>
+      <p class="lede">NovelForge is a writing studio with a binder, a corkboard, nine outline frameworks, a story graph and a fantasy map maker. Every scene is an ordinary Word document on your own disk: no account, no cloud, no subscription.</p>
+      <div class="btn-row">
+        <a class="btn btn-primary" href="{{root}}download/">{{icon:download}} Download for Windows</a>
+        <a class="btn" href="{{root}}docs/">{{icon:book}} Read the docs</a>
+      </div>
+      <dl class="facts">
+        <div><dt>Free</dt><dd>MIT licence, no trial</dd></div>
+        <div><dt>Windows 10 and 11</dt><dd>Needs Python 3.13+</dd></div>
+        <div><dt>Offline</dt><dd>No account, no telemetry</dd></div>
+        <div><dt>Real .docx files</dt><dd>One per scene</dd></div>
+        <div><dt>Version {{version}}</dt><dd>Released {{released}}</dd></div>
+      </dl>
     </div>
-    <h1>Free novel writing software that keeps your book in <span class="hl">real Word files</span></h1>
-    <p class="lede">
-      NovelForge is a free, open-source novel-writing studio for Windows. Every scene,
-      character sheet and map is a real Microsoft Word document in a folder on your own
-      disk: no subscription, no cloud, no account. Nine outline frameworks, a story graph
-      that reads your actual prose, and a fantasy map maker that builds a whole world in one click.
-    </p>
-    <div class="btn-row">
-      <a class="btn btn-primary" href="{{root}}download/"><span class="btn-icon">⬇</span> Download for Windows</a>
-      <a class="btn btn-ghost" href="{{root}}features/">See every feature</a>
-    </div>
-    <p class="fine">No telemetry. No internet connection required. Works on a laptop with the Wi-Fi off.</p>
-
-    <div class="hero-shot">
+    <figure class="hero-shot">
       <div class="window-chrome">
         <div class="chrome-bar">
           <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
-          <span class="chrome-title">The Ashfall Crown — NovelForge</span>
+          <span class="chrome-title">The Ashfall Crown: NovelForge</span>
         </div>
-        <img src="{{root}}assets/screenshots/main-editor.png" width="1340" height="680" alt="NovelForge's main writing window: a binder of chapters and scenes on the left, the scene editor in the middle, and a scene inspector with goal, conflict and disaster fields on the right.">
+        <img src="{{root}}assets/screenshots/main-editor.png" fetchpriority="high" alt="NovelForge's main writing window: a binder of chapters and scenes on the left, the scene editor in the middle, and a scene inspector with goal, conflict and disaster fields on the right.">
+      </div>
+    </figure>
+  </div>
+</section>
+
+<section class="alt-bg" id="inside">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="kicker">What is inside</p>
+      <h2>One window, everything a novel needs</h2>
+      <p>Each tile opens its page. Nothing here needs the internet, and none of it is a separate app.</p>
+    </div>
+    <div class="bento">
+      <div class="tile w2">
+        {{icon:pen}}
+        <h3><a href="{{root}}docs/writing/the-binder/">Binder and editor</a></h3>
+        <p>Chapters and scenes in a tree, a quiet editor with spelling and grammar marks tuned to your own names, and an inspector for each scene's goal, conflict and disaster.</p>
+      </div>
+      <div class="tile h2">
+        {{icon:map}}
+        <h3><a href="{{root}}map-maker/">Fantasy map maker</a></h3>
+        <p>One button builds a world; every part stays editable, and pins link to your Location sheets.</p>
+        <div class="tile-img"><img src="{{root}}assets/maps/map-classic.jpg" loading="lazy" alt="A generated fantasy map called Highfield: two large landmasses with mountain ranges, forests, rivers, roads and named towns on aged parchment."></div>
+      </div>
+      <div class="tile">
+        {{icon:board}}
+        <h3><a href="{{root}}features/#planning">Corkboard</a></h3>
+        <p>Every scene as an index card. Drag one onto another to reorder the book.</p>
+      </div>
+      <div class="tile w2">
+        {{icon:list}}
+        <h3><a href="{{root}}features/#planning">Nine outline frameworks</a></h3>
+        <p>Switch between them freely; each one's answers are kept.</p>
+        <ul class="chips">
+          <li>Three-Act</li><li>Save the Cat</li><li>Snowflake</li><li>Seven-Point</li><li>Story Circle</li><li>Hero's Journey</li><li>Romancing the Beat</li><li>Mystery/Crime</li><li>Freytag</li>
+        </ul>
+      </div>
+      <div class="tile">
+        {{icon:graph}}
+        <h3><a href="{{root}}features/#story-graph">Story graph</a></h3>
+        <p>Finds characters and places in your prose, then checks continuity in fifteen points.</p>
+      </div>
+      <div class="tile">
+        {{icon:clock}}
+        <h3><a href="{{root}}features/#planning">Timeline</a></h3>
+        <p>Sorts invented calendars, so "the third moon of Harrowmere" lands where it should.</p>
+      </div>
+      <div class="tile">
+        {{icon:shield}}
+        <h3><a href="{{root}}docs/your-files/backups-and-snapshots/">Backups</a></h3>
+        <p>Safe saves, verified zip backups and a recovery journal.</p>
+      </div>
+      <div class="tile w2">
+        {{icon:command}}
+        <h3><a href="{{root}}docs/reference/keyboard-shortcuts/">Command palette</a></h3>
+        <p>Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> and type what you want: "story graph", "backup", "theme". It searches every menu, so it never falls out of date.</p>
       </div>
     </div>
   </div>
-</header>
-
-<section class="stats-bar">
-  <div class="wrap stats-grid">
-    <div class="stat"><strong>9</strong><span>outline frameworks</span></div>
-    <div class="stat"><strong>$0</strong><span>now and always</span></div>
-    <div class="stat"><strong>15</strong><span>point continuity checker</span></div>
-    <div class="stat"><strong>100%</strong><span>of your work on your own disk</span></div>
-  </div>
 </section>
 
-<section>
-  <div class="wrap">
-    <p class="definition">
-      <strong>What is NovelForge?</strong> It is free, open-source novel writing software for Windows.
-      It gives you a binder of chapters and scenes, a corkboard, nine outline frameworks, a timeline,
-      reference sheets for characters and places, a story graph that checks continuity, a procedural
-      fantasy map maker and offline prose diagnostics. Unlike most writing apps it stores your book as
-      ordinary <strong>Microsoft Word (.docx) files</strong>, one per scene, so nothing is locked in a
-      database and nothing is uploaded anywhere.
-    </p>
-  </div>
-</section>
-
-<section class="alt-bg">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="kicker">Why writers choose it</span>
-      <h2>Built for people who finish books</h2>
-      <p>A novel takes years. The tool you write it in should still open, exactly as readable, on the day you type the last line.</p>
+<section id="word-files">
+  <div class="wrap files-grid">
+    <div>
+      <p class="kicker">Your files stay yours</p>
+      <h2>Your novel is just Word files</h2>
+      <p>This is what NovelForge writes to your disk when you create a novel. Every scene, character sheet and world-bible page is a <code>.docx</code> file you can open in Word, LibreOffice or Google Docs, copy to a USB stick, keep in OneDrive or hand to an editor. There is no database to export from, because the files are the book.</p>
+      <p>A small <code>project.json</code> remembers ordering, links and word counts, and never your prose. Edit a scene in Word, press <kbd>F2</kbd> in NovelForge, and it picks the change up.</p>
+      <p><a href="{{root}}docs/writing/the-binder/">How the binder maps to these folders</a> &middot; <a href="{{root}}docs/your-files/backups-and-snapshots/">Backups and snapshots</a></p>
     </div>
-    <div class="cards">
-      <div class="card"><span class="glyph" aria-hidden="true">◆</span><h3>You own every file</h3><p>Real .docx documents in a plain folder. Open them in Word, back them up with anything, hand them to an editor. If NovelForge vanished tomorrow your novel would still be there.</p></div>
-      <div class="card"><span class="glyph" aria-hidden="true">◇</span><h3>Free, with no catch</h3><p>No trial, no subscription, no paywalled feature, no account. MIT-licensed source you can read, change and share.</p></div>
-      <div class="card"><span class="glyph" aria-hidden="true">✦</span><h3>Fully offline and private</h3><p>Nothing is sent anywhere, ever. There is no telemetry and no generative AI reading your manuscript. It works with the network unplugged.</p></div>
-      <div class="card"><span class="glyph" aria-hidden="true">▤</span><h3>Made for fiction</h3><p>Scene goal, conflict and disaster fields, nine story structures, a timeline that understands invented calendars, and reference sheets for characters, places, items and factions.</p></div>
-      <div class="card"><span class="glyph" aria-hidden="true">⌘</span><h3>Fast, and keyboard-first</h3><p>It opens in about a second. Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> and type what you want (“story graph”, “backup”, “theme”) and it runs.</p></div>
-      <div class="card"><span class="glyph" aria-hidden="true">⛨</span><h3>Hard to lose your work</h3><p>Atomic saves, a copy of a document before a bulk change, verified zip backups and a crash-recovery journal that asks before it restores anything.</p></div>
-    </div>
+    <pre class="tree"><b>The Ashfall Crown/</b>
+  00 Manuscript/
+    01 Chapter One/
+      01-01 Opening Scene.docx  <i>one per scene</i>
+  01 Outline/
+    Outline.docx
+    Premise &amp; Logline.docx
+  02 Characters/               <i>a sheet each</i>
+  03 Locations/
+  07 World Bible/
+    Geography &amp; Nature.docx
+    Magic or Power System.docx
+  10 Notes/
+    Revision Checklist.docx
+  11 Publishing/
+    Query Letter.docx
+    Synopsis.docx
+  13 Maps/
+  _Backups/                    <i>verified zips</i>
+  _Snapshots/
+  project.json                 <i>order, links, counts</i></pre>
   </div>
 </section>
 
-<section id="story">
+<section class="alt-bg" id="compare">
   <div class="wrap">
     <div class="section-head">
-      <span class="kicker">What is inside</span>
-      <h2>Plan it, understand it, map it, protect it</h2>
-      <p>A corkboard and nine outline frameworks for the plan. A story graph that reads your prose for the continuity. A map maker for the world. Atomic saves, snapshots and verified backups for the safety. Every one has its own page.</p>
-    </div>
-    <div class="btn-row btn-row-center">
-      <a class="btn btn-primary" href="{{root}}features/">See every feature</a>
-      <a class="btn" href="{{root}}map-maker/">Meet the map maker</a>
-    </div>
-  </div>
-</section>
-
-<section class="alt-bg">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="kicker">How it compares</span>
+      <p class="kicker">How it compares</p>
       <h2>Where NovelForge fits</h2>
       <p>Scrivener and Atticus are excellent, mature tools; this is not a claim to beat them at everything. Here is the short version.</p>
     </div>
     <div class="compare-table-wrap">
       <table class="compare-table">
-        <thead><tr><th></th><th class="us">NovelForge<small>version {{version}}</small></th><th>Scrivener<small>checked 2026-09-20</small></th><th>Atticus<small>checked 2026-09-20</small></th><th>Obsidian<small>checked 2026-09-20</small></th></tr></thead>
+        <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col" class="us">NovelForge<small>version {{version}}</small></th><th scope="col">Scrivener<small>checked 2026-09-20</small></th><th scope="col">Atticus<small>checked 2026-09-20</small></th><th scope="col">Obsidian<small>checked 2026-09-20</small></th></tr></thead>
         <tbody>
           <tr><td>Price</td><td class="us">Free</td><td>Paid licence</td><td>Paid licence</td><td>Free</td></tr>
           <tr><td>Where your book lives</td><td class="us">Real .docx files</td><td>Project file</td><td>Cloud-synced project</td><td>Markdown files</td></tr>
@@ -112,44 +143,40 @@ image: assets/brand/og-image.jpg
         </tbody>
       </table>
     </div>
-    <p class="compat-note">Each column is stamped with the date we last looked at that product; please check each vendor before you decide. <a href="{{root}}compare/">Read the full, honest comparison, including when to pick something else →</a></p>
+    <p class="compat-note">Each column is stamped with the date we last looked at that product; please check each vendor before you decide. <a href="{{root}}compare/">Read the full, honest comparison, including when to pick something else</a>.</p>
   </div>
 </section>
 
 <section id="install">
   <div class="wrap">
     <div class="section-head">
-      <span class="kicker">Getting started</span>
+      <p class="kicker">Getting started</p>
       <h2>Four steps, no technical background needed</h2>
       <p>NovelForge runs on Windows 10 and 11. There is no installer: you unzip a folder and double-click one file.</p>
     </div>
-    <div class="install-steps four">
-      <div class="step"><span class="num">1</span><h3>Install Python</h3><p>Free, from <a href="https://www.python.org/downloads/" rel="noopener">python.org</a>. Version 3.13 or newer; tick “Add python.exe to PATH”.</p></div>
-      <div class="step"><span class="num">2</span><h3>Download NovelForge</h3><p>Get the latest release’s <strong>Source code (zip)</strong> from GitHub and unzip it anywhere.</p></div>
+    <div class="install-steps">
+      <div class="step"><span class="num">1</span><h3>Install Python</h3><p>Free, from <a href="https://www.python.org/downloads/" rel="noopener">python.org</a>. Version 3.13 or newer; tick "Add python.exe to PATH".</p></div>
+      <div class="step"><span class="num">2</span><h3>Download NovelForge</h3><p>Get the latest release's <strong>Source code (zip)</strong> from GitHub and unzip it anywhere.</p></div>
       <div class="step"><span class="num">3</span><h3>Double-click Write.bat</h3><p>It finds Python and, the first time only, installs the two small libraries NovelForge needs. That needs the internet once.</p></div>
       <div class="step"><span class="num">4</span><h3>Start writing</h3><p>Choose <strong>File → New Novel</strong>, give it a title and a word target, and type. It saves itself.</p></div>
     </div>
-    <div class="btn-row btn-row-center">
-      <a class="btn btn-primary" href="{{root}}download/"><span class="btn-icon">⬇</span> Full download instructions</a>
-      <a class="btn" href="{{repo}}/releases/latest" rel="noopener">Latest release on GitHub</a>
-    </div>
-    <p class="compat-note">Windows 10 and 11 only for now. The engine is plain Python, but the interface has only ever been tested on Windows. macOS and Linux are a possibility, not a promise.</p>
+    <p class="compat-note">Windows 10 and 11 only for now. The engine is plain Python, but the interface has only ever been tested on Windows. macOS and Linux are a possibility, not a promise. <a href="{{root}}docs/getting-started/install-and-first-launch/">The full install guide</a> and the <a href="{{root}}download/">download page</a> cover the common problems.</p>
   </div>
 </section>
 
-<section class="alt-bg">
+<section class="alt-bg" id="questions">
   <div class="wrap">
     <div class="section-head">
-      <span class="kicker">Questions</span>
-      <h2>Quick answers</h2>
+      <p class="kicker">Questions</p>
+      <h2>Four quick answers</h2>
     </div>
-    <div class="faq prose wide" style="max-width: 820px; margin: 0 auto;">
+    <div class="faq prose">
       <details><summary>Is NovelForge really free?</summary><div class="answer"><p>Yes. It is free and open source under the MIT licence. There is no trial period, no subscription, no locked feature and no account. If it helps you, a donation is welcome but never expected.</p></div></details>
       <details><summary>Where are my files stored?</summary><div class="answer"><p>In a normal folder on your own computer, <code>Projects\Your Novel\</code>. Every scene is its own Word (.docx) file. A small project.json remembers only ordering, links and word counts, never your prose.</p></div></details>
       <details><summary>Does it use AI?</summary><div class="answer"><p>No. There is no generative AI in NovelForge and nothing reads your manuscript except the program on your machine. The prose checks are ordinary offline rules that point at problems; they never rewrite your text.</p></div></details>
       <details><summary>Does it work on Mac or Linux?</summary><div class="answer"><p>Not yet. The engine is plain Python, but the interface has only been built and tested on Windows 10 and 11. If Mac or Linux support would get you using it, please <a href="{{repo}}/issues" rel="noopener">say so on GitHub</a>.</p></div></details>
     </div>
-    <p class="compat-note"><a href="{{root}}faq/">All the questions and answers →</a></p>
+    <p class="compat-note"><a href="{{root}}faq/">All the questions and answers</a></p>
   </div>
 </section>
 
@@ -158,7 +185,7 @@ image: assets/brand/og-image.jpg
     <h2>Start your next chapter in files you own.</h2>
     <p>Free for Windows 10 and 11. No account, no cloud, no catch.</p>
     <div class="btn-row btn-row-center">
-      <a class="btn btn-primary" href="{{root}}download/"><span class="btn-icon">⬇</span> Download NovelForge</a>
+      <a class="btn btn-primary" href="{{root}}download/">{{icon:download}} Download NovelForge</a>
       <a class="btn" href="{{repo}}" rel="noopener">View the source</a>
     </div>
   </div>

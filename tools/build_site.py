@@ -49,7 +49,7 @@ dependencies (structured data).
 * {{root}} is the path back to the top of the site (so pages work under
   /NovelForge/ and on their own domain); {{site}} the absolute address; {{repo}},
   {{version}}, {{released}}, {{author}}. {{gen:shortcuts}} is the generated table
-  of keyboard shortcuts.
+  of keyboard shortcuts. {{icon:name}} is an icon from the inline sprite (see ICONS).
 * h2 and h3 get ids automatically; the "On this page" list is built from them.
 """
 
@@ -596,6 +596,7 @@ class Site:
         text = page["raw"]
         for key, make in GENERATED.items():
             text = text.replace("{{gen:%s}}" % key, make())
+        text = re.sub(r"\{\{icon:(\w+)\}\}", lambda m: icon(m.group(1)), text)
         text = (text.replace("{{root}}", root).replace("{{site}}", SITE)
                 .replace("{{repo}}", REPO).replace("{{version}}", self.version)
                 .replace("{{released}}", RELEASED).replace("{{author}}", AUTHOR))

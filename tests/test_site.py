@@ -491,6 +491,72 @@ class EveryPage(unittest.TestCase):
             self.assertIn(status, binder)
 
 
+class HomePage(unittest.TestCase):
+    """What the home page shows must be what the program does."""
+
+    def test_the_folder_listing_is_what_a_new_novel_really_contains(self):
+        """Every name in the 'your novel is just Word files' listing is created by Project.create()."""
+        import html as _html
+        from novelforge.project import Project
+
+        text = (OUT / "index.html").read_text(encoding="utf-8")
+        block = re.search(r'<pre class="tree">(.*?)</pre>', text, re.S).group(1)
+        lines = []
+        for raw in block.split("\n"):
+            raw = re.sub(r"<i>.*?</i>", "", raw)                       # the little notes
+            raw = _html.unescape(re.sub(r"</?b>", "", raw)).rstrip()
+            if raw.strip():
+                lines.append(raw)
+        self.assertGreater(len(lines), 12)
+        temp = Path(tempfile.mkdtemp(prefix="nf_files_"))
+        self.addCleanup(shutil.rmtree, temp, True)
+        project = Project.create("The Ashfall Crown", author="Om Abhyankar", parent=temp)
+        self.assertEqual(lines[0].strip(), project.root.name + "/")
+        self.assertTrue(any(line.strip().endswith(".docx") for line in lines))
+        stack = []
+        for line in lines[1:]:
+            depth = (len(line) - len(line.lstrip())) // 2
+            name = line.strip()
+            del stack[depth - 1:]
+            found = project.root.joinpath(*stack, name.rstrip("/"))
+            self.assertTrue(found.exists(), f"{'/'.join(stack + [name])} is not created for a new novel")
+            self.assertEqual(name.endswith("/"), found.is_dir(), name)
+            if name.endswith("/"):
+                stack.append(name.rstrip("/"))
+
+    def test_the_feature_grid_has_eight_tiles_each_with_one_link_to_a_real_page(self):
+        raw = (OUT / "index.html").read_text(encoding="utf-8")
+        grid = re.search(r'<div class="bento">(.*?)</section>', raw, re.S).group(1)
+        tiles = re.split(r'<div class="tile(?: [wh]2)?">', grid)[1:]
+        self.assertEqual(len(tiles), 8)
+        for tile in tiles:
+            links = re.findall(r'<h3><a href="([^"]+)"', tile)
+            self.assertEqual(len(links), 1, tile[:80])
+            self.assertTrue(to_file(links[0], site.SITE).is_file(), links[0])
+        self.assertIn("nine outline frameworks", re.sub(r"<[^>]+>", "", grid).lower())
+
+    def test_the_hero_states_the_five_facts_and_the_download_button_is_readable(self):
+        raw = (OUT / "index.html").read_text(encoding="utf-8")
+        self.assertEqual(len(re.findall(r"<dt>", raw)), 5)
+        self.assertIn(f"Version {site.VERSION}", raw)
+        self.assertIn('class="btn btn-primary"', raw)
+        for banned in ('class="pill"', "stats-bar", "hero-badges"):
+            self.assertNotIn(banned, raw, "no badge pills or round-number stat bar")
+
+    def test_the_comparison_on_home_is_three_rows_and_every_competitor_column_is_dated(self):
+        for name in ("index", "compare"):
+            path = OUT / "index.html" if name == "index" else OUT / "compare" / "index.html"
+            raw = path.read_text(encoding="utf-8")
+            head = re.search(r"<thead>(.*?)</thead>", raw, re.S).group(1)
+            competitors = re.findall(r"<th[^>]*>([A-Za-z ]+)<small>checked (\d{4}-\d{2}-\d{2})</small>", head)
+            self.assertGreaterEqual(len(competitors), 3, name)
+            for _who, checked in competitors:
+                date.fromisoformat(checked)
+        home = (OUT / "index.html").read_text(encoding="utf-8")
+        body = re.search(r"<tbody>(.*?)</tbody>", home, re.S).group(1)
+        self.assertEqual(body.count("<tr>"), 3)
+
+
 class Docs(unittest.TestCase):
     """The documentation section: sidebar, previous/next, linking, and the generated shortcuts page."""
 
