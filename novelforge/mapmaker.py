@@ -20,7 +20,7 @@ import os
 import random
 import re
 import zlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -112,7 +112,38 @@ STYLES: Dict[str, Dict[str, Any]] = {
             "desert": "#e2cd97", "swamp": "#a5a274", "ice": "#dcdcc9",
         },
     },
+    # For the printed book. Black ink on white paper, and nothing but greys, so
+    # a black-and-white interior loses nothing when it is converted: every
+    # terrain that can touch another sits at least a step (about 9% of the way
+    # from black to white) away from it in brightness, which the tests check
+    # by converting the fills to luminance. Land is the white of the page and
+    # the sea a light grey tint; text and coast lines are pure black (100% K),
+    # which is what printers ask for at small sizes.
+    "print": {
+        "label": "Print (black and white)",
+        "paper": "#d3d3d3",
+        "paper_dark": "#c6c6c6",
+        "ink": "#000000",
+        "ink_light": "#404040",
+        "water": "#d3d3d3",
+        "water_deep": "#7f7f7f",
+        "halo": ["#e6e6e6", "#eaeaea", "#f0f0f0"],
+        "grid": "#9a9a9a",
+        "texture": False,
+        "vignette": False,
+        "terrain": {
+            "land": "#ffffff", "water": "#d3d3d3", "forest": "#919191",
+            "desert": "#bdbdbd", "swamp": "#a7a7a7", "ice": "#e9e9e9",
+        },
+    },
 }
+
+# The colour a mark of emphasis takes in each style (a treasure X, a route to
+# follow). It is the ink where the style has no second colour to spare.
+_ACCENTS = {"parchment": "#8a2f22", "treasure": "#8a2f22", "ink": None,
+            "dark": None, "print": None}
+for _name, _accent in _ACCENTS.items():
+    STYLES[_name].setdefault("accent", _accent or STYLES[_name]["ink"])
 
 TERRAIN: Dict[str, Dict[str, Any]] = {
     "land":      {"label": "Land / coast", "fill": "#f2e8cb", "closed": True,
@@ -1754,7 +1785,7 @@ def _build_primitives(gm: GameMap, include_furniture: bool,
     for slot in [k for k in cache if k not in live]:
         del cache[slot]
 
-    accent = "#8a2f22" if gm.style in ("parchment", "treasure") else ink
+    accent = palette.get("accent") or ink
     placement = _cached_label_placement(gm, visible) if gm.auto_place_labels else {}
     label_size = max(9, int(gm.height * 0.0155))
     for pin in gm.pins:
@@ -2412,6 +2443,327 @@ def render_docx(gm: GameMap, png_path: Optional[Path], out_path: Path,
                               f"{len(labels)} labels.")
 
         return save_via_atomic(out_path, doc.save)
+
+
+# ==========================================================================
+# Print and ebook export
+#
+# A map is drawn on a screen and printed on paper, and the two want different
+# things: paper wants a size in inches, 300 dots to each, a margin the trimming
+# knife will not touch, and lines a press can hold. The figures below are the
+# ones publishers ask for (IngramSpark, KDP); where one is only this tool's own
+# rule of thumb it says so.
+# ==========================================================================
+
+_MM = 1.0 / 25.4
+
+
+@dataclass(frozen=True)
+class PrintPreset:
+    """A page size: the trimmed page in inches (both pages, for a spread)."""
+
+    key: str
+    label: str
+    width_in: float
+    height_in: float
+    spread: bool = False
+
+
+def _make_print_presets() -> Dict[str, PrintPreset]:
+    sizes = (("5x8", "5 x 8 in", 5.0, 8.0),
+             ("5.25x8", "5.25 x 8 in", 5.25, 8.0),
+             ("5.5x8.5", "5.5 x 8.5 in", 5.5, 8.5),
+             ("6x9", "6 x 9 in", 6.0, 9.0),
+             ("a5", "A5 (148 x 210 mm)", 148 * _MM, 210 * _MM),
+             ("a4", "A4 (210 x 297 mm)", 210 * _MM, 297 * _MM),
+             ("letter", "US Letter (8.5 x 11 in)", 8.5, 11.0))
+    out: Dict[str, PrintPreset] = {}
+    for key, label, width, height in sizes:
+        out[key] = PrintPreset(key, label, width, height)
+    for key, label, width, height in sizes:      # the same pages, side by side
+        out[f"{key}-spread"] = PrintPreset(
+            f"{key}-spread", f"{label}, double-page spread", width * 2, height,
+            True)
+    return out
+
+
+PRINT_PRESETS: Dict[str, PrintPreset] = _make_print_presets()
+
+#: Text and non-bleeding art stay this far inside the trim (IngramSpark asks for
+#: 0.5 in; KDP's own minimum is smaller but grows with the page count).
+SAFE_MARGIN_IN = 0.5
+#: How far past the trim a picture that touches the edge must run.
+BLEED_IN = 0.125
+#: The thinnest line, in points, a press holds reliably (a common minimum).
+MIN_LINE_PT = 0.25
+#: The smallest text, in points, this tool calls legible - its own rule of
+#: thumb, not a publisher's figure.
+MIN_LEGIBLE_PT = 6.0
+#: The sheet the book is printed on. Not a map colour: whatever the style, the
+#: page around the map is paper.
+PAGE_PAPER = "#ffffff"
+#: The marks on a proof copy (`guides=True`): production marks, not map colours.
+GUIDE_COLOURS = {"bleed": "#e03131", "trim": "#1c7ed6", "safe": "#2f9e44",
+                 "fold": "#f08c00"}
+
+
+def print_preset(preset: Any) -> PrintPreset:
+    """A `PrintPreset` from its key ("6x9", "a5-spread") or from itself."""
+    if isinstance(preset, PrintPreset):
+        return preset
+    try:
+        return PRINT_PRESETS[str(preset).strip().lower()]
+    except KeyError:
+        raise ValueError(
+            f"unknown print size {preset!r}; choose from {', '.join(PRINT_PRESETS)}"
+        ) from None
+
+
+@dataclass(frozen=True)
+class PrintLayout:
+    """Where everything sits on a print sheet, in pixels at `dpi`."""
+
+    dpi: int
+    size: Tuple[int, int]                     # the whole sheet, bleed included
+    bleed_px: int
+    trim: Tuple[int, int, int, int]           # the page as it will be cut
+    safe: Tuple[int, int, int, int]           # where the map may go
+    fold_x: Optional[int] = None              # the spine, on a spread
+
+
+def print_layout(preset: Any, dpi: int = 300, bleed_in: float = BLEED_IN,
+                 gutter_in: float = 0.0, safe_in: float = SAFE_MARGIN_IN,
+                 inside: str = "left") -> PrintLayout:
+    """
+    The sheet for a print size: trim, bleed all round, and the safe area.
+
+    The safe area is the trim less `safe_in` on every side; on a single page
+    `gutter_in` more is taken from the `inside` edge (the binding side: "left"
+    on a right-hand page), so nothing sinks into the spine. On a spread the
+    spine is down the middle (`fold_x`) and the picture spans it.
+    """
+    spec = print_preset(preset)
+    dpi = int(dpi)
+    if not 72 <= dpi <= 1200:
+        raise ValueError("dpi must be between 72 and 1200")
+    if inside not in ("left", "right"):
+        raise ValueError("inside must be 'left' or 'right'")
+    trim_w = int(round(spec.width_in * dpi))
+    trim_h = int(round(spec.height_in * dpi))
+    # A bleed or a margin is a minimum, so a fraction of a pixel rounds up.
+    bleed = max(0, int(math.ceil(float(bleed_in) * dpi - 1e-9)))
+    margin = max(0, int(math.ceil(float(safe_in) * dpi - 1e-9)))
+    gutter = max(0, int(math.ceil(float(gutter_in) * dpi - 1e-9)))
+    trim = (bleed, bleed, bleed + trim_w, bleed + trim_h)
+    left, top = trim[0] + margin, trim[1] + margin
+    right, bottom = trim[2] - margin, trim[3] - margin
+    if not spec.spread and gutter:
+        if inside == "left":
+            left += gutter
+        else:
+            right -= gutter
+    if right - left < 40 or bottom - top < 40:
+        raise ValueError("the margins leave no room for a map on this page")
+    fold = bleed + trim_w // 2 if spec.spread else None
+    return PrintLayout(dpi=dpi, size=(trim_w + 2 * bleed, trim_h + 2 * bleed),
+                       bleed_px=bleed, trim=trim, safe=(left, top, right, bottom),
+                       fold_x=fold)
+
+
+@dataclass(frozen=True)
+class MapExport:
+    """What an export made: the file, the picture's description, and warnings."""
+
+    path: Path
+    alt_text: str
+    width_px: int
+    height_px: int
+    dpi: int = 0
+    #: Smallest text in the picture, in points as printed (0 when it has none).
+    min_text_pt: float = 0.0
+    #: Things worth telling the writer, in plain words.
+    notes: Tuple[str, ...] = ()
+
+
+def _smallest_text(gm: GameMap, edition: str) -> float:
+    sizes = [text_parts(p)[3] for p in build_primitives(gm, edition=edition)
+             if p[0] == "text"]
+    return float(min(sizes)) if sizes else 0.0
+
+
+def _names_on_the_fold(gm: GameMap, edition: str, x0: float, x1: float
+                       ) -> List[str]:
+    """Names whose lettering crosses the map-space band x0..x1 (a spread's spine)."""
+    visible = gm.visible_layers(edition)
+    placement = layout_pin_labels(gm, visible)
+    size = max(9, int(gm.height * 0.0155))
+    boxes: List[Tuple[str, Box]] = []
+    for pin in gm.pins:
+        if pin.layer not in visible or not pin.label.strip():
+            continue
+        side, show = placement.get(pin.id, (pin.label_side or "e", True))
+        if show:
+            lx, ly, anchor = pin_label_anchor(pin, side)
+            boxes.append((pin.label, text_box(lx, ly, pin.label, size, anchor)))
+        reach = max(3.0, float(pin.size)) * 1.2          # the marker itself
+        boxes.append((pin.label, (pin.x - reach, pin.y - reach,
+                                  pin.x + reach, pin.y + reach)))
+    for label in gm.labels:
+        if label.layer in visible and label.text.strip():
+            boxes.append((label.text, text_box(label.x, label.y, label.text,
+                                               label.size, "center",
+                                               label.tracking)))
+    for shape in gm.shapes:
+        if shape.layer in visible and shape.label.strip():
+            cx, cy = shape.centroid()
+            boxes.append((shape.label, text_box(
+                cx, cy, shape.label, max(11, int(gm.height * 0.019)), "center",
+                2.0)))
+    out: List[str] = []
+    for name, box in boxes:
+        if box[0] < x1 and box[2] > x0 and name not in out:
+            out.append(name)
+    return out
+
+
+def _draw_guides(page, layout: PrintLayout, thickness: int) -> None:
+    """Bleed, trim, safe-area and spine lines, for a proof copy."""
+    from PIL import ImageDraw
+
+    draw = ImageDraw.Draw(page)
+    width, height = page.size
+    draw.rectangle([0, 0, width - 1, height - 1],
+                   outline=GUIDE_COLOURS["bleed"], width=thickness)
+    x0, y0, x1, y1 = layout.trim
+    draw.rectangle([x0, y0, x1 - 1, y1 - 1], outline=GUIDE_COLOURS["trim"],
+                   width=thickness)
+    sx0, sy0, sx1, sy1 = layout.safe
+    ring = [(sx0, sy0), (sx1, sy0), (sx1, sy1), (sx0, sy1), (sx0, sy0)]
+    for seg in _dash_segments(ring, 14.0 * thickness, 9.0 * thickness):
+        if len(seg) >= 2:
+            draw.line(seg, fill=GUIDE_COLOURS["safe"], width=thickness)
+    if layout.fold_x is not None:
+        draw.line([(layout.fold_x, y0), (layout.fold_x, y1)],
+                  fill=GUIDE_COLOURS["fold"], width=thickness)
+
+
+def export_print(gm: GameMap, path: Path | str, preset: Any = "6x9",
+                 dpi: int = 300, greyscale: bool = True,
+                 bleed_in: float = BLEED_IN, guides: bool = False,
+                 gutter_in: float = 0.0, edition: str = "reader", *,
+                 style: Optional[str] = None,
+                 safe_in: float = SAFE_MARGIN_IN, inside: str = "left",
+                 min_line_pt: float = MIN_LINE_PT) -> MapExport:
+    """
+    A PNG the size of a printed page, ready to place in a book's interior.
+
+    The sheet is the trimmed page (`preset`, see `PRINT_PRESETS`; a "-spread"
+    preset is two pages side by side) plus `bleed_in` all round, at `dpi` dots
+    to the inch, white where there is no map. The map is drawn to fit inside
+    the safe area, centred, at the shape it was drawn in, with no line thinner
+    than `min_line_pt`. `greyscale` gives a single-channel image (black ink for
+    the interior); `edition` defaults to "reader", so author-only layers never
+    reach the printer; `style` draws it in another style for this export only
+    ("print" is made for it). `guides=True` marks the bleed, trim, safe area
+    and spine in colour - a proof for checking margins, not for the printer.
+    The dpi is written into the file.
+
+    Returns a `MapExport`, whose `notes` say what deserves a look: text that
+    prints too small, names sitting on a spread's spine, a colour style
+    flattened to grey, a proof copy.
+    """
+    from PIL import Image
+
+    layout = print_layout(preset, dpi, bleed_in, gutter_in, safe_in, inside)
+    spec = print_preset(preset)
+    if style and style != gm.style:
+        gm = replace(gm, style=style)
+    left, top, right, bottom = layout.safe
+    room_w, room_h = right - left, bottom - top
+    scale = min(room_w / gm.width, room_h / gm.height)
+    map_w = min(room_w, max(1, int(round(gm.width * scale))))
+    map_h = min(room_h, max(1, int(round(gm.height * scale))))
+    # Supersampling smooths lines, but a big sheet must not need a gigabyte.
+    ss = 2
+    while ss > 1 and (map_w * ss) * (map_h * ss) > 24_000_000:
+        ss -= 1
+    min_px = max(1, int(math.ceil(float(min_line_pt) / 72.0 * layout.dpi - 1e-9)))
+    picture = _render_image(gm, scale, ss, edition, min_px, (map_w, map_h))
+
+    page = Image.new("RGB", layout.size, PAGE_PAPER)
+    page.paste(picture, (left + (room_w - map_w) // 2, top + (room_h - map_h) // 2))
+    if guides:
+        _draw_guides(page, layout, max(2, layout.dpi // 150))
+    elif greyscale:
+        page = page.convert("L")
+
+    alt = describe_map(gm, edition)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    page.save(str(path), "PNG", optimize=True, dpi=(layout.dpi, layout.dpi),
+              pnginfo=_png_info(alt))
+
+    notes: List[str] = []
+    smallest = _smallest_text(gm, edition)
+    points = smallest * scale / layout.dpi * 72.0
+    if smallest and points < MIN_LEGIBLE_PT:
+        notes.append(
+            f"The smallest names print at about {points:.1f} pt, which is hard "
+            f"to read on paper. A larger page or a double-page spread gives them "
+            f"room.")
+    if spec.spread and layout.fold_x is not None:
+        half = max(float(gutter_in), 0.125) * layout.dpi / scale   # map units
+        middle = gm.width / 2.0
+        crossing = _names_on_the_fold(gm, edition, middle - half, middle + half)
+        if crossing:
+            notes.append(
+                f"{len(crossing)} name(s) sit on the spine and may be lost in the "
+                f"binding: {', '.join(crossing[:6])}"
+                + (" and more." if len(crossing) > 6 else "."))
+    if greyscale and not guides and gm.style != "print":
+        notes.append(
+            f"The {STYLES.get(gm.style, {}).get('label', gm.style)} style was "
+            f"turned to grey; the Print style keeps land, sea and terrain apart "
+            f"better in black and white.")
+    if guides:
+        notes.append("This copy has guide lines and colour; it is a proof for "
+                     "checking margins, not a file for the printer.")
+    return MapExport(path=path, alt_text=alt, width_px=layout.size[0],
+                     height_px=layout.size[1], dpi=layout.dpi,
+                     min_text_pt=round(points, 2) if smallest else 0.0,
+                     notes=tuple(notes))
+
+
+def export_ebook(gm: GameMap, path: Path | str, width_px: int = 1800,
+                 edition: str = "reader", *, style: Optional[str] = None,
+                 quality: int = 90) -> MapExport:
+    """
+    A colour picture for an ebook: `width_px` wide, opaque RGB, no transparency.
+
+    Ebook stores want maps at least 80% of the screen's width, in PNG or JPEG
+    (chosen by the file's extension: .jpg/.jpeg or anything else for PNG), with
+    alt text on every image. The description (`describe_map`) is stored in the
+    file (PNG "Description", JPEG comment) and returned in the result for the
+    ebook's own markup. `edition` defaults to "reader". RGB with no profile is
+    read as sRGB, which is what ebook readers assume.
+    """
+    width_px = max(300, min(6000, int(width_px)))
+    if style and style != gm.style:
+        gm = replace(gm, style=style)
+    scale = width_px / float(gm.width)
+    height_px = max(1, int(round(gm.height * scale)))
+    ss = 2 if (width_px * height_px * 4) <= 24_000_000 else 1
+    image = _render_image(gm, scale, ss, edition, 1, (width_px, height_px))
+    alt = describe_map(gm, edition)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.suffix.lower() in (".jpg", ".jpeg"):
+        image.save(str(path), "JPEG", quality=max(40, min(100, int(quality))),
+                   optimize=True, comment=alt.encode("utf-8"))
+    else:
+        image.save(str(path), "PNG", optimize=True, pnginfo=_png_info(alt))
+    return MapExport(path=path, alt_text=alt, width_px=width_px,
+                     height_px=height_px)
 
 
 # ==========================================================================

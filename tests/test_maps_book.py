@@ -524,5 +524,420 @@ class AltText(unittest.TestCase):
         self.assertTrue(mm.describe_map(one).startswith("A dungeon map"))
 
 
+def hex_rgb(colour):
+    return tuple(int(colour[i:i + 2], 16) for i in (1, 3, 5))
+
+
+def luma(colour):
+    """Grey level 0..1 the way Pillow's convert("L") sees a colour."""
+    r, g, b = hex_rgb(colour)
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+
+
+class PrintStyle(unittest.TestCase):
+    """STYLES["print"]: black ink on white, and greys a black-and-white press keeps apart."""
+
+    ADJACENT = (
+        ("sea", "land"),
+        ("land", "water"), ("land", "forest"), ("land", "desert"),
+        ("land", "swamp"), ("land", "ice"),
+        ("forest", "swamp"), ("forest", "desert"), ("forest", "ice"),
+        ("desert", "swamp"), ("desert", "ice"), ("swamp", "ice"),
+        ("water", "forest"), ("water", "desert"), ("water", "swamp"),
+        ("water", "ice"), ("sea", "ice"), ("sea", "forest"), ("sea", "desert"),
+        ("sea", "swamp"),
+    )
+
+    def fills(self):
+        style = mm.STYLES["print"]
+        out = dict(style["terrain"])
+        out["sea"] = style["paper"]
+        return out
+
+    def test_it_is_a_style_the_editor_can_offer(self):
+        self.assertIn("print", mm.STYLES)
+        self.assertTrue(mm.STYLES["print"]["label"])
+        self.assertEqual(mm.GameMap(style="print").palette(), mm.STYLES["print"])
+
+    def test_every_colour_in_it_is_a_grey(self):
+        def colours(value):
+            if isinstance(value, str):
+                yield value
+            elif isinstance(value, dict):
+                for v in value.values():
+                    yield from colours(v)
+            elif isinstance(value, (list, tuple)):
+                for v in value:
+                    yield from colours(v)
+
+        seen = [c for k, v in mm.STYLES["print"].items() if k != "label"
+                for c in colours(v) if isinstance(c, str) and c.startswith("#")]
+        self.assertGreater(len(seen), 10)
+        for colour in seen:
+            r, g, b = hex_rgb(colour)
+            self.assertTrue(r == g == b, f"{colour} is not a grey")
+
+    def test_ink_is_pure_black_and_the_land_is_the_white_of_the_page(self):
+        style = mm.STYLES["print"]
+        self.assertEqual(style["ink"], "#000000")
+        self.assertEqual(style["terrain"]["land"], "#ffffff")
+        self.assertEqual(style["accent"], "#000000")
+        self.assertFalse(style["texture"])
+        self.assertFalse(style["vignette"])
+
+    def test_terrains_that_can_touch_differ_in_brightness(self):
+        # Breaking it: give the forest nearly the swamp's grey and this names
+        # the pair. 0.08 is about 20 steps of 255 - the least a coarse press
+        # tint keeps apart.
+        fills = self.fills()
+        for a, b in self.ADJACENT:
+            gap = abs(luma(fills[a]) - luma(fills[b]))
+            self.assertGreaterEqual(gap, 0.08, f"{a} and {b} are {gap:.3f} apart")
+        # the coast is the one edge that has no ink-free way to show:
+        self.assertGreaterEqual(luma(fills["land"]) - luma(fills["sea"]), 0.15)
+
+    def test_a_whole_map_in_it_has_no_colour_in_the_picture(self):
+        from PIL import Image, ImageChops
+
+        gm = mapgen.generate(mapgen.preset("Classic fantasy world", 3))
+        gm.style = "print"
+        with tempfile.TemporaryDirectory() as folder:
+            path = mm.render_png(gm, Path(folder) / "p.png", scale=0.5)
+            with Image.open(path) as image:
+                r, g, b = image.convert("RGB").split()
+                self.assertIsNone(ImageChops.difference(r, g).getbbox())
+                self.assertIsNone(ImageChops.difference(g, b).getbbox())
+
+    def test_every_style_has_an_accent_and_the_old_ones_are_unchanged(self):
+        for name, style in mm.STYLES.items():
+            self.assertTrue(style.get("accent", "").startswith("#"), name)
+        self.assertEqual(mm.STYLES["parchment"]["accent"], "#8a2f22")
+        self.assertEqual(mm.STYLES["treasure"]["accent"], "#8a2f22")
+        self.assertEqual(mm.STYLES["ink"]["accent"], mm.STYLES["ink"]["ink"])
+        self.assertEqual(mm.STYLES["dark"]["accent"], mm.STYLES["dark"]["ink"])
+
+
+class PrintSizes(unittest.TestCase):
+    def test_the_trim_sizes_a_book_uses(self):
+        p = mm.PRINT_PRESETS
+        for key, size in (("5x8", (5, 8)), ("5.25x8", (5.25, 8)),
+                          ("5.5x8.5", (5.5, 8.5)), ("6x9", (6, 9)),
+                          ("letter", (8.5, 11))):
+            self.assertEqual((p[key].width_in, p[key].height_in), size, key)
+        self.assertAlmostEqual(p["a5"].width_in, 5.827, places=2)
+        self.assertAlmostEqual(p["a5"].height_in, 8.268, places=2)
+        self.assertAlmostEqual(p["a4"].width_in, 8.268, places=2)
+        self.assertAlmostEqual(p["a4"].height_in, 11.693, places=2)
+
+    def test_every_size_has_a_double_page_spread_at_twice_the_width(self):
+        singles = [k for k, v in mm.PRINT_PRESETS.items() if not v.spread]
+        self.assertEqual(len(singles), 7)
+        for key in singles:
+            single, spread = mm.PRINT_PRESETS[key], mm.PRINT_PRESETS[f"{key}-spread"]
+            self.assertTrue(spread.spread)
+            self.assertAlmostEqual(spread.width_in, single.width_in * 2)
+            self.assertEqual(spread.height_in, single.height_in)
+            self.assertIn("spread", spread.label)
+
+    def test_the_layout_adds_bleed_all_round_and_keeps_the_safe_area_inside_the_trim(self):
+        layout = mm.print_layout("6x9", 300)
+        self.assertEqual(layout.bleed_px, 38)                  # 0.125 in, rounded up
+        self.assertEqual(layout.size, (1800 + 76, 2700 + 76))
+        self.assertEqual(layout.trim, (38, 38, 1838, 2738))
+        self.assertEqual(layout.safe, (38 + 150, 38 + 150, 1838 - 150, 2738 - 150))
+        self.assertIsNone(layout.fold_x)
+        spread = mm.print_layout("6x9-spread", 300)
+        self.assertEqual(spread.size, (3600 + 76, 2700 + 76))
+        self.assertEqual(spread.fold_x, 38 + 1800)
+
+    def test_a_gutter_is_taken_from_the_inside_edge_only(self):
+        plain = mm.print_layout("5x8", 100)
+        left = mm.print_layout("5x8", 100, gutter_in=0.5, inside="left")
+        right = mm.print_layout("5x8", 100, gutter_in=0.5, inside="right")
+        self.assertEqual(left.safe[0], plain.safe[0] + 50)
+        self.assertEqual(left.safe[2], plain.safe[2])
+        self.assertEqual(right.safe[2], plain.safe[2] - 50)
+        self.assertEqual(right.safe[0], plain.safe[0])
+
+    def test_nonsense_is_refused_with_a_word_about_what_would_work(self):
+        with self.assertRaises(ValueError) as caught:
+            mm.print_layout("7x7", 300)
+        self.assertIn("6x9", str(caught.exception))
+        for kwargs in ({"dpi": 10}, {"dpi": 5000}, {"safe_in": 4.0},
+                       {"inside": "middle"}):
+            with self.assertRaises(ValueError, msg=str(kwargs)):
+                mm.print_layout("6x9", **{"dpi": 300, **kwargs})
+
+
+class PrintExport(unittest.TestCase):
+    DPI = 100                       # the maths is the same at any dpi; this is quick
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.dir = Path(cls.folder.name)
+        cls.count = 0
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def out(self):
+        type(self).count += 1
+        return self.dir / f"p{self.count}.png"
+
+    def export(self, gm, preset="6x9", **kw):
+        kw.setdefault("dpi", self.DPI)
+        return mm.export_print(gm, self.out(), preset, **kw)
+
+    def image(self, result):
+        from PIL import Image
+
+        image = Image.open(result.path)
+        image.load()
+        return image
+
+    def ink_box(self, image):
+        """Where anything that is not the page's own white sits."""
+        from PIL import ImageChops
+
+        grey = image.convert("L")
+        return ImageChops.invert(grey).getbbox()
+
+    def test_the_sheet_is_the_trim_plus_bleed_at_the_dpi_and_says_so(self):
+        # Breaking it: leave the bleed out of the sheet and the size is short.
+        gm = secret_map()
+        for key in ("5x8", "6x9", "letter", "a5-spread"):
+            layout = mm.print_layout(key, self.DPI)
+            result = self.export(gm, key)
+            image = self.image(result)
+            self.assertEqual(image.size, layout.size, key)
+            self.assertEqual((result.width_px, result.height_px), layout.size)
+            self.assertEqual(round(image.info["dpi"][0]), self.DPI, key)
+            self.assertEqual(round(image.info["dpi"][1]), self.DPI, key)
+
+    def test_the_dpi_is_written_as_asked(self):
+        result = self.export(secret_map(), "5x8", dpi=300)
+        self.assertEqual(round(self.image(result).info["dpi"][0]), 300)
+        self.assertEqual(result.dpi, 300)
+
+    def test_greyscale_is_one_channel_and_colour_is_kept_when_asked(self):
+        gm = secret_map()
+        self.assertEqual(self.image(self.export(gm)).mode, "L")
+        colour = self.image(self.export(gm, greyscale=False))
+        self.assertEqual(colour.mode, "RGB")
+        r, g, b = colour.split()
+        from PIL import ImageChops
+        self.assertIsNotNone(ImageChops.difference(r, b).getbbox(),
+                             "parchment should still be coloured")
+
+    def test_the_map_sits_inside_the_safe_area_and_the_rest_is_paper(self):
+        # Breaking it: fit to the trim instead of the safe area and the map
+        # spills into the margin.
+        for gm in (secret_map(),
+                   mm.GameMap(name="Tall", width=500, height=900)):
+            layout = mm.print_layout("6x9", self.DPI)
+            image = self.image(self.export(gm))
+            box = self.ink_box(image)
+            sx0, sy0, sx1, sy1 = layout.safe
+            self.assertGreaterEqual(box[0], sx0 - 1)
+            self.assertGreaterEqual(box[1], sy0 - 1)
+            self.assertLessEqual(box[2], sx1 + 1)
+            self.assertLessEqual(box[3], sy1 + 1)
+            # as big as the safe area allows, in the shape it was drawn
+            self.assertTrue(box[2] - box[0] >= (sx1 - sx0) - 3
+                            or box[3] - box[1] >= (sy1 - sy0) - 3, gm.name)
+            self.assertAlmostEqual((box[2] - box[0]) / (box[3] - box[1]),
+                                   gm.width / gm.height, delta=0.02)
+            # centred
+            self.assertAlmostEqual((box[0] + box[2]) / 2, (sx0 + sx1) / 2, delta=2)
+            self.assertAlmostEqual((box[1] + box[3]) / 2, (sy0 + sy1) / 2, delta=2)
+
+    def test_a_gutter_keeps_the_map_off_the_inside_edge(self):
+        gm = secret_map()
+        for inside in ("left", "right"):
+            layout = mm.print_layout("6x9", self.DPI, gutter_in=0.5, inside=inside)
+            box = self.ink_box(self.image(self.export(gm, gutter_in=0.5,
+                                                      inside=inside)))
+            self.assertGreaterEqual(box[0], layout.safe[0] - 1, inside)
+            self.assertLessEqual(box[2], layout.safe[2] + 1, inside)
+        plain = self.ink_box(self.image(self.export(gm)))
+        gutter = self.ink_box(self.image(self.export(gm, gutter_in=0.5)))
+        self.assertLess(gutter[2] - gutter[0], plain[2] - plain[0])
+
+    def test_a_spread_puts_the_map_across_the_spine_and_warns_about_names_on_it(self):
+        gm = mm.GameMap(name="Two Pages", width=800, height=550, title_on_map=False,
+                        compass=False, layers=[mm.Layer(name="Base")])
+        gm.pins.append(mm.Pin(x=400, y=300, kind="town", label="Spine Town"))
+        gm.pins.append(mm.Pin(x=120, y=300, kind="town", label="Edge Town"))
+        layout = mm.print_layout("6x9-spread", self.DPI)
+        result = self.export(gm, "6x9-spread")
+        box = self.ink_box(self.image(result))
+        self.assertAlmostEqual((box[0] + box[2]) / 2, layout.fold_x, delta=2)
+        spine = [n for n in result.notes if "spine" in n]
+        self.assertEqual(len(spine), 1)
+        self.assertIn("Spine Town", spine[0])
+        self.assertNotIn("Edge Town", spine[0])
+        quiet = mm.GameMap(name="Quiet", width=800, height=550, title_on_map=False,
+                           compass=False, layers=[mm.Layer(name="Base")])
+        quiet.pins.append(mm.Pin(x=120, y=300, kind="town", label="Edge Town"))
+        self.assertFalse([n for n in self.export(quiet, "6x9-spread").notes
+                          if "spine" in n])
+        self.assertFalse([n for n in self.export(gm, "6x9").notes if "spine" in n])
+
+    def test_guides_mark_bleed_trim_and_safe_area_and_only_when_asked(self):
+        gm = secret_map()
+        layout = mm.print_layout("6x9", self.DPI)
+        plain = self.image(self.export(gm, greyscale=False))
+        proof = self.image(self.export(gm, guides=True))
+        self.assertEqual(proof.mode, "RGB")
+        self.assertEqual(proof.getpixel((0, 0)), hex_rgb(mm.GUIDE_COLOURS["bleed"]))
+        self.assertEqual(proof.getpixel((layout.trim[0], layout.trim[1])),
+                         hex_rgb(mm.GUIDE_COLOURS["trim"]))
+        self.assertEqual(plain.getpixel((0, 0)), (255, 255, 255))
+        self.assertEqual(plain.getpixel((layout.trim[0], layout.trim[1])),
+                         (255, 255, 255))
+        top_middle = proof.getpixel((layout.trim[0] + 3, layout.safe[1]))
+        self.assertIn(top_middle, (hex_rgb(mm.GUIDE_COLOURS["safe"]), (255, 255, 255)))
+        spread = self.image(self.export(gm, "6x9-spread", guides=True))
+        fold = mm.print_layout("6x9-spread", self.DPI).fold_x
+        self.assertEqual(spread.getpixel((fold, 100)), hex_rgb(mm.GUIDE_COLOURS["fold"]))
+        self.assertTrue([n for n in self.export(gm, guides=True).notes
+                         if "proof" in n])
+
+    def test_the_default_is_the_reader_edition_and_the_authors_secrets_stay_home(self):
+        # Breaking it: default `edition` to "author".
+        gm = secret_map()
+        default = self.image(self.export(gm))
+        reader = self.image(self.export(gm, edition="reader"))
+        author = self.image(self.export(gm, edition="author"))
+        self.assertEqual(default.tobytes(), reader.tobytes())
+        self.assertNotEqual(default.tobytes(), author.tobytes())
+        result = self.export(gm)
+        self.assertEqual(result.alt_text, mm.describe_map(gm, "reader"))
+        self.assertNotIn("Vault", result.alt_text)
+        self.assertEqual(self.image(result).text.get("Description"), result.alt_text)
+
+    def test_another_style_for_one_export_leaves_the_map_alone(self):
+        gm = secret_map()
+        plain = self.image(self.export(gm))
+        printed = self.image(self.export(gm, style="print"))
+        self.assertEqual(gm.style, "parchment")
+        self.assertNotEqual(plain.tobytes(), printed.tobytes())
+        self.assertFalse([n for n in self.export(gm, style="print").notes
+                          if "turned to grey" in n])
+        self.assertTrue([n for n in self.export(gm).notes if "turned to grey" in n])
+
+    def test_it_says_how_small_the_names_print(self):
+        # 9 px lettering on an 800 px map fitted 5 in wide is 4 pt.
+        gm = secret_map()
+        result = self.export(gm)
+        scale = 500 / 800                 # 6x9 at 100 dpi: safe area 500 px wide
+        self.assertAlmostEqual(result.min_text_pt, 9 * scale / self.DPI * 72, delta=0.02)
+        self.assertTrue([n for n in result.notes if "smallest names" in n])
+        big = mm.GameMap(name="Big", width=800, height=550, title_on_map=False,
+                         compass=False, border=False,
+                         layers=[mm.Layer(name="Base")])
+        big.labels.append(mm.MapLabel(x=400, y=270, text="LARGE", size=60))
+        loud = self.export(big)
+        self.assertGreater(loud.min_text_pt, 6.0)
+        self.assertFalse([n for n in loud.notes if "smallest names" in n])
+
+    def test_no_line_is_thinner_than_the_press_can_hold(self):
+        # Breaking it: pass 1 as the minimum stroke to the renderer.
+        seen = []
+        real = mm._render_image
+
+        def spy(*args, **kw):
+            seen.append(args[4] if len(args) > 4 else kw.get("min_stroke"))
+            return real(*args, **kw)
+
+        mm._render_image = spy
+        try:
+            self.export(secret_map(), dpi=300)
+            self.export(secret_map(), dpi=300, min_line_pt=0.5)
+        finally:
+            mm._render_image = real
+        self.assertEqual(seen, [2, 3])            # 0.25 pt is 1.04 px; 0.5 pt is 2.08
+
+    def test_a_hairline_is_thickened_when_drawn(self):
+        from PIL import Image, ImageDraw
+
+        image = Image.new("RGB", (100, 40), "white")
+        prim = ("line", [(5, 20), (95, 20)], "#000000", 0.2, False)
+        mm._paint(ImageDraw.Draw(image, "RGBA"), [prim], 1.0, 3)
+        rows = [y for y in range(40) if image.getpixel((50, y)) != (255, 255, 255)]
+        self.assertEqual(len(rows), 3)
+        image = Image.new("RGB", (100, 40), "white")
+        mm._paint(ImageDraw.Draw(image, "RGBA"), [prim], 1.0)
+        rows = [y for y in range(40) if image.getpixel((50, y)) != (255, 255, 255)]
+        self.assertEqual(len(rows), 1)
+
+    def test_a_real_world_exports_quickly_at_300_dpi(self):
+        import time
+
+        gm = mapgen.generate(mapgen.preset("Classic fantasy world", 5))
+        started = time.perf_counter()
+        result = mm.export_print(gm, self.out(), "6x9", style="print")
+        self.assertLess(time.perf_counter() - started, 15.0)
+        self.assertEqual(self.image(result).size, (1876, 2776))
+
+
+class EbookExport(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.dir = Path(cls.folder.name)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_colour_png_of_the_width_asked_with_the_description(self):
+        from PIL import Image
+
+        gm = secret_map()
+        result = mm.export_ebook(gm, self.dir / "e.png", width_px=900)
+        self.assertEqual((result.width_px, result.height_px), (900, round(550 * 900 / 800)))
+        with Image.open(result.path) as image:
+            image.load()
+            self.assertEqual(image.size, (result.width_px, result.height_px))
+            self.assertEqual(image.mode, "RGB")           # opaque, no alpha
+            self.assertEqual(image.text.get("Description"), result.alt_text)
+            r, g, b = image.split()
+            from PIL import ImageChops
+            self.assertIsNotNone(ImageChops.difference(r, b).getbbox(), "kept its colour")
+        self.assertEqual(result.alt_text, mm.describe_map(gm, "reader"))
+        self.assertNotIn("Vault", result.alt_text)
+
+    def test_the_default_is_the_reader_edition_at_1800_wide(self):
+        from PIL import Image
+
+        gm = secret_map()
+        result = mm.export_ebook(gm, self.dir / "d.png")
+        self.assertEqual(result.width_px, 1800)
+        reader = mm.export_ebook(gm, self.dir / "r.png", 1800, edition="reader")
+        author = mm.export_ebook(gm, self.dir / "a.png", 1800, edition="author")
+        with Image.open(result.path) as d, Image.open(reader.path) as r, \
+                Image.open(author.path) as a:
+            self.assertEqual(d.tobytes(), r.tobytes())
+            self.assertNotEqual(d.tobytes(), a.tobytes())
+
+    def test_a_jpeg_carries_the_description_too(self):
+        from PIL import Image
+
+        gm = secret_map()
+        result = mm.export_ebook(gm, self.dir / "e.jpg", width_px=700)
+        with Image.open(result.path) as image:
+            self.assertEqual(image.format, "JPEG")
+            self.assertEqual(image.mode, "RGB")
+            self.assertEqual(image.info.get("comment"), result.alt_text.encode("utf-8"))
+
+    def test_silly_widths_are_kept_sensible(self):
+        gm = secret_map()
+        self.assertEqual(mm.export_ebook(gm, self.dir / "s.png", 10).width_px, 300)
+        self.assertEqual(mm.export_ebook(gm, self.dir / "b.png", 99999).width_px, 6000)
+
+
 if __name__ == "__main__":
     unittest.main()
