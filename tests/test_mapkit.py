@@ -161,6 +161,24 @@ class Seeding(unittest.TestCase):
 SQUARE = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]
 L_SHAPE = [(0.0, 0.0), (20.0, 0.0), (20.0, 10.0), (10.0, 10.0),
            (10.0, 20.0), (0.0, 20.0)]
+# two 10x10 rooms joined by a neck 2 wide
+DUMBBELL = [(0.0, 0.0), (10.0, 0.0), (10.0, 4.0), (20.0, 4.0), (20.0, 0.0),
+            (30.0, 0.0), (30.0, 10.0), (20.0, 10.0), (20.0, 6.0), (10.0, 6.0),
+            (10.0, 10.0), (0.0, 10.0)]
+# a slab with a slot 4 wide cut into the top
+U_SHAPE = [(0.0, 0.0), (20.0, 0.0), (20.0, 20.0), (12.0, 20.0), (12.0, 6.0),
+           (8.0, 6.0), (8.0, 20.0), (0.0, 20.0)]
+# the same slab opening sideways
+C_SHAPE = [(0.0, 0.0), (20.0, 0.0), (20.0, 8.0), (8.0, 8.0), (8.0, 12.0),
+           (20.0, 12.0), (20.0, 20.0), (0.0, 20.0)]
+# a star-shaped polygon whose plain mitred 8-unit offset crosses itself
+AWKWARD_STAR = [(-17.346365149607877, 95.11055179811805), (-51.04666262364646, 52.85758711870881),
+                (-69.58616963638612, 32.86853318161171), (-52.17358845957833, 1.7190966934132996),
+                (-48.27245543665825, -21.18855855288909), (-57.287894689410585, -80.25042940507106),
+                (-13.937937989891408, -43.34237883385622), (14.876856378690515, -80.01389355285681),
+                (34.34313269316622, -58.86139810842537), (70.18961234501364, -40.91573340799286),
+                (45.9564273743556, 2.1818036466333686), (47.44149514322848, 15.635830514997492),
+                (43.985884435688035, 40.49522473083861), (26.501711290804362, 83.89854131719109)]
 
 
 class PolygonBasics(unittest.TestCase):
@@ -504,6 +522,19 @@ class Insetting(unittest.TestCase):
                             mk.point_segment_distance(e, a, b)), d - 1e-6)
         self.assertGreater(answered, 90)           # it does answer for ordinary shapes
 
+    def test_a_shape_that_would_split_is_never_returned_broken(self):
+        # the neck is 2 wide: a small inset is fine, from 1 on the two rooms part
+        # company, which one polygon cannot express - so the answer is None,
+        # never a polygon that crosses itself
+        inner = mk.inset_polygon(DUMBBELL, 0.5)
+        self.assertTrue(mk.polygon_is_simple(inner))
+        self.assertAlmostEqual(shoelace(inner), 173.0)
+        for d in (1.0, 1.5, 3.0):
+            self.assertIsNone(mk.inset_polygon(DUMBBELL, d))
+        # the slot of the U is 4 wide and its arms 8: fine at 2, gone at 3
+        self.assertTrue(mk.polygon_is_simple(mk.inset_polygon(U_SHAPE, 2.0)))
+        self.assertIsNone(mk.inset_polygon(U_SHAPE, 3.0))
+
     def test_negative_inset_grows(self):
         grown = mk.inset_polygon(SQUARE, -1.0)
         self.assertAlmostEqual(shoelace(grown), 144.0)
@@ -550,12 +581,31 @@ class Offsetting(unittest.TestCase):
 
     def test_concave_offset_is_always_a_simple_polygon_around_the_original(self):
         rng = random.Random(18)
-        for _ in range(150):
+        for _ in range(250):
             poly = random_star(rng)
-            d = rng.uniform(1.0, 60.0)                      # up to "far too much"
+            d = rng.uniform(1.0, 60.0) if rng.random() < 0.3 else rng.uniform(1.0, 12.0)
             out = mk.offset_polygon(poly, d)
             self.assertTrue(mk.polygon_is_simple(out), (poly, d))
             self.assertTrue(mk.polygon_contains_polygon(out, poly), (poly, d))
+
+    def test_an_offset_that_would_cross_itself_is_caught(self):
+        # found by random search: growing this star by 8 with plain mitred
+        # corners folds it over itself, so the kit must not hand that back
+        out = mk.offset_polygon(AWKWARD_STAR, 7.994203412853194)
+        self.assertTrue(mk.polygon_is_simple(out))
+        self.assertTrue(mk.polygon_contains_polygon(out, AWKWARD_STAR))
+        for v in out:
+            self.assertGreaterEqual(mk.distance_to_boundary(v, AWKWARD_STAR), 7.99)
+
+    def test_slots_that_close_up_fall_back_to_a_safe_outline(self):
+        for shape in (DUMBBELL, C_SHAPE, U_SHAPE):
+            for d in (0.5, 1.5, 2.5, 4.0, 8.0):
+                out = mk.offset_polygon(shape, d)
+                self.assertTrue(mk.polygon_is_simple(out), (shape, d))
+                self.assertTrue(mk.polygon_contains_polygon(out, shape), (shape, d))
+                self.assertGreater(shoelace(out), shoelace(shape))
+        # once the slot has filled in, the outline is that of the whole slab
+        self.assertAlmostEqual(shoelace(mk.offset_polygon(C_SHAPE, 4.0)), 28.0 * 28.0)
 
     def test_offset_keeps_the_winding_and_a_negative_offset_shrinks(self):
         self.assertLess(shoelace(mk.offset_polygon(SQUARE[::-1], 1.0)), 0.0)
@@ -675,6 +725,24 @@ class Bisecting(unittest.TestCase):
         before = list(poly)
         mk.bisect_polygon(poly, random.Random(1), 300.0)
         self.assertEqual(poly, before)
+
+    def test_min_compactness_refuses_cuts_that_make_slivers(self):
+        square = [(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0)]
+        # every cut of a square makes oblongs, less compact than 0.75 and worse
+        # than the square itself, so the square is left whole...
+        self.assertEqual(mk.bisect_polygon(square, random.Random(1), 500.0,
+                                           min_compactness=0.75), [square])
+        # ...while the default is happy to cut it up
+        self.assertGreater(len(mk.bisect_polygon(square, random.Random(1), 500.0)), 4)
+
+    def test_a_long_thin_block_is_still_cut_into_compact_lots(self):
+        strip = [(0.0, 0.0), (200.0, 0.0), (200.0, 4.0), (0.0, 4.0)]
+        lots = mk.bisect_polygon(strip, random.Random(2), 20.0)
+        self.assertGreater(len(lots), 10)
+        for lot in lots:
+            self.assertGreaterEqual(shoelace(lot), 20.0 - 1e-9)
+            self.assertGreaterEqual(mk.compactness(lot), 0.45)      # far better than the strip
+        self.assertAlmostEqual(sum(shoelace(l) for l in lots), 800.0)
 
     def test_bisecting_a_large_polygon_is_fast(self):
         poly = regular(8, 300.0)
@@ -1680,4 +1748,58 @@ class Polylines(unittest.TestCase):
         self.assertEqual(mk.resample([], 1.0), [])
 
 
-# @@TESTS@@
+# ---------------------------------------------------------------------------
+# What the kit promises about itself
+# ---------------------------------------------------------------------------
+
+class Purity(unittest.TestCase):
+    def test_the_kit_pulls_in_no_gui_or_imaging_library(self):
+        code = ("import sys, novelforge.mapkit;"
+                "print(','.join(m for m in ('tkinter', 'PIL', 'docx', 'numpy') if m in sys.modules))")
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        out = subprocess.run([sys.executable, "-c", code], cwd=here,
+                             capture_output=True, text=True, timeout=30)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(out.stdout.strip(), "")
+
+    def test_the_source_never_uses_hash_or_the_global_random_generator(self):
+        import ast
+        with open(mk.__file__, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                self.assertNotEqual(node.func.id, "hash", "line %d" % node.lineno)
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) \
+                    and node.value.id == "random":
+                self.assertEqual(node.attr, "Random", "random.%s at line %d"
+                                 % (node.attr, node.lineno))
+
+    def test_the_module_holds_no_mutable_state(self):
+        for name, value in vars(mk).items():
+            if name.startswith("__"):
+                continue
+            self.assertNotIsInstance(value, (list, dict, set, bytearray, random.Random), name)
+
+    def test_calls_do_not_change_their_arguments(self):
+        rng = random.Random(90)
+        poly = random_convex(rng)
+        pts = random_sites(rng, 10)
+        path = random_path(rng, 6)
+        snapshot = (list(poly), list(pts), list(path))
+        r = random.Random(1)
+        mk.bisect_polygon(poly, r, 200.0)
+        mk.inset_polygon(poly, 3.0)
+        mk.offset_polygon(poly, 3.0)
+        mk.voronoi_cells(pts, BOX)
+        mk.lloyd_relax(pts, BOX, 2)
+        mk.mst(pts)
+        mk.gabriel_edges(pts)
+        mk.chaikin(path, 2)
+        mk.catmull_rom(path, 4)
+        mk.simplify(path, 5.0)
+        mk.resample(path, 7.0)
+        self.assertEqual((poly, pts, path), snapshot)
+
+
+if __name__ == "__main__":
+    unittest.main()

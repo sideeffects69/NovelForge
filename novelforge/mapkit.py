@@ -651,6 +651,7 @@ def _split_once(poly: Polygon, rng: random.Random, area: float, min_area: float,
     n = len(poly)
     lengths = [dist(poly[i], poly[(i + 1) % n]) for i in range(n)]
     order = sorted(range(n), key=lambda i: (-lengths[i], i))
+    parent_compact = compactness(poly)
     for attempt in range(6):
         i = order[min(attempt // 3, n - 1)]       # longest side, then second longest
         a, b = poly[i], poly[(i + 1) % n]
@@ -675,8 +676,9 @@ def _split_once(poly: Polygon, rng: random.Random, area: float, min_area: float,
             continue
         ok = True
         for piece in (left, right):
-            if compactness(piece) < min_compact:
-                ok = False
+            c = compactness(piece)
+            if c < min_compact and c < parent_compact - 1e-12:
+                ok = False                        # a sliver, and worse than what we cut
                 break
             m = len(piece)
             for k in range(m):
@@ -705,9 +707,10 @@ def bisect_polygon(poly: Sequence[Point], rng: random.Random, min_area: float,
     then the polygon is left whole - if either piece would be smaller than
     ``min_area``, would make a corner sharper than ``min_angle_deg`` (or a
     reflex spike within that of a full turn), or would be a sliver (compactness
-    under ``min_compactness``). Pieces are only split while their area is at
-    least twice ``min_area``, so lots land between ``min_area`` and roughly
-    three times it.
+    under ``min_compactness`` *and* worse than the polygon being cut, so a
+    long thin block is still cut down into shorter lots). Pieces are only
+    split while their area is at least twice ``min_area``, so lots land
+    between ``min_area`` and roughly three times it.
 
     The lots tile the polygon exactly (no gaps, no overlaps; inset each one
     for streets and alleys), are wound counter-clockwise, and come out in a
