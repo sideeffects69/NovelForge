@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="brand/banner.jpg" alt="NovelForge: a modern, dark novel-writing studio with a binder, a centred page and a generated fantasy map" width="880">
+</p>
+
 # NovelForge
 
 **A local novel-writing studio that writes real Word documents, not a
@@ -23,6 +27,11 @@ maker with one-click procedural worlds, and offline prose diagnostics — into
 one tool that opens in about a second and never asks you to sign in.
 
 **To start it: double-click `Write.bat`.**
+
+<p align="center">
+  <img src="site/assets/screenshots/main-editor.png" alt="The real NovelForge main window in the Premium theme: chapter binder, the scene editor and the scene inspector" width="860"><br>
+  <em>The app itself (Premium theme): binder, editor, inspector.</em>
+</p>
 
 ---
 
@@ -104,7 +113,8 @@ No AI, no telemetry, no login, no subscription. MIT licensed.
 
 ## The first five minutes
 
-1. Double-click `Write.bat`.
+1. Double-click `Write.bat`. (The very first time it installs two small Python
+   libraries for you - `python-docx` and `Pillow` - which needs the internet once.)
 2. **File → New Novel...** Give it a title and a word target. Press OK.
    It creates about thirty Word documents in a few seconds.
 3. In the binder on the left, open **Manuscript → Chapter One → Opening Scene**.
@@ -117,11 +127,13 @@ That is the whole loop. Everything below is detail you can read when you need it
 ## The website
 
 **[sideeffects69.github.io/NovelForge](https://sideeffects69.github.io/NovelForge/)**
-— screenshots, the full feature list, install steps and a download link, if
-you'd rather look before you clone. It's a plain landing page, not the app
-itself: NovelForge can't run in a browser (Tkinter doesn't work there, and
-it needs your real filesystem), so there is no online version to try
-without installing anything. Source lives in `site/` in this repo.
+— features, the map maker, an honest comparison with Scrivener, Atticus and
+others, a FAQ, download help and a changelog, if you'd rather look before you
+download. It's a website *about* the app, not the app itself: NovelForge can't
+run in a browser (Tkinter doesn't work there, and it needs your real filesystem),
+so there is no online version to try without installing anything. The pages are
+generated from `tools/site/` by `python tools/build_site.py` and published from
+`site/`.
 
 ---
 
@@ -374,12 +386,19 @@ the story bible, and in the dependency map.
 A drawing tool for the world in your head. Continents, kingdoms, city plans,
 dungeons, treasure maps.
 
-**Press "Surprise Me"** for a whole world in one click — coastline, kingdoms,
-regions, seas, rivers, roads and dozens of named settlements, built from the
-system's own randomness. Press it again for a different world. Every world
-records its seed, so one you like can be regenerated exactly; **Generate...**
-opens the same thing as a dialog, if you want to choose the preset, size and
-counts yourself rather than leave them to chance.
+**Press "Surprise Me"** for a whole world in one click — coastlines that wander
+into bays and headlands, mountain ranges, forests and deserts, rivers that run
+from the highlands to the sea, roads that follow the land (never through the
+water), and dozens of named settlements, built from the system's own randomness.
+Press it again for a different world. Every world records its seed, so one you
+like can be regenerated exactly - names included; **Generate...** opens the same
+thing as a dialog, if you want to choose the preset, size and counts yourself
+rather than leave them to chance.
+
+**The window** is a tool rail (select, draw terrain, freehand, pin, label, erase,
+pan), a palette for terrain, pin type and layers, the map lying on a desk, and a
+properties panel. **Export** and **More** menus hold everything else. Zooming
+shows at once and redraws when you stop, so a busy map stays smooth.
 
 **Names come from editable lists, not a fixed dictionary.** Settlements,
 kingdoms, regions, seas and rivers can each be given their own naming style —
@@ -390,7 +409,7 @@ invented language.
 
 **Draw a coastline by hand:** pick **Freehand**, choose *Land / coast*, hold
 the left button and draw a rough blob. Let go. The line is smoothed, filled,
-and given the concentric coastal halo that makes a map look hand-drawn rather
+and given the pale shallows and ripples that make a map look hand-drawn rather
 than like a diagram. Prefer straight edges? Use **Draw terrain**, click each
 corner, then double-click to close it.
 
@@ -414,8 +433,10 @@ worldbuilding notes stay connected, which is the whole point.
 prints well), Dark atlas, and Treasure map. Layers let you keep political
 borders separate from terrain and hide them for a clean geography map.
 
-**Export** to PNG, to SVG (scalable, stays sharp at any size), or **To Word** —
-a .docx with the map image plus a legend table of every pin and named area.
+**Export** (the menu at the top right) to PNG, to SVG (scalable, stays sharp at
+any size), or a Word document - a .docx with the map image plus a legend table of
+every pin and named area. Place names carry a halo, so they stay readable where
+they cross a coastline or a river.
 
 There is also a **place name generator** (Plan menu) with five flavours:
 northern, southern, elvish, harsh and plain-English compound names.
@@ -738,11 +759,13 @@ laptop it is quietly reduced to fit.
 Any list that can hold more rows than are visible needs a scrollbar — use
 `scrolled()` in `novelforge/ui/storyviews.py`.
 
-A test guards this: `tests/test_gui_smoke.py` opens a dozen windows at
-1340×680, and the main window at its smallest size, and fails if any content is
-clipped, hidden or squeezed (run it with `python -m unittest discover -s tests
--t .`). It checks one resolution rather than every one from 1024×768 up to
-3840×2160, so treat other sizes as a rule to check by hand (see `CLAUDE.md`).
+Tests guard this: the GUI suite in `tests/` opens every window, the Map Maker
+in every theme, and the main window at its smallest size and at a simulated 125%
+display, and fails if any content is clipped, hidden or squeezed. The whole suite
+(`python -m unittest discover -s tests -t .`, about five minutes) also uses every
+menu command and button, tests the map engine and checks the website. It covers
+three sizes rather than every one from 1024×768 up to 3840×2160, so treat other
+sizes as a rule to check by hand (see `CLAUDE.md`).
 `python tools/uishots/run.py` photographs the real windows if you want to look.
 
 ---
@@ -761,7 +784,8 @@ word count read in.
   the Tkinter UI has only ever been built and tested on Windows.)
 - **Python 3.13 or newer.** Get it from [python.org](https://www.python.org/downloads/)
   (tick "Add python.exe to PATH" during install) or `winget install Python.Python.3.13`.
-- Two packages: `pip install python-docx Pillow`
+- Two packages, `python-docx` and `Pillow`. `Write.bat` installs them on the first
+  run; to do it yourself: `pip install -r requirements.txt`
   — `python-docx` writes the Word files, `Pillow` renders the map images.
   Everything else — the GUI, the drawing, the diagnostics — is the Python
   standard library. Nothing else to install, no build step, no internet

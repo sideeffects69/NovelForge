@@ -36,12 +36,13 @@ to ask them to narrow it down technically.
   screens **do not exist yet**. Do not treat anything in `web/` as the
   current app, and do not assume a feature exists there just because it
   exists in `novelforge/ui/`.
-- **`site/`** — a plain static HTML/CSS marketing page, no JS logic of its
-  own, no build step. This is **not the app** in any form - it's the
-  project's public landing page (screenshots, feature list, install steps,
-  download link, sponsor links), hosted for free on GitHub Pages at
-  `https://sideeffects69.github.io/NovelForge/`. See the dedicated section
-  below before touching it.
+- **`site/`** — the project's public website (a multi-page marketing and
+  documentation site: features, the map maker, an honest comparison, FAQ,
+  download help, changelog), hosted free on GitHub Pages at
+  `https://sideeffects69.github.io/NovelForge/`. Plain HTML/CSS and one tiny
+  script; **generated** from `tools/site/` by `tools/build_site.py` and the
+  output is committed. This is **not the app** in any form. See the dedicated
+  section below before touching it.
 
 If a future session's goal is to finish migrating `novelforge/ui/` to
 `web/`, that's a real, large, deliberate project — confirm with the user
@@ -86,8 +87,8 @@ on top of too):
 | `structures.py` | The nine outline frameworks, as data |
 | `templates.py` | The field lists behind every generated `.docx` reference sheet |
 | `storygraph.py` | Mines the manuscript for entities/mentions and builds the relationship graph |
-| `mapgen.py` | Procedural world generation (heightmap → coastline → rivers → settlements → names) |
-| `mapmaker.py` | Map data model + `build_primitives()`, the single source of truth rendered by the editor, PNG export and SVG export |
+| `mapgen.py` | Procedural world generation: lobes + warp + noise → marching-squares coasts → priority-flood rivers → biomes → settlements → A* roads → labels. Deterministic per seed, names included |
+| `mapmaker.py` | Map data model + `build_primitives()`, the single source of truth rendered by the editor, PNG export and SVG export; terrain stamps, shores, label halos, and the display-list caches |
 | `mapstory.py` | Where the map connects back to Locations/the story graph |
 | `config.py` | App paths and the one settings JSON file |
 | `server.py` | Local-only HTTP bridge (binds `127.0.0.1`) used by `--web`/`--serve` |
@@ -103,8 +104,10 @@ The UI (`novelforge/ui/`), Tkinter, all of it live:
 | `storyviews.py` | The four story-graph windows |
 | `writing.py` | Editor intelligence: completion, live spelling/grammar marks |
 | `dialogs.py` | Modal `Dialog` subclasses and non-modal tool windows |
-| `widgets.py` | Small reusable widgets, incl. `center_window()` (see rule below), `AutoScrollbar`, `Gauge`, `StatusBar`, and `ScrolledText.set_report()` |
+| `widgets.py` | Small reusable widgets, incl. `center_window()` (see rule below), `Card` and `shell()`, `Dropdown`, `AutoScrollbar`, `Gauge`, `StatusBar`, and `ScrolledText.set_report()` |
 | `styling.py` | The look of the whole app: theme tokens, the one ttk style, the Tk option-database defaults, title-bar tint, toolbar icons, tooltips (see "The look of the app") |
+| `fluent.py` | The rounded controls: ttk *image elements* (9-slice, drawn with Pillow) for buttons, fields, tabs, scroll bars, check/radio boxes (see "The look of the app" - three traps live here) |
+| `mapicons.py` | The map maker's tool and toolbar icons, drawn with Pillow (no icon font needed) |
 | `palette.py` | The Ctrl+Shift+P command palette, built by walking the real menus |
 | `welcome.py` | The first-run screen, shown only when there is no novel |
 
@@ -190,12 +193,19 @@ premium - `ui/theme.py` no longer exists.)
 
 ## Tests
 
-    python -m unittest discover -s tests -t .        # about 4 minutes (44 tests)
+    python -m unittest discover -s tests -t .        # about 5 minutes (97 tests)
 
 Needs Windows and a display for the GUI half (skipped otherwise); the windows
 open and close on the desktop while it runs. Do not run it as
 `python tests/test_x.py`: the `-t .` form is what makes `tests/__init__.py` run
-first. One module: `python -m unittest tests.test_gui_walk`.
+first. One module: `python -m unittest tests.test_gui_walk`. The walk tests
+dominate the time (they use every menu command, button and shortcut, and each
+step pumps the event loop for a few tenths of a second); the engine and site
+tests take about twenty seconds.
+
+**Run it streaming when you are debugging** (`python -u ... -v > file`): a
+PowerShell `*>` redirect holds all output until the end, which makes a hung test
+look like a slow one.
 
 - **`tests/__init__.py` must run before anything imports `novelforge`.** It
   points `NOVELFORGE_SETTINGS` and `NOVELFORGE_PROJECTS` at a temp folder,
@@ -235,8 +245,27 @@ first. One module: `python -m unittest tests.test_gui_walk`.
   guarantees the sandbox.
 - `test_gui_scaling.py` - the whole interface at a simulated 125% display. The
   scale is simulated by setting `tk scaling` before the window is built. The map
-  maker is left out: fifteen toolbar buttons need about 1500px at 125%, and
-  Windows will not let a window exceed the real screen.
+  maker is left out (its window is checked at 100% in `test_gui_maps.py`).
+- `test_maps.py` - the map *engine*, no window: determinism (same seed, same
+  world, names included), structure (settlements on land, roads never through
+  the sea, long rivers, chains of mountains, lakes painted over land), the
+  contour maths, the display-list caches, halos, exports. Fast.
+- `test_gui_maps.py` - the Map Maker *window*: fits in every theme, every rail
+  tool, both dropdowns and every item in them, instant zoom that redraws once,
+  no rebuild on redraw, Surprise Me, drawing and undo, the empty-map hint.
+- `test_gui_speed.py` - the rounded controls, measured in a bare window with no
+  app around them: a window with one of every control and three tall scroll bars
+  draws in under 0.4 s (about 0.05 here), a resize repaints in under 0.2 s, and
+  controls stay control-sized (button under 50px, slim scroll bar). Each of the
+  three bugs it guards - a 2px middle, a 2px trough, image elements without a
+  zero minimum size - was re-introduced and the test failed (3.9 s, 0.57 s, 82px).
+- `test_site.py` - the website as a crawler meets it: generated output is
+  current, one `h1` and a sane heading order per page, title/description length,
+  canonical/OG/icons, the Google verification tag, JSON-LD (no invented
+  ratings), every internal link and `#anchor`, image alt text and sizes,
+  sitemap/robots/llms consistency, no content hidden without JavaScript - and
+  that the *claims* on the pages ("nine outline frameworks", "thirteen terrain
+  types", "twenty pins", the version) match the code.
 - `test_launch.py` - the real entry point: `python -m novelforge` as its own
   process (what `Write.bat` runs), once with a novel and once as a fresh
   install; waits for the window, posts WM_CLOSE (what the X button does), and
@@ -246,7 +275,12 @@ first. One module: `python -m unittest tests.test_gui_walk`.
   window can also be, and the test closes whatever it finds.
 - Every check here has been proven able to fail by breaking the thing it guards
   (a menu command, a corkboard button, the map toolbar's padding, the theme
-  recolour, the display scaling) and confirming the test names the culprit. Do
+  recolour, the display scaling, and for the newer files: roads across the sea,
+  stub rivers, lakes under land, unseeded names, a salted `hash()`, a display
+  list that is never remembered, a zoom with no preview, a dead link, a missing
+  alt, a wrong claim on the site) and confirming the test names the culprit.
+  Two of those mutation checks found tests that *could not* fail - one asserted
+  only that a number appeared somewhere, not everywhere. Do
   the same when you add or change one - a check that cannot fail proves nothing.
   The clip detector (`tools/uishots/clipping.py`) once passed a synthetic case it
   should have failed, because `pack` *unmaps* what does not fit instead of
@@ -356,55 +390,84 @@ The menus are still one `tk.Menu` tree built in `App._build_menu`, but since
 menu bar from it (see "The look of the app"). Add commands to the tree exactly
 as before; the bar, the palette and the tests all read it.
 
-## Map maker: what already exists (check before "adding" it again)
+## Map maker: what exists (rebuilt 2026-09-20; check before "adding" anything)
 
-The map maker is more built-out than a quick skim of `README.md` suggests
-(the README's "Maps" section predates the two most recent map commits and
-undersells current features). Before proposing an addition, confirm it
-isn't already here:
+**The engine (`mapgen.py`)** builds a world in about 0.7 s, in this order, on a
+256x171 grid (roads and biomes on a half-resolution grid):
+1. *Land*: each continent is a cluster of overlapping Gaussian lobes, bitten by a
+   few "dents" (gulfs), islands added, then the whole field bent by a **broad and
+   a fine domain warp** and roughened with fractal noise. Margins keep the sea at
+   the top, bottom and sides so the title, scale and compass have room. Sea level
+   is a percentile, so "30% land" is exact.
+2. *Relief*: bulk rise inland plus **ridged noise**, so mountains are chains.
+3. *Coasts*: **marching squares** on the height field (`_contours`) - smooth,
+   sub-cell-accurate rings, land winding one way and lakes/inland seas the other
+   (negative signed area = land, because y points down). The old Moore-boundary
+   tracing gave staircases.
+4. *Drainage*: **priority flood** (`_drain`) so every land cell drains to the
+   sea; deep basins become lakes; rivers are traced **upstream from their mouths**
+   along the biggest catchment (the old code started at high-flow cells near the
+   coast and produced 30px stubs), with tributaries.
+5. *Biomes*: shares of the land come from the sliders and are enforced by
+   **ranking cells** (percentile), not fixed thresholds on noise (which put a whole
+   interior in one biome on some seeds); masks are blurred, faded toward shores,
+   contoured.
+6. *Settlements*, then 7. *roads* (**A\*** over a cost grid, MST plus a few
+   loops, existing roads cheap), then 8. *labels* (region names at the point
+   deepest inland; the ocean name at the point farthest from land, never on a lake
+   and never in the compass corner).
+Everything is seeded - **names included** (`name_for(..., seed=)`; before, names
+were different on every run, contradicting the "same seed, same world" promise
+written on the map).
 
-- Procedural world generation (`mapgen.py`): heightmap via fractal value
-  noise → coastline extraction → **downhill-flow rivers** (not just noise) →
-  biome placement → habitability-scored settlement placement → roads.
-- One-press **"Surprise Me"** (full random world from OS entropy, seed
-  recorded for reproducibility) alongside a parameterised **"Generate..."**
-  dialog.
-- Per-culture procedural naming with **user-editable name lists**
-  (`Name Styles.json` in the project's Maps folder, "Edit Names" in the UI),
-  and **per-role styles** — settlements, realms, regions, seas and rivers can
-  each sound different, or be pointed at the same style.
-  Settlement-name collisions are disambiguated (Upper/Lower/Little/Great/...,
-  then a numeral) rather than left blank.
-  - **Greedy label-collision avoidance** for every pin/label
-    (`layout_pin_labels` in `mapmaker.py`), with a documented fallback of
-    hiding a name rather than printing it on top of another.
-  - **Pins link to Location sheets** — right-click → Link, double-click to
-    open the linked sheet in Word.
-  - **Layers**, shown/hidden independently.
-  - One shared primitive list (`build_primitives()`) rendered identically by
-    the Tkinter canvas, the PNG exporter, and the SVG exporter — "what you
-    see while editing is exactly what you export." Keep it that way; don't
-    let PNG/SVG export drift into their own drawing logic.
+**Also present** (unchanged in spirit): the **Surprise Me** and **Generate...**
+buttons; per-culture, per-role name lists in `Name Styles.json`; greedy
+label-collision avoidance (`layout_pin_labels`), hiding a name rather than
+overprinting; pins linked to Location sheets (right-click -> Link, double-click
+opens the sheet in Word); layers; four art styles; PNG, SVG and Word export.
+**One shared primitive list** (`build_primitives()`) is rendered identically by
+the Tk canvas, the PNG exporter and the SVG exporter - keep it that way.
 
-**Genuine gaps**, worth considering later rather than assumed to already
-exist: coastlines come from smoothed noise rather than a Voronoi/Delaunay
-mesh, so they read as smooth rather than jagged/geologic (Azgaar's Fantasy
-Map Generator, MIT-licensed, is the reference implementation if this is ever
-worth the rewrite risk — it is a genuine rewrite of `mapgen.py`'s terrain
-step, not a small change); there's no "zoom into a town" street-layout
-generator (Watabou's TownGeneratorOS is the reference); and the hand-draw
-tools have no click-to-stamp icon brush (mountain/tree/castle) — freehand and
-click-to-place-points are the only ways to draw terrain by hand.
+**Rendering facts that cost time:**
+- **`PAINT_ORDER`: water and land share rank 1, so shapes paint in the order they
+  were made.** Water used to be rank 0 (always underneath), which hid every lake
+  under the land that held it - generated or hand-drawn. Emit big rings first
+  (the generator sorts by area) so a lake follows its land and an island in a
+  lake follows the lake.
+- **The text primitive has an optional 11th element, a halo colour**; read every
+  text primitive through `mapmaker.text_parts()` (the canvas fakes the outline
+  with four offset copies, Pillow uses `stroke_width`, SVG `paint-order`).
+- **Shores are painted for *all* coasts before any land** (a wide stroke round one
+  island would otherwise cover a neighbour drawn earlier): pale shallows as stacked
+  wide strokes, ripples as thin *offset rings* (`_offset_ring`, which skips vertices
+  that would fold). An earlier version made ripples with sea-coloured "cover"
+  strokes and left radial tick artifacts at sharp corners.
+- **Seeds use `zlib.crc32`, never `hash()`** (`_stable_seed`): Python salts `str`
+  hashes per process, which reshuffled every forest each time a map was opened.
+- **Caches** on `GameMap`: `_prim_cache` (whole display list, keyed on a content
+  fingerprint - views, zoom and selection are not in it) and `_shape_cache` (each
+  shape's share, so dragging one vertex re-scatters one forest). `build_primitives`
+  returns a *copy*. `_scatter_in_bounds` uses a Pillow-rasterised polygon mask
+  instead of ray casting (100x faster).
+- **A Tk canvas does not clip.** Wide strokes near the map edge spilled onto the
+  desk; `MapEditor._draw_desk` paints desk-coloured bands over everything outside
+  the sheet (shaved by a pixel - float coordinates round) and draws the shadow
+  on top of them.
 
-**Toolbar button widths must fit their own label.** The main toolbar's
-buttons used one flat `width=8` for every label, which clipped "Surprise Me"
-and "Edit Names" to "Surprise !" and "Edit Nam" — invisible from reading the
-code, only visible in an actual screenshot. Fixed (2026-09) to
-`width=max(8, len(label) + 1)` per button. Don't "fix" this by removing
-`width=` entirely — with this many buttons in one un-wrapped row, letting
-ttk pad every button to its natural size pushes the whole toolbar past the
-window's edge and hides "Help" and the coordinate readout off-screen
-instead, which is worse and easy to miss since nothing raises an exception.
+**The window (`mapeditor.py`)**: a card-strip of actions (map picker, primary
+*Surprise Me*, *Generate...*, New, Save, Undo, Redo, and **Export** / **More**
+dropdowns), a tool rail with drawn icons, a palette card (terrain, pin type,
+layers), the map on a "desk" with a shadow, a properties card, and a status strip
+with zoom. The picker shows an unsaved map as "Name  (unsaved)". Zoom scales the
+items on screen at once (`canvas.scale`) and does **one** real redraw when the wheel
+goes quiet (140 ms). Panning still uses `canvas.move`. Redraws reuse the cached
+display list, so nothing is rebuilt for a zoom, a selection or a pan.
+
+**Genuine gaps**: no town/city or building generator (those map kinds start as a
+blank grid to draw by hand; Watabou's TownGeneratorOS is the reference), no
+click-to-stamp brush for single trees or castles, no drawn political borders or
+realm areas, and coasts are noise-and-warp rather than a Voronoi mesh (Azgaar's
+generator is the reference if that is ever worth a rewrite).
 
 ## Security posture
 
@@ -441,205 +504,214 @@ except `/api/health`. Within that model:
   unfinished web UI - just don't assume this is safe if `server.py` is ever
   exposed beyond loopback.
 
-## `site/` — the public website (added 2026-09, replaced web-online/ same day)
+## `site/` - the public website (multi-page and generated, 2026-09-20)
 
-A landing page for the desktop app, not a version of the app itself -
-screenshots, the feature list, install steps, a download link to the
-latest GitHub Release, and the sponsor links also in the README. Plain
-HTML/CSS, no build step, one small JS file (`app.js`) doing exactly one
-thing: an IntersectionObserver that adds `.is-visible` to `[data-reveal]`
-elements as they scroll into view, skipped entirely under
-`prefers-reduced-motion`. Hosted for free on GitHub Pages, deployed
-automatically by `.github/workflows/deploy-pages.yml` on any push to
-`main` that touches `site/**`.
+A real website for the desktop app, not a version of it: home, features, the map
+maker, an honest comparison with Scrivener/Atticus/Obsidian/Word, FAQ, download
+help, changelog, support, and a 404. Plain HTML/CSS and one tiny script
+(`app.js`, scroll-reveal). Hosted free on GitHub Pages, deployed by
+`.github/workflows/deploy-pages.yml` on any push to `main` that touches `site/**`.
 
-**Redesigned 2026-09, twice.** First pass: fairly called "basic" - the user
-pointed at obsidian.md, literatureandlatte.com/scrivener and atticus.io as
-the bar. Added Fraunces (display) + Inter (body), a `.window-chrome`
-wrapper (macOS-style traffic-light dots + title bar) around every
-screenshot so a plain Tkinter capture reads as a polished product shot, a
-head-to-head comparison table against Scrivener/Atticus/Obsidian (the same
-pattern Atticus's own site uses against Vellum), and scroll-reveal via
-`app.js`. Kept the warm/parchment identity at that point, reasoning that
-copying a competitor's palette isn't the same thing as looking premium.
+**It is generated.** Edit `tools/site/pages/<slug>.html` (page bodies; `{{root}}`
+is the path back to the top so it works under `/NovelForge/` and on its own domain,
+`{{repo}}`, `{{version}}`, `{{author}}`) and the `PAGES` list / constants in
+`tools/build_site.py`, then run `python tools/build_site.py` and **commit `site/`
+too**. The generator writes the nav, footer, canonical URLs, Open Graph/Twitter
+tags, favicon links, JSON-LD (SoftwareApplication, SoftwareSourceCode, WebSite,
+BreadcrumbList, FAQPage built from the `<details>` on the FAQ and home pages),
+`sitemap.xml` (with images), `robots.txt`, `llms.txt`, `llms-full.txt` (the
+site's own text as plain markdown) and measures every local `<img>` so its
+`width`/`height` are right. `--check` exits 1 if `site/` is stale; `tests/test_site.py`
+runs that and much more. Add a page by adding it to `PAGES` and writing its body.
 
-**Second pass, same day**: the user then supplied a real logo/brand
-package (navy + electric-blue + ivory, a book/quill "N" mark) and a very
-detailed design spec explicitly modelled on Obsidian + Scrivener + Linear +
-"a sophisticated writer's desk at night," with exact hex values, a full
-token list, and instructions to apply the identical palette to both the
-desktop app and the website. That reasoning about the warm palette being
-more distinctively premium didn't survive contact with an actual brand
-package - the site now runs on that dark-navy/electric-blue system
-(swapped Fraunces → Literata per the spec's typography section; kept the
-`.window-chrome` and comparison-table patterns from the first pass, they
-weren't palette-specific). The **desktop app got a real Preferences theme
-option out of this too**: `THEMES["premium"]` in `config.py`, the same
-9-key dict every other theme here already uses, selectable in Preferences
-with zero other UI code needing to change (the dropdown already reads
-`THEMES.keys()`). It is **not** selected by default - `warm` still is,
-Classic in the spec's terms - since it hasn't had the scrutiny a default
-deserves.
+**Honesty rules for the copy** (the user was explicit): no invented ratings,
+reviews or testimonials (the JSON-LD must not contain `aggregateRating`), say
+"Windows only" plainly, say what NovelForge does *not* do (ebook typesetting,
+collaboration, Mac), and mark competitor facts we are unsure of "See vendor"
+rather than guessing. Every numeric claim (frameworks, terrain types, pins, art
+styles, the version) is checked against the code by `test_site.py`.
 
-Getting it to actually look coherent, not just "the dict has navy values
-now," took a real fix, not just new hex codes: `app.py`'s `_apply_theme()`
-used to configure zero ttk style for `TButton`/`TEntry`/`TCombobox`, for
-*any* theme - invisible against light backgrounds, but every toolbar
-button and inspector field stayed a flat white box against the new dark
-palette, because Windows' native "vista" ttk renderer draws those specific
-widgets itself and ignores Tk colour overrides outright. Fixed by
-switching to "clam" (fully Tk-drawn, actually obeys `ttk.Style`) **only**
-when `settings["theme"] == "premium"` - Classic keeps the exact native
-chrome it always had. `widgets.py`'s `Form.multiline()` had the identical
-gap one level down (a bare `tk.Text`, styled for no theme, ever - a latent
-bug in "dark" too, not new) and now reads `theme()` at creation time.
-`mapeditor.py`'s two `tk.Listbox`es (terrain, layers) got the same
-treatment. All of this was found by actually launching the app against
-each palette and looking at a real screenshot, not by reading the colour
-values and assuming they took - the white-box failure mode is invisible
-in code review.
+**AI and search discoverability, and its limit.** `robots.txt` explicitly allows
+GPTBot, ChatGPT-User, OAI-SearchBot, ClaudeBot, PerplexityBot, Google-Extended,
+Applebot-Extended, CCBot and others; `llms.txt` is a short plain-text summary.
+**But crawlers only read `robots.txt` and `llms.txt` at the root of a host**, and
+this is a *project* page under `/NovelForge/`, so those two files inside `site/`
+are not found by anything on their own. The fix is a repository named exactly
+`sideeffects69.github.io`; `tools/site-root/` holds the ready-made files (also
+generated) and a README with the steps. **Creating that repository was offered to
+the user, not done** - it is a new public repo under their account. Sitemap
+submission in Search Console works regardless of location.
 
-**Closed 2026-09-19:** the remaining unstyled `tk.Listbox`/`tk.Text` widgets
-are now covered centrally by the Tk option database (below), not one at a time.
-The rest of this section describes the first Premium pass; read "The look of
-the app" for the current state. Tkinter still has no drop-shadow, backdrop-blur
-or smooth hover-elevation; the parts of the spec written assuming a browser
-(glow, 150ms transitions on every control) don't have a faithful desktop
-equivalent without replacing native widgets with hand-drawn Canvas ones - a
-real, separate, much larger project. Get explicit sign-off before ever
-starting that.
+**Google Search Console** is a URL-prefix property for the project page, verified
+by the `google-site-verification` meta tag on the home page (it is in
+`build_site.py` as `VERIFICATION` and asserted by a test - do not lose it). The
+user still has to press VERIFY and submit `sitemap.xml` themselves.
 
-The full CSS palette, exactly as specified, is recorded in `site/style.css`
-as CSS custom properties (`--bg`, `--surface-1`...`--surface-3`, `--brand`,
-etc.) - copy those hex values rather than re-deriving them if the desktop
-app's token system is ever extended to match more closely.
+**Screenshots** (`site/assets/screenshots/`) come from a disposable demo novel
+("The Ashfall Crown"), never the writer's own: `python tools/uishots/run.py --out
+<dir> --themes premium --client-only` for the main window, dashboard, corkboard,
+outline and story graph, plus `tools/site_assets.py` for the Map Maker with a
+generated world, the command palette and the three sample map JPEGs. Use the
+premium theme (the site is navy). Follow the isolation rules under "If you drive
+the real GUI" - always assert the loaded novel is the demo one first.
 
-**Screenshots** (`site/assets/screenshots/`) were taken against a disposable
-demo project (`Kessa Ren` / "The Ashfall Crown"), seeded via
-`Project.create()` directly and launched with `NOVELFORGE_SETTINGS`
-pointed at a throwaway settings file - never the user's real project. If
-you retake these, follow the same isolation, and add the hard safety
-assertion (`assert app.project.data.title == "<expected demo title>"`)
-*before* taking any screenshot or touching anything - see "If you drive
-the real GUI to test it" above for exactly why that assertion exists and
-what happens without it.
+**Progressive enhancement**: reveal-on-scroll hides content only under a `js`
+class set inline in `<head>`, so scripting-off or a failed script leaves the page
+readable (a test guards it).
 
-**The donate QR images are duplicated**, not symlinked: once at
-`assets/donate/` (for the README, rendered by GitHub's own Markdown
-renderer with repo-relative paths) and again at `site/assets/donate/` (for
-the Pages deployment, which only ever sees the `site/` folder's own
-contents - a path like `../assets/...` would point outside what actually
-gets published, and 404). If the PayPal/UPI QR codes are ever regenerated,
-update both copies.
+**The donate QR images are duplicated**, not symlinked: `assets/donate/` (the
+README, repo-relative paths) and `site/assets/donate/` (Pages only ever sees
+`site/`). Update both if the codes are regenerated.
 
-**The download link points at `/releases/latest`**, not a specific
-version, so it never needs updating when a new release is tagged - just
-tag the release and the link is already current.
+**The download link points at `/releases/latest`**, so it never needs updating;
+just create the Release. The full CSS palette is in `site/style.css` custom
+properties - copy those hex values rather than re-deriving them.
 
-## The look of the app (rebuilt 2026-09-19)
+**The brand**: `brand/originals/*.jpg` are the writer's own logo files;
+`python tools/brand.py` derives `brand/icon.png`, `icon.ico`, `banner.jpg` and every
+`site/assets/brand/*` size, the favicon and the web manifest. The logo is used
+everywhere on purpose ("do not skip on logos and favicons"): window/taskbar icon
+(`styling.app_icons`, `set_app_identity`), welcome screen, About box, README,
+website header, favicons and Open Graph image.
 
-The desktop UI was modernised in one pass and verified by photographing every
-window in two themes (`tools/uishots/`), not by reading code. What exists, and
-why each piece is the way it is:
+## The look of the app (rebuilt 2026-09-19, rounded and layered 2026-09-20)
 
-- **One flat "clam" style for every theme** (`ui/styling.py`). Windows' native
-  "vista" ttk theme ignores every ttk colour, which is why the app looked like a
-  2005 dialog box and why the dark palettes had white boxes floating in them.
-  `styling.apply()` runs at start-up and on a theme change and *derives*
-  everything (hover, borders, row selection, legible secondary text) from the
-  nine keys in `config.THEMES` - a theme is still one dict. This supersedes the
-  earlier arrangement where only Premium used clam and Classic kept native
-  chrome: warm and light are flat now too.
+The desktop UI was modernised in two passes and verified by photographing every
+window in two themes (`tools/uishots/`), not by reading code.
+
+**Layers.** A window backdrop (`tokens["window"]`, the darkest surface) with
+rounded **cards** standing on it (`widgets.Card`, tone `panel`), the writing
+sheet and text fields as `page`/`field` cards inside those, and controls on top.
+The window's own chrome (menu strip, toolbar, status bar) uses `Chrome.*` styles
+because it sits on the backdrop, not on a card. **Every tool window and dialog
+gets the same shell** from `widgets.shell(window)`: the backdrop colour plus one
+card, whose body you build in exactly as before (`Dialog`, the corkboard, outline,
+story-graph windows... all use it; the map maker builds its own cards).
+
+- **One flat "clam" style for every theme** (`ui/styling.py`), *derived* from the
+  nine keys in `config.THEMES` (hover, borders, row selection, legible secondary
+  text). Windows' native "vista" theme ignores every ttk colour, which is why the
+  old app looked like a 2005 dialog and dark palettes had white boxes in them.
+- **Rounded controls** (`ui/fluent.py`): ttk *image elements* - 9-slice PNGs drawn
+  with Pillow (4x supersampled) from the tokens - for buttons (`TButton`,
+  `Accent.`, `Tool.`, `Compact.`, `Quiet.`, `Menu.`), fields, tabs, scroll-bar
+  thumbs, check and radio boxes, and `Rail.Toolbutton` (a tool rail that tints
+  when selected). On a theme change the *same* `PhotoImage`s are repainted in
+  place (`Kit.photo` -> `paste`), so live widgets update; elements are created
+  once, layouts re-applied every `apply()`. **Three traps, each of which broke
+  the app before it was understood:**
+  1. **ttk tiles the edges and middle of a 9-slice image; it does not stretch
+     them** (Tk 8.6), one draw call per tile. A first version had a 2px middle:
+     one text field took ~1000 draws (~200 ms), every button, every resize, every
+     window paid it, and the suite went from about a minute to five. `MIDDLE = 64`.
+     **The same applies to any image element with `sticky="nswe"` and no border,
+     even a transparent one:** the scroll bar's trough used a 2px clear image that
+     ttk tiled over the whole bar (hundreds of calls each), and a window with three
+     scroll bars took 0.8 s to open (0.09 s after the fix, `TROUGH = 128`). If a
+     window is slow to open, suspect an element whose image is tiny.
+  2. **An image element's minimum size is its image's size**, so that 64px middle
+     made every button ask for 82px. Every 9-slice element is created with
+     `width=0, height=0`, and `padding=PAD` (3px) - the default padding is the
+     border (9px a side), which stacked on the style's own padding made a button
+     47px tall instead of ~34.
+  3. **ttk fills the whole widget rectangle with the style's `background`
+     before drawing the element**, so a rounded control with transparent corners
+     shows a square of that colour unless it is exactly the colour behind the
+     widget - and it must not vary by state. `styling.apply` sets each style's
+     background to what sits behind it (the `behind` list) and clears its state
+     maps; states are the image's job.
+  Also: ttk finds an element by the *last dotted part* of its name (`*.thumb`,
+  `*.trough`, `*.downarrow`, `*.textarea`); PhotoImages must stay referenced;
+  always pass `master=` to `ImageTk.PhotoImage` (a process that has had two Tk
+  roots otherwise attaches images to the wrong one).
+- **`Card`** is a Canvas: four anti-aliased corner images, two rectangles and
+  four hairlines, with a `.body` frame inset by `padding`. `fit` makes it ask for
+  its content's size ("height", "width" or "both") instead of Tk's default
+  378x265 - needed for any card that is not simply filling a grid cell; `ground`
+  says what it stands on. `restyle()` is a duck-typed hook: `styling.retheme`
+  calls it (and any widget's `restyle`) on every descendant.
+- **`Dropdown`** (`widgets.py`) is a small borderless window of `Menu.TButton`s,
+  not a native menu. A posted native menu runs a modal loop on Windows, which
+  freezes anything driving the window (the test walker included) and cannot be
+  themed. It closes on Escape, on a choice and on focus loss.
+- **Type scale** in `styling`: `BASE, SMALL, LEAD, TITLE, DISPLAY, HERO =
+  10, 9, 12, 15, 21, 28`; `UI_FONT` resolves to Segoe UI Variable on Windows 11.
 - **Classic Tk widgets** (Text, Listbox, Entry, Canvas...) that `ttk.Style`
   cannot reach take their colours from the Tk *option database* (`option_add`,
-  priority 60). That supplies defaults only; anything set explicitly still wins,
-  so the editor and map canvases keep their own colours.
+  priority 60): defaults only, anything set explicitly wins.
 - **Title bar** is tinted through DWM (`styling.style_titlebar`; Windows 11, a
-  silent no-op elsewhere) from `center_window()`, so every window gets it. Tk
-  rebuilds its top-level window when first mapped, which throws the attribute
-  away, so it is re-applied on `<Map>`.
+  silent no-op elsewhere) from `center_window()`. Tk rebuilds its top-level
+  window when first mapped, throwing the attribute away, so it is re-applied on
+  `<Map>`.
 - **The menu bar is drawn by the app** (`App._build_menu_strip`), because
-  Windows owns the native one and gives Tk no way to recolour it - a white
-  strip across a dark window. The `tk.Menu` tree from `_build_menu` stays the
-  source of truth and is never attached to the window; each button gets a
-  `menu clone` of a top-level menu. Two Tk rules cost time: `tk::MbPost`
-  refuses a menu that is not a *descendant of its menubutton* (so you cannot
-  point a Menubutton at a shared menu), and `clone` is what keeps dynamic
-  entries - the Undo label, Open Recent - live. Popup colours are set on the
-  originals *before* cloning (`_theme_menu`); a theme change rebuilds the strip.
-  The detached bar's index 0 is a tearoff entry: skip by `type()`, never index
-  blindly. `menu_bar_height()` returns 0 for the main window now.
-- **Toolbar**: icons come from the system icon font (Segoe Fluent Icons /
-  MDL2 via Pillow, `styling.IconSet`), so no icon files ship; without the font
-  the buttons just show their text. Below the width the labels need it shows
-  icons only (tooltips name each button and its shortcut). The collapse is
-  decided against the width the full toolbar needed when it was built, not its
-  current width, so switching modes can't feed back and flicker.
-- **Command palette** (`palette.py`, Ctrl+Shift+P - Ctrl+K is the corkboard).
-  Built each time by walking the real menus, so it cannot drift from them; runs
-  an entry with `menu.invoke`, exactly what a click does.
+  Windows owns the native one and gives Tk no way to recolour it. The `tk.Menu`
+  tree from `_build_menu` stays the source of truth and is never attached to the
+  window; each strip button gets a `menu clone` of a top-level menu (`tk::MbPost`
+  refuses a menu that is not a descendant of its menubutton; `clone` is what keeps
+  dynamic entries live). Popup colours are set on the originals *before* cloning
+  (`_theme_menu`). The detached bar's index 0 is a tearoff entry: skip by
+  `type()`, never index blindly.
+- **Icons.** The main toolbar uses the system icon font (Segoe Fluent Icons /
+  MDL2 via Pillow, `styling.IconSet`), so no icon files ship; the map maker
+  draws its own (`ui/mapicons.py`) because the font has no "freehand" or "erase".
+  Icons are baked in a colour, so a theme change redraws them.
+- **Command palette** (`palette.py`, Ctrl+Shift+P - Ctrl+K is the corkboard),
+  built each time by walking the real menus, so it cannot drift from them.
 - **First-run screen** (`welcome.py`) overlays the panes only when there is no
-  novel: start-up otherwise opens the first project, so it never shows a recent
-  list.
+  novel.
 - **Reports** (`ScrolledText.set_report`): every generated report is plain text
-  built with the same conventions - a title over `====`, ALL-CAPS section names,
-  `----` rules, `!!`/`~` severity markers. `set_report` styles those and keeps a
-  monospace body so aligned tables still line up; nothing about how reports are
-  generated changed. Used by the in-pane detail view, `ReportWindow`, and the
-  story-graph tabs. Tk paints a tag's background across its line *spacing*, so
-  a rule is a 1px line with separate blank lines around it, not spacing.
-- **A theme change recolours what is already on screen** (`styling.retheme`,
-  called from `_apply_theme`). ttk widgets follow the style by themselves and
-  new classic Tk widgets read the option database, but a Text, Listbox or Entry
-  built *before* the switch kept the old colours - View > Theme left the
-  inspector's boxes cream in a dark window until another row was clicked. It
-  walks every window, including open tool windows; the editor is skipped
-  because `_style_editor` owns it (ghost mode hides its text). A report window's
-  heading colours are baked in when it is rendered and are not redone.
-  (Re-adding an option-database value at the same priority *does* take effect
-  immediately; the stale colours were never the database's fault.)
-- **Right-click menus** get themed colours from `*Menu.*` in the option database,
-  since they are bare `tk.Menu`s built on the spot. The in-app menu bar's menus
-  are coloured explicitly (`_theme_menu`) before being cloned.
-- **Button rows wrap** (`widgets.flow`, used by `Form.button_row`): the scene
-  inspector has four buttons in a ~330px pane and the last one hung off the
-  edge once the buttons gained padding. It also survives a dragged sash.
-  `Compact.TButton` has a natural width (clam's 11-character minimum is
-  overridden); an explicit `width=` on a widget still wins, which the map
-  toolbar relies on.
-- **Always pass `master=` to `ImageTk.PhotoImage`.** Without it the image
-  belongs to whichever Tk root is tkinter's default - fine with one window,
-  wrong the moment a process has had two (the tests).
-- The placeholder window icon follows the theme accent; a real
-  `brand/icon.png` does not change with the theme.
-- **Save-state indicator** in the status bar. `StatusBar.set_state` runs from
-  the per-keystroke modified handler, so its unchanged path must stay one
-  comparison (the Speed rule above).
-- **Buttons**: `TButton` (default), `Accent.TButton` (primary), `Tool.TButton`
-  (borderless, toolbar), `Compact.TButton` (dense rows). clam gives every
-  button an 11-character *minimum* width; `Tool.TButton` overrides it to 0.
-  **The map editor's toolbar has fifteen buttons in a row and overflowed off the
-  edge - hiding Help and the coordinate readout - when the default padding
-  grew;** it uses `Compact.TButton`, and the clipped-content test guards it.
-- **Scroll bars** are a slim thumb (`AutoScrollbar`), and *disabled* rather than
-  hidden when there is nothing to scroll: hiding changes the width the content
-  has, and wrapped text can then re-flow back and forth around the threshold.
+  with the same conventions (title over `====`, ALL-CAPS section names, `----`
+  rules, `!!`/`~` severity markers); `set_report` styles those and keeps a
+  monospace body so aligned tables still line up. Tk paints a tag's background
+  across its line *spacing*, so a rule is a 1px line with blank lines around it.
+  `ScrolledText` on a card sits in an inset rounded `field` card.
+- **A theme change recolours what is already on screen** (`styling.retheme`).
+- **Button rows wrap** (`widgets.flow`); `Compact.TButton` has a natural width.
+  An explicit `width=` on a widget still wins over the style (the Sprint window
+  uses `width=7`: three default buttons are ~110px each and do not fit it).
+- **Scroll bars** are a slim thumb (`AutoScrollbar`), *disabled* rather than
+  hidden when there is nothing to scroll (hiding changes the width the content
+  has, and wrapped text can re-flow back and forth around the threshold).
 - **Map editor** stays "fit to window" until the writer pans or zooms
-  (`_auto_fit`). The first map used to be fitted while the window was still
-  being built and opened as a thumbnail (about a quarter of the canvas width,
-  now about 96%).
-- Secondary text uses `text_dim` (at least 4.5:1) rather than the palette's
-  `dim` (about 2:1 on the warm panel); tree status colours are nudged only as
-  far as needed to stay legible on the sidebar (`ensure_contrast`).
-- **Not done, deliberately:** shadows, blur, rounded corners and smooth hover
-  transitions (not available without hand-drawn Canvas widgets); the check-box
-  indicator is clam's plain square with a cross; and `premium` is **not** the
-  default theme - `warm` is. Changing `DEFAULT_SETTINGS["theme"]` would only
-  affect new installs (an existing settings file persists its theme), and it was
-  left as the writer's decision.
-- The centre header's title label is squeezed by about 19px at the 900px
-  minimum window width (long scene titles are cut short). It predates this work
-  and is accepted; the clip detector reports it, and the test ignores it.
+  (`_auto_fit`). See "Map maker" for its layout.
+- **Corkboard cards** are drawn with `corkboard.rounded()` - a smooth polygon
+  through its corners - not `create_rectangle`, and use the theme tokens
+  (`styling.current_tokens()`), not the older `config.theme()` dict.
+- **`display_scale()`**: requested window sizes are for a 100% display and are
+  multiplied by it in `center_window`; the app is per-monitor-DPI aware.
+- **Not done, deliberately:** drop shadows and blur (a card's edge is a hairline;
+  the map's shadow is stacked rectangles), smooth hover transitions, and
+  `premium` as the default theme - `warm` still is (it would only affect new
+  installs; left as the writer's decision, which has not been made).
+- The centre header's title label is squeezed by about 19px at the 900px minimum
+  window width (long scene titles are cut short). It predates this work; the clip
+  detector reports it and the test ignores it.
+
+## Lessons that cost real time (2026-09-20)
+
+- **Look at a screenshot after every visual change, and time it.** The 64px tile
+  fix made the suite fast and, unseen, made every button 82px tall; the cause was
+  found only because a window was photographed. Speed *and* size regress silently.
+- **A suite that suddenly takes five times longer is a performance bug, not a slow
+  machine.** Profile with `cProfile` (it showed 100% of the time inside Tcl), then
+  bisect widget types inside the running app. A `ttk.Style` call at runtime also
+  costs ~2 s once (a global theme-changed pass over every widget) - do not
+  benchmark after calling one.
+- **Do not put regexes or backslashes in inline shell heredocs.** The command layer
+  here collapses `\` and once turned `\b` into a literal backspace character, so a
+  test silently matched nothing. Write patch scripts with the file tool and run
+  them.
+- **PowerShell has no heredocs**; use Bash for `python - <<'EOF'` and PowerShell for
+  Windows-native launching (`msedge --headless`, `cmd /c`).
+- **A Tk canvas never clips**, a `pack`ed child is silently unmapped when it does
+  not fit (grid overflows instead), and float coordinates round: all three have
+  produced "stray pixel" bugs.
+- **`hash()` of a string is salted per process.** Use `zlib.crc32` for anything
+  that must be the same tomorrow.
+- **Headless Edge/Chrome cannot be narrower than ~500px**; to test a phone layout
+  load the page in a 390px `<iframe>` from a wrapper file.
+- **Test claims against the code**: the site said "nine frameworks" in six places;
+  one test now compares them with `structures.framework_names()`.
 
 ## Releasing a new version
 
@@ -651,12 +723,15 @@ change it.
 1. Bump `APP_VERSION` in `novelforge/__init__.py` (the About box and the
    settings file read it). `web/package.json` has its own, unfinished version
    and is left alone.
-2. Run the whole test suite.
+2. Run the whole test suite, and `python tools/build_site.py --check`. If the
+   site's version or copy changed, run `python tools/build_site.py` and commit `site/`
+   (and `tools/site-root/`) with it.
 3. Commit, `git tag vX.Y.Z`, `git push origin main vX.Y.Z`.
 4. Create the Release for the tag. Follow `v1.0.0`'s shape: title
    "NovelForge X.Y" (`v1.0.0` is "NovelForge 1.0", `v2.1.0` is "NovelForge 2.1"),
    a short "What's new" written for a writer, a "Getting started" (install
-   Python 3.13+, download **Source code (zip)**, double-click `Write.bat`), an
+   Python 3.13+, download **Source code (zip)**, double-click `Write.bat` - it
+   installs python-docx and Pillow itself the first time), an
    "Upgrading" note (novels live in `Projects/` and preferences in
    `novelforge-settings.json`, both inside the install folder - copy them
    across), and no attached files - people take GitHub's own source zip.
@@ -704,12 +779,13 @@ npm run build     # static export into web/out/, committed to the repo -
 npm run test      # typecheck + lint + format check
 ```
 
-`site/` (the public website - no build step):
+`site/` (the public website - generated, then served as plain files):
 ```
-cd site
-python -m http.server 8000     # then open localhost:8000 in a browser
+python tools/build_site.py            # regenerate site/ (and tools/site-root/)
+python tools/build_site.py --check    # is it current?
+python -m http.server 8000 --directory site   # then open localhost:8000
 ```
 Deploys automatically on every push to `main` that touches `site/**`
 (`.github/workflows/deploy-pages.yml`) to
-https://sideeffects69.github.io/NovelForge/ - no manual deploy step, and
-nothing to run locally to publish a change.
+https://sideeffects69.github.io/NovelForge/ - no manual deploy step. `Write.bat`
+installs `python-docx` and `Pillow` on first run if they are missing.
