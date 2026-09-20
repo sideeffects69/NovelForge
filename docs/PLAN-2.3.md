@@ -37,17 +37,17 @@ The research is in `docs/research/`: `maps-fantasy.md`, `maps-other-types.md`, `
 - All agents share one usage quota. Waves are kept small; reports are written to disk as they go.
 - New behaviour gets tests, and each new test is proven able to fail. Rules in `CLAUDE.md` apply (speed, theme tokens, windows fit the screen, `.docx` is the truth).
 
-## Status board (updated 2026-09-20 17:00)
+## Status board (updated 2026-09-20 22:15)
 
-The four running builds were stopped by the shared usage limit (it resets 20:50); their work is committed as work-in-progress on their branches and they are resumable. Builds share one usage window, so waves are kept small.
+Four builds were stopped at about 16:40 by the shared usage limit (the window reset at 20:50). Their work was committed as work-in-progress on their branches and they were resumed at about 22:15. All builds share one usage window (about five hours), so waves are kept small.
 
 | Package | What | State |
 |---|---|---|
 | R1-R4 | Research: fantasy maps, other map types, Obsidian, website | done |
-| O1 | Go to, Connections panel + mention index, scene tags | Go to done; Connections in progress (paused) |
-| MK | mapkit.py geometry kit | module written; tests pending (paused) |
-| MC1 | Book-ready maps: scale fix, units, author-only layers, print export, legend, child-map fields, new-kind registry | scale fix mostly done; rest pending (paused) |
-| WS1 | Website foundation: docs machinery, design, search, tests, small fixes | step 1 done, step 2 in progress (paused; site build broken mid-rename on its branch) |
+| O1 | Go to, Connections panel + mention index, scene tags | Go to done; Connections in progress (resumed) |
+| MK | mapkit.py geometry kit | module written; tests pending (resumed) |
+| MC1 | Book-ready maps: scale fix, units, author-only layers, print export, legend, child-map fields, new-kind registry | scale fix mostly done; rest pending (resumed) |
+| WS1 | Website foundation: docs machinery, design, search, tests, small fixes | step 1 done, step 2 in progress (resumed; the site build was broken mid-rename on its branch) |
 | MC2 | World features: realms, rain shadow, names, travel and journeys | brief written; waits for MK, MC1 |
 | MC3 | Curved labels, coast roughening, cartouche | brief written; waits for MC1 |
 | GA/GB/GC | Generators: dungeon + floor plan; city + castle; sector + system + treasure | briefs written; wait for MK, MC1 |
