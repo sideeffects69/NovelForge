@@ -171,7 +171,12 @@ U_SHAPE = [(0.0, 0.0), (20.0, 0.0), (20.0, 20.0), (12.0, 20.0), (12.0, 6.0),
 # the same slab opening sideways
 C_SHAPE = [(0.0, 0.0), (20.0, 0.0), (20.0, 8.0), (8.0, 8.0), (8.0, 12.0),
            (20.0, 12.0), (20.0, 20.0), (0.0, 20.0)]
-# a star-shaped polygon whose plain mitred 8-unit offset crosses itself
+# a hollow square whose cavity opens to the outside through a slot 2 wide:
+# grow it by 1 or more and the two lips of the slot run through each other
+NARROW_OPENING = [(0.0, 0.0), (20.0, 0.0), (20.0, 9.0), (16.0, 9.0), (16.0, 4.0),
+                  (4.0, 4.0), (4.0, 16.0), (16.0, 16.0), (16.0, 11.0), (20.0, 11.0),
+                  (20.0, 20.0), (0.0, 20.0)]
+# a spiky star-shaped polygon: growing it by 8 bevels several sharp corners
 AWKWARD_STAR = [(-17.346365149607877, 95.11055179811805), (-51.04666262364646, 52.85758711870881),
                 (-69.58616963638612, 32.86853318161171), (-52.17358845957833, 1.7190966934132996),
                 (-48.27245543665825, -21.18855855288909), (-57.287894689410585, -80.25042940507106),
@@ -589,16 +594,34 @@ class Offsetting(unittest.TestCase):
             self.assertTrue(mk.polygon_contains_polygon(out, poly), (poly, d))
 
     def test_an_offset_that_would_cross_itself_is_caught(self):
-        # found by random search: growing this star by 8 with plain mitred
-        # corners folds it over itself, so the kit must not hand that back
-        out = mk.offset_polygon(AWKWARD_STAR, 7.994203412853194)
+        # the lips of the slot are 2 apart: grow by 0.9 and they still clear each
+        # other (the offset is kept as drawn), grow by 1 or more and the plain
+        # mitred outline runs through itself, so the kit must not hand that back
+        kept = mk.offset_polygon(NARROW_OPENING, 0.9)
+        self.assertEqual(len(kept), 12)
+        self.assertTrue(mk.polygon_is_simple(kept))
+        for d in (1.0, 1.5, 2.0, 3.0):
+            out = mk.offset_polygon(NARROW_OPENING, d)
+            self.assertTrue(mk.polygon_is_simple(out), d)
+            self.assertTrue(mk.polygon_contains_polygon(out, NARROW_OPENING), d)
+            self.assertGreater(shoelace(out), shoelace(NARROW_OPENING))
+
+    def test_bevelled_corners_are_not_mistaken_for_a_broken_offset(self):
+        # growing this spiky star by 8 bevels several sharp corners; the bevel
+        # cuts closer than 8 to the corner it replaces, which is fine, so the
+        # result must be the real offset and not the fallback around the hull
+        d = 7.994203412853194
+        out = mk.offset_polygon(AWKWARD_STAR, d)
         self.assertTrue(mk.polygon_is_simple(out))
         self.assertTrue(mk.polygon_contains_polygon(out, AWKWARD_STAR))
         for v in out:
-            self.assertGreaterEqual(mk.distance_to_boundary(v, AWKWARD_STAR), 7.99)
+            self.assertGreaterEqual(mk.distance_to_boundary(v, AWKWARD_STAR), d - 1e-6)
+        fallback = mk.offset_polygon(mk.convex_hull(AWKWARD_STAR), d)
+        self.assertLess(shoelace(out), 0.95 * shoelace(fallback))
+        self.assertGreater(len(out), 8)
 
     def test_slots_that_close_up_fall_back_to_a_safe_outline(self):
-        for shape in (DUMBBELL, C_SHAPE, U_SHAPE):
+        for shape in (DUMBBELL, C_SHAPE, U_SHAPE, NARROW_OPENING):
             for d in (0.5, 1.5, 2.5, 4.0, 8.0):
                 out = mk.offset_polygon(shape, d)
                 self.assertTrue(mk.polygon_is_simple(out), (shape, d))
@@ -1256,6 +1279,15 @@ class Treemap(unittest.TestCase):
             better += squares < strip
         self.assertGreater(tried, 50)
         self.assertGreaterEqual(better, tried - 2)
+
+    def test_equal_rooms_come_out_close_to_square(self):
+        # the point of "squarified": n equal rooms never degrade into long strips
+        for n in range(2, 21):
+            for w, h in ((100, 100), (120, 80), (90, 60), (60, 90), (150, 50)):
+                out = mk.squarify([("k%d" % i, w * h / n) for i in range(n)], (0, 0, w, h))
+                for r in out.values():
+                    rw, rh = r[2] - r[0], r[3] - r[1]
+                    self.assertLessEqual(max(rw / rh, rh / rw), 3.05, (n, w, h, r))
 
     def test_squarify_scales_requests_that_do_not_add_up(self):
         out = mk.squarify([("a", 1.0), ("b", 3.0)], (0, 0, 20, 10))       # 4 units -> 200

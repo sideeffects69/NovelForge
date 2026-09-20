@@ -502,10 +502,13 @@ def _offset_ok(orig: Sequence[Point], res: Sequence[Point], d: float,
     """Validate an offset of counter-clockwise ``orig`` by ``d`` > 0.
 
     The result must be a simple counter-clockwise polygon, on the right side
-    of the original (inside for an inset, containing it for an offset), and
-    nowhere closer to the original outline than ``d``. The closest approach
-    of two polygons that do not cross is always between a vertex of one and
-    an edge of the other, so testing those pairs is exact.
+    of the original (inside for an inset, containing it for an offset), never
+    touching the original outline, and with every vertex at least ``d`` from
+    it. For an inset the original's vertices must also stay ``d`` from the
+    result's edges (the closest approach of two polygons that do not cross is
+    always between a vertex of one and an edge of the other, so testing those
+    pairs is exact). That last test is skipped for an offset: a bevelled
+    corner cuts across closer than ``d`` to the corner it replaces, on purpose.
     """
     if len(res) < 3 or not polygon_is_simple(res) or polygon_area(res) <= 0.0:
         return False
@@ -523,9 +526,10 @@ def _offset_ok(orig: Sequence[Point], res: Sequence[Point], d: float,
     for v in res:
         if distance_to_boundary(v, orig) < d - tol:
             return False
-    for v in orig:
-        if distance_to_boundary(v, res) < d - tol:
-            return False
+    if inward:
+        for v in orig:
+            if distance_to_boundary(v, res) < d - tol:
+                return False
     return True
 
 
