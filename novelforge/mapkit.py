@@ -735,4 +735,136 @@ def bisect_polygon(poly: Sequence[Point], rng: random.Random, min_area: float,
     return out
 
 
+# ---------------------------------------------------------------------------
+# Points and cells
+# ---------------------------------------------------------------------------
+
+GOLDEN_ANGLE = math.pi * (3.0 - math.sqrt(5.0))         # about 2.39996 radians
+
+
+def sunflower(n: int, cx: float = 0.0, cy: float = 0.0, radius: float = 1.0,
+              phase: float = 0.0) -> List[Point]:
+    """``n`` points on a golden-angle (Vogel) spiral: even spacing with no
+    rows or columns, the classic seed layout for a town's wards.
+
+    Point 0 is the centre and later points spiral outward, so index order is
+    distance order; the last one lies exactly ``radius`` from the centre.
+    ``phase`` turns the whole spiral (radians).
+    """
+    if n <= 0:
+        return []
+    if n == 1:
+        return [(cx, cy)]
+    out: List[Point] = []
+    for i in range(n):
+        r = radius * math.sqrt(i / (n - 1))
+        a = phase + i * GOLDEN_ANGLE
+        out.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+    return out
+
+
+def voronoi_cells(points: Sequence[Point], bbox: Rect) -> List[Polygon]:
+    """The Voronoi cell of every site, clipped to ``bbox``.
+
+    ``result[i]`` is the region of the box nearer to ``points[i]`` than to any
+    other site: a convex counter-clockwise polygon, or ``[]`` if a site outside
+    the box has no part of the box. The cells tile the box exactly. Built by
+    cutting the box with each neighbour's bisector, nearest neighbours first,
+    stopping once no farther site can reach the cell, so it is close to linear
+    in practice; fine for a few hundred sites. Sites must be distinct (a
+    coincident site is ignored).
+    """
+    n = len(points)
+    box = rect_polygon(bbox)
+    cells: List[Polygon] = []
+    for i in range(n):
+        p = points[i]
+        px, py = p
+        others = sorted(((points[j][0] - px) ** 2 + (points[j][1] - py) ** 2, j)
+                        for j in range(n) if j != i)
+        cell: Polygon = box
+        reach2 = max((v[0] - px) ** 2 + (v[1] - py) ** 2 for v in cell)
+        for d2, j in others:
+            if d2 > 4.0 * reach2 * (1.0 + 1e-12):
+                break                    # this and every farther bisector misses the cell
+            if d2 <= 1e-18:
+                continue
+            qx, qy = points[j]
+            mx, my = (px + qx) / 2.0, (py + qy) / 2.0
+            cell = clip_halfplane(cell, (mx, my), (mx - (qy - py), my + (qx - px)), True)
+            if not cell:
+                break
+            reach2 = max((v[0] - px) ** 2 + (v[1] - py) ** 2 for v in cell)
+        cells.append(cell)
+    return cells
+
+
+def lloyd_relax(points: Sequence[Point], bbox: Rect,
+                iterations: int = 1) -> List[Point]:
+    """Lloyd's relaxation: move every site to the centroid of its Voronoi
+    cell, ``iterations`` times. Evens out the cells while keeping the layout
+    irregular; sites stay inside ``bbox``. The order and count are kept."""
+    pts: List[Point] = [(float(x), float(y)) for x, y in points]
+    for _ in range(max(0, iterations)):
+        cells = voronoi_cells(pts, bbox)
+        pts = [polygon_centroid(c) if c else p for c, p in zip(cells, pts)]
+    return pts
+
+
+def poisson_disc(rng: random.Random, bbox: Rect, min_dist: float,
+                 k: int = 30) -> List[Point]:
+    """Blue-noise points no closer than ``min_dist`` (Bridson's algorithm).
+
+    Fills the box (``x0 <= x < x1``, ``y0 <= y < y1``) so evenly that no
+    circle of radius ``2 * min_dist`` is empty, in a fixed order for a given
+    ``rng``. ``k`` is the number of candidates tried around each point before
+    it is retired (higher packs tighter and costs more).
+    """
+    x0, y0, x1, y1 = bbox
+    w, h = x1 - x0, y1 - y0
+    if min_dist <= 0.0:
+        raise ValueError("poisson_disc needs a positive min_dist")
+    if w <= 0.0 or h <= 0.0:
+        return []
+    cell = min_dist / math.sqrt(2.0)
+    gw, gh = int(w / cell) + 1, int(h / cell) + 1
+    grid = [-1] * (gw * gh)                       # each grid cell holds at most one point
+    pts: List[Point] = []
+    active: List[int] = []
+    limit2 = min_dist * min_dist
+
+    def add(p: Point) -> None:
+        grid[int((p[1] - y0) / cell) * gw + int((p[0] - x0) / cell)] = len(pts)
+        active.append(len(pts))
+        pts.append(p)
+
+    add((x0 + rng.random() * w, y0 + rng.random() * h))
+    while active:
+        slot = rng.randrange(len(active))
+        bx, by = pts[active[slot]]
+        for _ in range(k):
+            ang = rng.random() * 2.0 * math.pi
+            r = min_dist * (1.0 + rng.random())
+            p = (bx + r * math.cos(ang), by + r * math.sin(ang))
+            if not (x0 <= p[0] < x1 and y0 <= p[1] < y1):
+                continue
+            gx, gy = int((p[0] - x0) / cell), int((p[1] - y0) / cell)
+            clear = True
+            for yy in range(max(gy - 2, 0), min(gy + 3, gh)):
+                for xx in range(max(gx - 2, 0), min(gx + 3, gw)):
+                    j = grid[yy * gw + xx]
+                    if j >= 0 and (pts[j][0] - p[0]) ** 2 + (pts[j][1] - p[1]) ** 2 < limit2:
+                        clear = False
+                        break
+                if not clear:
+                    break
+            if clear:
+                add(p)
+                break
+        else:
+            active[slot] = active[-1]             # retire this point
+            active.pop()
+    return pts
+
+
 # @@APPEND@@

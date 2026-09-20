@@ -563,4 +563,287 @@ class Offsetting(unittest.TestCase):
         self.assertEqual(mk.offset_polygon(SQUARE, -6.0), [])
 
 
+def bbox_overlap(a, b):
+    ax0, ay0, ax1, ay1 = mk.polygon_bbox(a)
+    bx0, by0, bx1, by1 = mk.polygon_bbox(b)
+    return ax0 < bx1 and bx0 < ax1 and ay0 < by1 and by0 < ay1
+
+
+class Bisecting(unittest.TestCase):
+    def check_lots(self, poly, lots, min_area, min_angle=25.0):
+        """Everything a generator relies on, for convex input."""
+        self.assertAlmostEqual(sum(shoelace(l) for l in lots), shoelace(poly), places=5)
+        for lot in lots:
+            self.assertGreater(shoelace(lot), 0.0)                    # counter-clockwise
+            self.assertGreaterEqual(shoelace(lot), min_area - 1e-9)   # big enough
+            self.assertTrue(mk.is_convex(lot))
+            for v in lot:
+                self.assertTrue(inside_convex(poly, v, 1e-6))         # inside the block
+            self.assertGreaterEqual(min(interior_angles(lot)), min_angle - 1e-6)
+            self.assertGreaterEqual(mk.compactness(lot), 0.2)         # no slivers
+        for i in range(len(lots)):
+            for j in range(i + 1, len(lots)):
+                if bbox_overlap(lots[i], lots[j]):
+                    self.assertFalse(convex_overlap(lots[i], lots[j]))
+
+    def test_lots_tile_a_convex_polygon_without_overlap_slivers_or_sharp_corners(self):
+        rng = random.Random(20)
+        split = 0
+        for _ in range(120):
+            poly = random_convex(rng)
+            min_area = shoelace(poly) / rng.uniform(3, 60)
+            lots = mk.bisect_polygon(poly, rng, min_area)
+            self.check_lots(poly, lots, min_area)
+            split += len(lots) > 1
+        self.assertGreater(split, 110)                # nearly every one really was cut
+
+    def test_a_stricter_minimum_angle_is_honoured(self):
+        rng = random.Random(21)
+        for _ in range(100):
+            poly = random_convex(rng)
+            min_area = shoelace(poly) / rng.uniform(4, 30)
+            lots = mk.bisect_polygon(poly, rng, min_area, min_angle_deg=60.0, jitter=0.4)
+            self.check_lots(poly, lots, min_area, min_angle=60.0)
+
+    def test_a_square_block_is_not_cut_into_triangles(self):
+        block = [(0.0, 0.0), (200.0, 0.0), (200.0, 140.0), (0.0, 140.0)]
+        lots = []
+        for seed in range(40):
+            lots += mk.bisect_polygon(block, random.Random(seed), 300.0)
+        self.assertGreater(len(lots), 2000)
+        triangles = sum(1 for l in lots if len(l) == 3)
+        self.assertLessEqual(triangles, len(lots) // 100)       # the city article's complaint
+        self.assertGreaterEqual(min(min(interior_angles(l)) for l in lots), 25.0 - 1e-6)
+
+    def test_lots_come_out_between_the_minimum_and_about_three_times_it(self):
+        block = regular(8, 300.0)
+        min_area = 1500.0
+        lots = mk.bisect_polygon(block, random.Random(3), min_area)
+        areas = [shoelace(l) for l in lots]
+        self.assertGreaterEqual(min(areas), min_area - 1e-9)
+        self.assertLessEqual(max(areas), 3.5 * min_area)
+
+    def test_concave_polygons_are_tiled_too(self):
+        rng = random.Random(22)
+        cut = 0
+        for _ in range(100):
+            poly = random_star(rng)
+            min_area = shoelace(poly) / rng.uniform(3, 25)
+            lots = mk.bisect_polygon(poly, rng, min_area)
+            self.assertAlmostEqual(sum(shoelace(l) for l in lots), shoelace(poly), places=5)
+            for lot in lots:
+                self.assertTrue(mk.polygon_is_simple(lot))
+                self.assertGreaterEqual(shoelace(lot), min_area - 1e-9)
+                self.assertTrue(mk.polygon_contains_polygon(poly, lot))
+            # every sample point of the polygon belongs to exactly one lot
+            for _ in range(15):
+                p = (rng.uniform(-100, 100), rng.uniform(-100, 100))
+                if not mk.point_in_polygon(p, poly):
+                    continue
+                if min(mk.distance_to_boundary(p, l) for l in lots) < 1e-6:
+                    continue
+                self.assertEqual(sum(mk.point_in_polygon(p, l) for l in lots), 1)
+            cut += len(lots) > 1
+        self.assertGreater(cut, 85)
+
+    def test_the_l_shape_is_split_into_valid_lots(self):
+        for seed in range(30):
+            lots = mk.bisect_polygon(L_SHAPE, random.Random(seed), 20.0)
+            self.assertAlmostEqual(sum(shoelace(l) for l in lots), 300.0, places=6)
+            self.assertGreater(len(lots), 4)
+            for lot in lots:
+                self.assertTrue(mk.polygon_is_simple(lot))
+                self.assertTrue(mk.polygon_contains_polygon(L_SHAPE, lot))
+                # no lot reaches into the empty notch of the L
+                self.assertFalse(mk.point_in_polygon((15.0, 15.0), lot))
+
+    def test_a_polygon_smaller_than_the_minimum_is_one_lot(self):
+        lots = mk.bisect_polygon(SQUARE, random.Random(1), 500.0)
+        self.assertEqual(lots, [SQUARE])
+        self.assertEqual(mk.bisect_polygon([], random.Random(1), 5.0), [])
+
+    def test_the_same_rng_gives_the_same_lots_and_another_gives_others(self):
+        poly = regular(7, 120.0)
+        a = mk.bisect_polygon(poly, random.Random(5), 400.0)
+        b = mk.bisect_polygon(poly, random.Random(5), 400.0)
+        c = mk.bisect_polygon(poly, random.Random(6), 400.0)
+        self.assertEqual(a, b)
+        self.assertNotEqual(a, c)
+
+    def test_the_input_is_not_changed(self):
+        poly = regular(6, 90.0)
+        before = list(poly)
+        mk.bisect_polygon(poly, random.Random(1), 300.0)
+        self.assertEqual(poly, before)
+
+    def test_bisecting_a_large_polygon_is_fast(self):
+        poly = regular(8, 300.0)
+        best = 1e9
+        for _ in range(3):
+            t = time.perf_counter()
+            lots = mk.bisect_polygon(poly, random.Random(1), 1000.0)
+            best = min(best, time.perf_counter() - t)
+        self.assertGreater(len(lots), 150)
+        self.assertLess(best, 0.05)
+
+
+# ---------------------------------------------------------------------------
+# Points and cells
+# ---------------------------------------------------------------------------
+
+BOX = (0.0, 0.0, 200.0, 140.0)
+SMALL = (0.0, 0.0, 100.0, 70.0)
+
+
+def random_sites(rng, n, box=BOX, margin=5.0):
+    """n well-separated random sites (rejection sampling, so no near-duplicates)."""
+    sites = []
+    while len(sites) < n:
+        p = (rng.uniform(box[0] + margin, box[2] - margin),
+             rng.uniform(box[1] + margin, box[3] - margin))
+        if all(mk.dist(p, q) > 1.0 for q in sites):
+            sites.append(p)
+    return sites
+
+
+class PointsAndCells(unittest.TestCase):
+    def test_sunflower_layout(self):
+        pts = mk.sunflower(30, 50.0, -20.0, 40.0)
+        self.assertEqual(len(pts), 30)
+        self.assertEqual(pts[0], (50.0, -20.0))                        # centre first
+        self.assertAlmostEqual(mk.dist(pts[-1], (50.0, -20.0)), 40.0)  # rim last
+        radii = [mk.dist(p, (50.0, -20.0)) for p in pts]
+        self.assertEqual(radii, sorted(radii))                         # index = distance order
+        self.assertLessEqual(max(radii), 40.0 + 1e-9)
+        # no two points on top of each other: spacing is about radius / sqrt(n)
+        closest = min(mk.dist(a, b) for i, a in enumerate(pts) for b in pts[:i])
+        self.assertGreater(closest, 0.3 * 40.0 / math.sqrt(30))
+        self.assertEqual(mk.sunflower(0), [])
+        self.assertEqual(mk.sunflower(1, 3, 4), [(3, 4)])
+        self.assertEqual(mk.sunflower(30, 50.0, -20.0, 40.0), pts)      # deterministic
+        self.assertNotEqual(mk.sunflower(30, 50.0, -20.0, 40.0, phase=1.0), pts)
+
+    def test_sunflower_stays_evenly_spread_for_any_count(self):
+        for n in range(2, 121, 7):
+            pts = mk.sunflower(n, 0, 0, 100.0)
+            closest = min(mk.dist(a, b) for i, a in enumerate(pts) for b in pts[:i])
+            self.assertGreater(closest, 0.25 * 100.0 / math.sqrt(n))
+
+    def test_voronoi_cells_tile_the_box_and_hold_their_sites(self):
+        rng = random.Random(30)
+        box_area = mk.rect_area(BOX)
+        for _ in range(120):
+            sites = random_sites(rng, rng.randint(2, 25))
+            cells = mk.voronoi_cells(sites, BOX)
+            self.assertEqual(len(cells), len(sites))
+            self.assertAlmostEqual(sum(shoelace(c) for c in cells), box_area, places=4)
+            for site, cell in zip(sites, cells):
+                self.assertGreater(shoelace(cell), 0.0)                 # counter-clockwise
+                self.assertTrue(mk.is_convex(cell))
+                self.assertTrue(inside_convex(cell, site))              # holds its own site
+                for v in cell:
+                    self.assertTrue(mk.rect_contains(BOX, v, 1e-6))
+
+    def test_every_point_belongs_to_the_cell_of_its_nearest_site(self):
+        rng = random.Random(31)
+        tested = 0
+        for _ in range(100):
+            sites = random_sites(rng, rng.randint(3, 20))
+            cells = mk.voronoi_cells(sites, BOX)
+            for _ in range(15):
+                p = (rng.uniform(0, 200), rng.uniform(0, 140))
+                ranked = sorted(range(len(sites)), key=lambda i: mk.dist(p, sites[i]))
+                if mk.dist(p, sites[ranked[1]]) - mk.dist(p, sites[ranked[0]]) < 1e-6:
+                    continue                                         # a tie: on a cell edge
+                self.assertTrue(inside_convex(cells[ranked[0]], p, tol=1e-6))
+                self.assertFalse(inside_convex(cells[ranked[1]], p, tol=-1e-7))
+                tested += 1
+        self.assertGreater(tested, 1300)
+
+    def test_voronoi_copes_with_a_regular_grid_of_sites(self):
+        sites = [(x * 20.0 + 10.0, y * 20.0 + 10.0) for x in range(10) for y in range(7)]
+        cells = mk.voronoi_cells(sites, BOX)
+        for cell in cells:
+            self.assertAlmostEqual(shoelace(cell), 400.0, places=6)     # 20 x 20 squares
+            self.assertEqual(len(cell), 4)
+
+    def test_a_site_outside_the_box_may_have_no_cell(self):
+        cells = mk.voronoi_cells([(50.0, 50.0), (150.0, 50.0), (1000.0, 1000.0)], BOX)
+        self.assertEqual(cells[2], [])
+        self.assertAlmostEqual(shoelace(cells[0]) + shoelace(cells[1]),
+                               mk.rect_area(BOX), places=5)
+
+    def test_voronoi_of_forty_sites_is_fast(self):
+        sites = random_sites(random.Random(32), 40)
+        best = 1e9
+        for _ in range(3):
+            t = time.perf_counter()
+            mk.voronoi_cells(sites, BOX)
+            best = min(best, time.perf_counter() - t)
+        self.assertLess(best, 0.1)
+
+    def test_lloyd_relaxation_evens_out_the_cells(self):
+        rng = random.Random(33)
+        better = 0
+        trials = 60
+        for _ in range(trials):
+            sites = random_sites(rng, rng.randint(8, 25))
+            relaxed = mk.lloyd_relax(sites, BOX, iterations=4)
+            self.assertEqual(len(relaxed), len(sites))
+            for p in relaxed:
+                self.assertTrue(mk.rect_contains(BOX, p))
+
+            def spread(pts):
+                areas = [shoelace(c) for c in mk.voronoi_cells(pts, BOX)]
+                mean = sum(areas) / len(areas)
+                return math.sqrt(sum((a - mean) ** 2 for a in areas) / len(areas))
+
+            better += spread(relaxed) < spread(sites)
+        self.assertGreaterEqual(better, trials - 3)
+
+    def test_lloyd_relaxation_is_deterministic_and_zero_iterations_change_nothing(self):
+        sites = random_sites(random.Random(34), 12)
+        self.assertEqual(mk.lloyd_relax(sites, BOX, 3), mk.lloyd_relax(sites, BOX, 3))
+        self.assertEqual(mk.lloyd_relax(sites, BOX, 0), sites)
+
+    def test_poisson_disc_respects_the_minimum_distance_and_the_box(self):
+        rng = random.Random(35)
+        for _ in range(120):
+            r = rng.uniform(5.0, 20.0)
+            pts = mk.poisson_disc(rng, SMALL, r)
+            self.assertGreater(len(pts), 3)
+            for p in pts:
+                self.assertTrue(SMALL[0] <= p[0] < SMALL[2] and SMALL[1] <= p[1] < SMALL[3])
+            ordered = sorted(pts)               # sweep by x: only near neighbours matter
+            for i, a in enumerate(ordered):
+                for b in ordered[i + 1:]:
+                    if b[0] - a[0] >= r:
+                        break
+                    self.assertGreaterEqual(mk.dist(a, b), r - 1e-9)
+
+    def test_poisson_disc_fills_the_box_without_holes(self):
+        rng = random.Random(36)
+        for _ in range(40):
+            r = rng.uniform(6.0, 14.0)
+            pts = mk.poisson_disc(rng, SMALL, r)
+            # blue noise packs about one point per 1.5 r^2 (edge effects aside)
+            self.assertGreater(len(pts), 0.35 * mk.rect_area(SMALL) / (r * r))
+            for _ in range(60):
+                probe = (rng.uniform(0, 100), rng.uniform(0, 70))
+                self.assertLess(min(mk.dist(probe, p) for p in pts), 2.0 * r)
+
+    def test_poisson_disc_is_deterministic(self):
+        a = mk.poisson_disc(random.Random(7), BOX, 12.0)
+        b = mk.poisson_disc(random.Random(7), BOX, 12.0)
+        c = mk.poisson_disc(random.Random(8), BOX, 12.0)
+        self.assertEqual(a, b)
+        self.assertNotEqual(a, c)
+
+    def test_poisson_disc_edge_cases(self):
+        self.assertEqual(mk.poisson_disc(random.Random(1), (0, 0, 0, 50), 5.0), [])
+        with self.assertRaises(ValueError):
+            mk.poisson_disc(random.Random(1), BOX, 0.0)
+        self.assertEqual(len(mk.poisson_disc(random.Random(1), (0, 0, 3, 3), 50.0)), 1)
+
+
 # @@TESTS@@
