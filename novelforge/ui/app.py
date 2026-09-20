@@ -54,6 +54,7 @@ from ..model import (
 )
 from ..project import Project, ProjectError, list_projects
 from . import dialogs, styling
+from .goto import remember as _remember_visit
 from .writing import WritingIntelligence
 from .widgets import (
     AutoScrollbar,
@@ -331,6 +332,8 @@ class App(WritingIntelligence, tk.Tk):
         self.edit_menu.add_command(label="Redo", accelerator="Ctrl+Y",
                                    command=self.cmd_redo)
         self.edit_menu.add_separator()
+        self.edit_menu.add_command(label="Go to...", accelerator="Ctrl+P",
+                                   command=self.cmd_goto)
         # Find and Replace used to live in Tools, which is where every other
         # app on the writer's machine puts everything BUT find/replace - Word,
         # a browser, an IDE all put it in Edit. Moving it here is one less
@@ -857,6 +860,7 @@ class App(WritingIntelligence, tk.Tk):
             "<Control-Alt-z>": lambda _e: self.cmd_undo(),
             "<Control-Alt-y>": lambda _e: self.cmd_redo(),
             "<Control-Shift-P>": lambda _e: self.cmd_palette(),
+            "<Control-p>": lambda _e: self.cmd_goto(),
             "<Control-k>": lambda _e: self.cmd_corkboard(),
             "<Control-g>": lambda _e: self.cmd_story_graph(),
             "<Control-i>": lambda _e: self.cmd_idea_inbox(),
@@ -880,6 +884,11 @@ class App(WritingIntelligence, tk.Tk):
         self.shortcuts = bindings
         for sequence, handler in bindings.items():
             self.bind_all(sequence, handler)
+        # Tk's own Text binding for Ctrl+P is "move the caret up a line" (emacs
+        # style; not present on every platform). Go to must win in the editor, and
+        # the caret must not also move, so the class binding is replaced by one that
+        # opens Go to and stops there.
+        self.bind_class("Text", "<Control-p>", lambda _e: self.cmd_goto() or "break")
 
     # ==================================================================
     # Startup
@@ -1192,7 +1201,24 @@ class App(WritingIntelligence, tk.Tk):
             return
         self.commit_all()
         self.selection_kind, self.selection_id = kind, ident
+        if kind and ident:
+            _remember_visit(self, f"{kind}:{ident}")
         self.render_selection()
+
+    def goto(self, kind: str, ident: str) -> bool:
+        """
+        Show a binder item: what a Go to row or a Connections row does.
+
+        Selecting a row through the tree only *queues* the selection event, so the
+        view is brought up to date here rather than a moment later.
+        """
+        iid = f"{kind}:{ident}"
+        if not (self.project and self.tree.exists(iid)):
+            return False
+        self.tree.selection_set(iid)
+        self.tree.see(iid)
+        self.on_tree_select()
+        return True
 
     def on_tree_double(self, _event=None) -> None:
         kind, ident = self._selected_key()
@@ -3770,12 +3796,34 @@ class App(WritingIntelligence, tk.Tk):
                 pass
         self._palette = CommandPalette(self)
 
+    def cmd_goto(self) -> None:
+        """Ctrl+P: jump to any scene, character, note, place or idea by typing."""
+        if not self.require_project():
+            return
+        from .goto import GoTo
+
+        existing = getattr(self, "_goto", None)
+        if existing is not None:
+            try:
+                if existing.winfo_exists():
+                    existing.close()
+                    self._goto = None
+                    return
+            except tk.TclError:
+                pass
+        self._goto = GoTo(self)
+
     def cmd_shortcuts(self) -> None:
         body = """KEYBOARD SHORTCUTS
 ==================
 
 FIND ANY COMMAND
   Ctrl+Shift+P      Command palette - type what you want, press Enter
+
+GO ANYWHERE
+  Ctrl+P            Go to - type part of a scene, chapter, character
+                    (or alias), note, event, map or idea; Enter goes
+                    there. Empty box: the places you were last.
 
 FILE
   Ctrl+S            Save
