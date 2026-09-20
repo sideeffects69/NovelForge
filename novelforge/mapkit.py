@@ -867,4 +867,268 @@ def poisson_disc(rng: random.Random, bbox: Rect, min_dist: float,
     return pts
 
 
+# ---------------------------------------------------------------------------
+# Graphs
+# ---------------------------------------------------------------------------
+#
+# An unweighted graph is {node: [neighbour, ...]}; a weighted one is
+# {node: [(neighbour, weight), ...]}. Both are undirected by convention (list
+# each edge under both ends; ``edges_to_adj`` and ``edges_to_wadj`` do that),
+# though nothing here breaks on a directed graph except ``farthest_pair`` and
+# ``connected_components``, which assume the two-way form.
+
+def edges_to_adj(edges: Iterable[Sequence], nodes: Optional[Iterable[Hashable]] = None
+                 ) -> Dict[Hashable, List[Hashable]]:
+    """Unweighted two-way adjacency from ``(a, b)`` edges (a third item, such
+    as a weight, is ignored). ``nodes`` adds nodes that have no edge."""
+    adj: Dict[Hashable, List[Hashable]] = {}
+    if nodes is not None:
+        for n in nodes:
+            adj.setdefault(n, [])
+    for e in edges:
+        adj.setdefault(e[0], []).append(e[1])
+        adj.setdefault(e[1], []).append(e[0])
+    return adj
+
+
+def edges_to_wadj(edges: Iterable[Sequence],
+                  weight: Optional[Callable[[Hashable, Hashable], float]] = None,
+                  nodes: Optional[Iterable[Hashable]] = None
+                  ) -> Dict[Hashable, List[Tuple[Hashable, float]]]:
+    """Weighted two-way adjacency from ``(a, b)`` or ``(a, b, w)`` edges.
+    An edge without ``w`` costs ``weight(a, b)`` if given, else 1.0."""
+    adj: Dict[Hashable, List[Tuple[Hashable, float]]] = {}
+    if nodes is not None:
+        for n in nodes:
+            adj.setdefault(n, [])
+    for e in edges:
+        a, b = e[0], e[1]
+        w = float(e[2]) if len(e) > 2 else (float(weight(a, b)) if weight else 1.0)
+        adj.setdefault(a, []).append((b, w))
+        adj.setdefault(b, []).append((a, w))
+    return adj
+
+
+def dijkstra(adj: Mapping[Hashable, Iterable[Tuple[Hashable, float]]],
+             source: Hashable, target: Optional[Hashable] = None
+             ) -> Tuple[Dict[Hashable, float], Dict[Hashable, Hashable]]:
+    """Shortest paths from ``source`` over a weighted graph.
+
+    Returns ``(dist, prev)``: ``dist[n]`` is the cost to reach ``n`` (absent if
+    unreachable) and ``prev[n]`` the node before it on the way back to the
+    source (``unwind_path`` turns that into a route). With ``target`` it stops
+    as soon as that node is settled. Weights must not be negative. Ties are
+    broken by discovery order, so the result is deterministic.
+    """
+    best: Dict[Hashable, float] = {source: 0.0}
+    prev: Dict[Hashable, Hashable] = {}
+    heap: List[Tuple[float, int, Hashable]] = [(0.0, 0, source)]
+    tick = 1
+    settled = set()
+    while heap:
+        d, _, u = heapq.heappop(heap)
+        if u in settled:
+            continue
+        settled.add(u)
+        if u == target:
+            break
+        for v, w in adj.get(u, ()):
+            if w < 0.0:
+                raise ValueError("dijkstra does not accept negative weights")
+            nd = d + w
+            if v not in best or nd < best[v]:
+                best[v] = nd
+                prev[v] = u
+                heapq.heappush(heap, (nd, tick, v))
+                tick += 1
+    return best, prev
+
+
+def unwind_path(prev: Mapping[Hashable, Hashable], target: Hashable) -> List[Hashable]:
+    """The route ``source -> ... -> target`` from a ``dijkstra`` ``prev`` map
+    (just ``[target]`` if the target is the source or unreachable)."""
+    path = [target]
+    while path[-1] in prev:
+        path.append(prev[path[-1]])
+    path.reverse()
+    return path
+
+
+def shortest_path(adj: Mapping[Hashable, Iterable[Tuple[Hashable, float]]],
+                  source: Hashable, target: Hashable) -> Optional[List[Hashable]]:
+    """The cheapest route from ``source`` to ``target``, or None if there is none."""
+    dist_, prev = dijkstra(adj, source, target)
+    return unwind_path(prev, target) if target in dist_ else None
+
+
+def multi_source_dijkstra(adj: Mapping[Hashable, Iterable[Tuple[Hashable, float]]],
+                          sources: Sequence[Hashable]
+                          ) -> Tuple[Dict[Hashable, float], Dict[Hashable, Hashable]]:
+    """Cheapest cost from the nearest of several sources, and which one.
+
+    Returns ``(dist, owner)``: ``owner[n]`` is the source that reaches ``n``
+    most cheaply (the earlier source in ``sources`` wins a tie). Ownership
+    regions are what make faction borders and city wards: a border lies where
+    the owner changes.
+    """
+    best: Dict[Hashable, Tuple[float, int]] = {}
+    heap: List[Tuple[float, int, int, Hashable]] = []
+    tick = 0
+    for idx, s in enumerate(sources):
+        if s not in best:
+            best[s] = (0.0, idx)
+            heapq.heappush(heap, (0.0, idx, tick, s))
+            tick += 1
+    while heap:
+        d, idx, _, u = heapq.heappop(heap)
+        if best[u] != (d, idx):
+            continue                                  # a better claim arrived later
+        for v, w in adj.get(u, ()):
+            if w < 0.0:
+                raise ValueError("multi_source_dijkstra does not accept negative weights")
+            cand = (d + w, idx)
+            if v not in best or cand < best[v]:
+                best[v] = cand
+                heapq.heappush(heap, (cand[0], idx, tick, v))
+                tick += 1
+    return ({n: b[0] for n, b in best.items()},
+            {n: sources[b[1]] for n, b in best.items()})
+
+
+def bfs_reachable(adj: Mapping[Hashable, Iterable[Hashable]],
+                  source: Hashable) -> Dict[Hashable, int]:
+    """Every node reachable from ``source`` mapped to its hop count (the
+    source itself is 0). Iterates in breadth-first order; ``n in result``
+    answers "is it reachable"."""
+    hops: Dict[Hashable, int] = {source: 0}
+    queue = deque([source])
+    while queue:
+        u = queue.popleft()
+        for v in adj.get(u, ()):
+            if v not in hops:
+                hops[v] = hops[u] + 1
+                queue.append(v)
+    return hops
+
+
+def connected_components(adj: Mapping[Hashable, Iterable[Hashable]]
+                         ) -> List[List[Hashable]]:
+    """The connected pieces of a two-way graph, each as a list of nodes in
+    breadth-first order, ordered by the first node of each in ``adj``. Nodes
+    that only appear as somebody's neighbour count too."""
+    seen = set()
+    out: List[List[Hashable]] = []
+    order = list(adj)
+    for nbrs in adj.values():
+        order.extend(nbrs)
+    for start in order:
+        if start in seen:
+            continue
+        comp = list(bfs_reachable(adj, start))
+        seen.update(comp)
+        out.append(comp)
+    return out
+
+
+def farthest_pair(adj: Mapping[Hashable, Iterable[Hashable]]
+                  ) -> Optional[Tuple[Hashable, Hashable]]:
+    """Two nodes as many hops apart as possible: a dungeon's entrance and
+    exit, the two ends of a journey. Exact (a breadth-first search from every
+    node) for up to 250 nodes, else the two-sweep estimate, which is exact on
+    trees. For a disconnected graph only nodes in the same piece are paired.
+    Returns ``(a, b)`` or None for an empty graph; ``a == b`` for one node.
+    Ties go to the pair found first, so the answer is deterministic.
+    """
+    nodes: List[Hashable] = []
+    known = set()
+    for n in adj:
+        for m in (n, *adj[n]):
+            if m not in known:
+                known.add(m)
+                nodes.append(m)
+    if not nodes:
+        return None
+    if len(nodes) > 250:
+        far = list(bfs_reachable(adj, nodes[0]))[-1]
+        return far, list(bfs_reachable(adj, far))[-1]
+    best_pair: Tuple[Hashable, Hashable] = (nodes[0], nodes[0])
+    best_hops = -1
+    for a in nodes:
+        for b, h in bfs_reachable(adj, a).items():
+            if h > best_hops:
+                best_hops, best_pair = h, (a, b)
+    return best_pair
+
+
+def mst(points: Sequence[Point],
+        metric: Optional[Callable[[Point, Point], float]] = None
+        ) -> List[Tuple[int, int]]:
+    """Minimum spanning tree of the complete graph on ``points`` (Prim, O(n^2)).
+
+    Returns ``n - 1`` edges as ``(i, j)`` index pairs with ``i < j`` in the
+    order they join the tree, starting from point 0; ties go to the lower
+    index. ``metric(p, q)`` replaces the straight-line distance (for lane
+    costs or hex distance). The tree is what makes a level or a sector
+    connected by construction.
+    """
+    n = len(points)
+    if n < 2:
+        return []
+    d = metric or dist
+    in_tree = [False] * n
+    best = [math.inf] * n
+    parent = [-1] * n
+    best[0] = 0.0
+    edges: List[Tuple[int, int]] = []
+    for _ in range(n):
+        u, ub = -1, math.inf
+        for v in range(n):
+            if not in_tree[v] and best[v] < ub:
+                u, ub = v, best[v]
+        in_tree[u] = True
+        if parent[u] >= 0:
+            edges.append((min(parent[u], u), max(parent[u], u)))
+        for v in range(n):
+            if not in_tree[v]:
+                w = d(points[u], points[v])
+                if w < best[v]:
+                    best[v], parent[v] = w, u
+    return edges
+
+
+def gabriel_edges(points: Sequence[Point]) -> List[Tuple[int, int]]:
+    """The Gabriel graph: ``(i, j)`` (``i < j``) is an edge when no other
+    point lies inside the circle whose diameter is the segment between them.
+
+    A sparse, natural-looking network that always contains the minimum
+    spanning tree, so it is a good pool of "extra lanes / loops" to draw from
+    once the tree guarantees connection. A point exactly on the circle does
+    not block the edge.
+    """
+    n = len(points)
+    edges: List[Tuple[int, int]] = []
+    for i in range(n):
+        pi = points[i]
+        near = sorted(((points[k][0] - pi[0]) ** 2 + (points[k][1] - pi[1]) ** 2, k)
+                      for k in range(n) if k != i)
+        for d2ij, j in near:
+            if j < i:
+                continue
+            pj = points[j]
+            slack = 1e-9 * max(1.0, d2ij)
+            clear = True
+            for d2ik, k in near:
+                if d2ik >= d2ij:
+                    break                     # only points nearer to i than j can be inside
+                if k == j:
+                    continue
+                pk = points[k]
+                if (pi[0] - pk[0]) * (pj[0] - pk[0]) + (pi[1] - pk[1]) * (pj[1] - pk[1]) < -slack:
+                    clear = False
+                    break
+            if clear:
+                edges.append((i, j))
+    return edges
+
+
 # @@APPEND@@

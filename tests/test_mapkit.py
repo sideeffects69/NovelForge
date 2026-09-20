@@ -846,4 +846,219 @@ class PointsAndCells(unittest.TestCase):
         self.assertEqual(len(mk.poisson_disc(random.Random(1), (0, 0, 3, 3), 50.0)), 1)
 
 
+# ---------------------------------------------------------------------------
+# Graphs
+# ---------------------------------------------------------------------------
+
+def kruskal_weight(points):
+    """Weight of a minimum spanning tree, computed a different way (Kruskal)."""
+    n = len(points)
+    parent = list(range(n))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    total = 0.0
+    for w, i, j in sorted((mk.dist(points[i], points[j]), i, j)
+                          for i in range(n) for j in range(i + 1, n)):
+        ri, rj = find(i), find(j)
+        if ri != rj:
+            parent[ri] = rj
+            total += w
+    return total
+
+
+def random_graph(rng, n, extra, weighted=True, connected=True):
+    """A random undirected graph as a list of (a, b, w) edges over 0..n-1."""
+    edges = {}
+    if connected:
+        for v in range(1, n):
+            edges[(rng.randrange(v), v)] = rng.uniform(0.5, 9.0)
+    for _ in range(extra):
+        a, b = rng.randrange(n), rng.randrange(n)
+        if a != b:
+            edges[(min(a, b), max(a, b))] = rng.uniform(0.5, 9.0)
+    return [(a, b, w if weighted else 1.0) for (a, b), w in edges.items()]
+
+
+def floyd(n, edges):
+    inf = float("inf")
+    d = [[0.0 if i == j else inf for j in range(n)] for i in range(n)]
+    for a, b, w in edges:
+        d[a][b] = min(d[a][b], w)
+        d[b][a] = min(d[b][a], w)
+    for k in range(n):
+        for i in range(n):
+            for j in range(n):
+                if d[i][k] + d[k][j] < d[i][j]:
+                    d[i][j] = d[i][k] + d[k][j]
+    return d
+
+
+class Graphs(unittest.TestCase):
+    def test_mst_is_a_connected_tree_of_minimum_weight(self):
+        rng = random.Random(40)
+        for _ in range(120):
+            pts = random_sites(rng, rng.randint(2, 30))
+            edges = mk.mst(pts)
+            self.assertEqual(len(edges), len(pts) - 1)
+            self.assertEqual(len(set(edges)), len(edges))
+            self.assertTrue(all(i < j for i, j in edges))
+            adj = mk.edges_to_adj(edges, nodes=range(len(pts)))
+            self.assertEqual(len(mk.bfs_reachable(adj, 0)), len(pts))       # connected
+            self.assertAlmostEqual(sum(mk.dist(pts[i], pts[j]) for i, j in edges),
+                                   kruskal_weight(pts), places=6)           # minimal
+
+    def test_mst_edge_cases_and_custom_metric(self):
+        self.assertEqual(mk.mst([]), [])
+        self.assertEqual(mk.mst([(1.0, 1.0)]), [])
+        self.assertEqual(mk.mst([(0.0, 0.0), (3.0, 4.0)]), [(0, 1)])
+        # with a metric that only looks at x, the tree follows the x order
+        pts = [(5.0, 0.0), (1.0, 50.0), (3.0, -20.0), (9.0, 7.0)]
+        edges = mk.mst(pts, metric=lambda a, b: abs(a[0] - b[0]))
+        self.assertEqual(sorted(edges), sorted([(1, 2), (0, 2), (0, 3)]))
+
+    def test_gabriel_edges_match_a_brute_force_definition(self):
+        rng = random.Random(41)
+        for _ in range(100):
+            pts = random_sites(rng, rng.randint(3, 20))
+            want = set()
+            for i in range(len(pts)):
+                for j in range(i + 1, len(pts)):
+                    mx, my = (pts[i][0] + pts[j][0]) / 2, (pts[i][1] + pts[j][1]) / 2
+                    r = mk.dist(pts[i], pts[j]) / 2
+                    if all(mk.dist((mx, my), pts[k]) >= r - 1e-9
+                           for k in range(len(pts)) if k not in (i, j)):
+                        want.add((i, j))
+            self.assertEqual(set(mk.gabriel_edges(pts)), want)
+
+    def test_the_gabriel_graph_contains_the_minimum_spanning_tree(self):
+        rng = random.Random(42)
+        for _ in range(120):
+            pts = random_sites(rng, rng.randint(2, 30))
+            self.assertTrue(set(mk.mst(pts)) <= set(mk.gabriel_edges(pts)))
+
+    def test_gabriel_graph_on_a_grid_keeps_points_on_the_circle(self):
+        pts = [(x * 10.0, y * 10.0) for x in range(3) for y in range(3)]
+        edges = set(mk.gabriel_edges(pts))
+        self.assertIn((0, 1), edges)          # neighbours in a row
+        self.assertIn((0, 3), edges)          # neighbours in a column
+        self.assertNotIn((0, 2), edges)       # (0, 10) is at the centre of their circle
+        self.assertIn((0, 4), edges)          # diagonal: the other two corners are on the circle
+
+    def test_gabriel_of_sixty_points_is_fast(self):
+        pts = random_sites(random.Random(43), 60)
+        t = time.perf_counter()
+        edges = mk.gabriel_edges(pts)
+        self.assertLess(time.perf_counter() - t, 0.15)
+        self.assertGreaterEqual(len(edges), 59)
+
+    def test_dijkstra_matches_floyd_warshall_and_paths_add_up(self):
+        rng = random.Random(44)
+        for _ in range(120):
+            n = rng.randint(2, 16)
+            edges = random_graph(rng, n, rng.randint(0, 20), connected=rng.random() < 0.7)
+            adj = mk.edges_to_wadj(edges, nodes=range(n))
+            want = floyd(n, edges)
+            src = rng.randrange(n)
+            dist_, prev = mk.dijkstra(adj, src)
+            for v in range(n):
+                if want[src][v] == float("inf"):
+                    self.assertNotIn(v, dist_)
+                    self.assertIsNone(mk.shortest_path(adj, src, v))
+                    continue
+                self.assertAlmostEqual(dist_[v], want[src][v], places=9)
+                path = mk.shortest_path(adj, src, v)
+                self.assertEqual((path[0], path[-1]), (src, v))
+                cost = 0.0
+                for a, b in zip(path, path[1:]):
+                    cost += min(w for x, w in adj[a] if x == b)
+                self.assertAlmostEqual(cost, want[src][v], places=9)
+
+    def test_dijkstra_can_stop_at_its_target_and_rejects_negative_weights(self):
+        adj = mk.edges_to_wadj([(0, 1, 1.0), (1, 2, 1.0), (2, 3, 1.0), (0, 3, 10.0)])
+        dist_, _ = mk.dijkstra(adj, 0, target=1)
+        self.assertEqual(dist_[1], 1.0)
+        self.assertNotIn(2, dist_)               # it stopped before looking further
+        with self.assertRaises(ValueError):
+            mk.dijkstra({0: [(1, -1.0)], 1: []}, 0)
+        self.assertEqual(mk.dijkstra({}, "a"), ({"a": 0.0}, {}))
+
+    def test_multi_source_dijkstra_gives_each_node_its_nearest_source(self):
+        rng = random.Random(45)
+        for _ in range(120):
+            n = rng.randint(4, 18)
+            edges = random_graph(rng, n, rng.randint(0, 15))
+            adj = mk.edges_to_wadj(edges, nodes=range(n))
+            want = floyd(n, edges)
+            sources = rng.sample(range(n), rng.randint(1, min(4, n)))
+            dist_, owner = mk.multi_source_dijkstra(adj, sources)
+            self.assertEqual(set(dist_), set(range(n)))          # connected: all reached
+            for v in range(n):
+                nearest = min(want[s][v] for s in sources)
+                self.assertAlmostEqual(dist_[v], nearest, places=9)
+                self.assertAlmostEqual(want[owner[v]][v], nearest, places=9)
+                self.assertIn(owner[v], sources)
+            for s in sources:
+                self.assertEqual((dist_[s], owner[s]), (0.0, s))
+
+    def test_multi_source_ties_go_to_the_earlier_source(self):
+        adj = mk.edges_to_wadj([("a", "m", 1.0), ("m", "b", 1.0)])
+        _, owner = mk.multi_source_dijkstra(adj, ["a", "b"])
+        self.assertEqual(owner["m"], "a")
+        _, owner = mk.multi_source_dijkstra(adj, ["b", "a"])
+        self.assertEqual(owner["m"], "b")
+
+    def test_bfs_and_components_agree_with_a_plain_flood_fill(self):
+        rng = random.Random(46)
+        for _ in range(120):
+            n = rng.randint(1, 20)
+            edges = random_graph(rng, n, rng.randint(0, 6), weighted=False, connected=False)
+            adj = mk.edges_to_adj(edges, nodes=range(n))
+            comps = mk.connected_components(adj)
+            self.assertEqual(sorted(v for c in comps for v in c), list(range(n)))
+            for comp in comps:
+                stack, seen = [comp[0]], {comp[0]}
+                while stack:
+                    u = stack.pop()
+                    for v in adj[u]:
+                        if v not in seen:
+                            seen.add(v)
+                            stack.append(v)
+                self.assertEqual(seen, set(comp))
+            hops = mk.bfs_reachable(adj, 0)
+            self.assertEqual(set(hops), set(next(c for c in comps if 0 in c)))
+            self.assertEqual(hops[0], 0)
+            for a, b, _ in edges:
+                if a in hops:
+                    self.assertLessEqual(abs(hops[a] - hops[b]), 1)     # neighbours differ by <= 1
+
+    def test_components_accept_tuple_nodes_and_neighbour_only_nodes(self):
+        adj = {(0, 0): [(0, 1)], (0, 1): [(0, 0)], (5, 5): [(6, 6)]}
+        comps = mk.connected_components(adj)
+        self.assertEqual(sorted(len(c) for c in comps), [2, 2])
+
+    def test_farthest_pair_is_the_diameter(self):
+        rng = random.Random(47)
+        for _ in range(100):
+            n = rng.randint(1, 18)
+            edges = random_graph(rng, n, rng.randint(0, 6), weighted=False,
+                                 connected=rng.random() < 0.7)
+            adj = mk.edges_to_adj(edges, nodes=range(n))
+            a, b = mk.farthest_pair(adj)
+            best = max(h for s in range(n) for h in mk.bfs_reachable(adj, s).values())
+            self.assertEqual(mk.bfs_reachable(adj, a)[b], best)
+
+    def test_farthest_pair_on_a_path_and_edge_cases(self):
+        path = mk.edges_to_adj([(i, i + 1) for i in range(9)])
+        self.assertEqual(set(mk.farthest_pair(path)), {0, 9})
+        self.assertIsNone(mk.farthest_pair({}))
+        self.assertEqual(mk.farthest_pair({"only": []}), ("only", "only"))
+        big = mk.edges_to_adj([(i, i + 1) for i in range(400)])      # two-sweep branch
+        self.assertEqual(set(mk.farthest_pair(big)), {0, 400})
+
+
 # @@TESTS@@
