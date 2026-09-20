@@ -312,4 +312,255 @@ class PolygonBasics(unittest.TestCase):
         self.assertTrue(mk.polygon_contains_polygon(L_SHAPE, [(2, 2), (18, 2), (18, 8)]))
 
 
+# ---------------------------------------------------------------------------
+# Polygon operations
+# ---------------------------------------------------------------------------
+
+def regular(n, radius, cx=0.0, cy=0.0, phase=0.3):
+    return [(cx + radius * math.cos(phase + 2 * math.pi * k / n),
+             cy + radius * math.sin(phase + 2 * math.pi * k / n)) for k in range(n)]
+
+
+def min_edge_distance(convex_ccw, p):
+    """Distance from an inside point to the outline of a convex CCW polygon,
+    the long way round (half-plane distances), independent of the kit."""
+    best = float("inf")
+    for i in range(len(convex_ccw)):
+        x0, y0 = convex_ccw[i]
+        x1, y1 = convex_ccw[(i + 1) % len(convex_ccw)]
+        best = min(best, ((x1 - x0) * (p[1] - y0) - (y1 - y0) * (p[0] - x0))
+                   / math.hypot(x1 - x0, y1 - y0))
+    return best
+
+
+class Clipping(unittest.TestCase):
+    def test_halfplane_splits_a_square_in_two(self):
+        left = mk.clip_halfplane(SQUARE, (5, 0), (5, 10), keep_left=True)
+        right = mk.clip_halfplane(SQUARE, (5, 0), (5, 10), keep_left=False)
+        self.assertAlmostEqual(abs(shoelace(left)), 50.0)
+        self.assertAlmostEqual(abs(shoelace(right)), 50.0)
+        # walking up the line x = 5, "left" is the side with smaller x
+        self.assertTrue(all(x <= 5 + 1e-9 for x, _ in left))
+        self.assertTrue(all(x >= 5 - 1e-9 for x, _ in right))
+        # a line that misses the polygon keeps all of it or none of it
+        self.assertEqual(mk.clip_halfplane(SQUARE, (20, 0), (20, 10), keep_left=True),
+                         SQUARE)
+        self.assertEqual(mk.clip_halfplane(SQUARE, (20, 0), (20, 10), keep_left=False), [])
+
+    def test_the_two_halves_of_any_convex_polygon_add_up(self):
+        rng = random.Random(10)
+        for _ in range(150):
+            poly = random_convex(rng)
+            a = (rng.uniform(-80, 80), rng.uniform(-80, 80))
+            b = (a[0] + rng.uniform(-1, 1) + 0.01, a[1] + rng.uniform(-1, 1))
+            l = mk.clip_halfplane(poly, a, b, True)
+            r = mk.clip_halfplane(poly, a, b, False)
+            self.assertAlmostEqual(abs(shoelace(l)) + abs(shoelace(r)),
+                                   abs(shoelace(poly)), places=6)
+            for piece in (l, r):
+                for v in piece:
+                    self.assertTrue(inside_convex(poly, v, tol=1e-6))
+
+    def test_halfplane_keeps_the_side_it_is_asked_to(self):
+        rng = random.Random(11)
+        for _ in range(120):
+            poly = random_convex(rng)
+            t = rng.uniform(0, 6.28)
+            a, b = (0.0, 0.0), (math.cos(t), math.sin(t))
+            for keep_left in (True, False):
+                for v in mk.clip_halfplane(poly, a, b, keep_left):
+                    side = b[0] * v[1] - b[1] * v[0]        # cross(b, v) from origin
+                    self.assertTrue(side >= -1e-7 if keep_left else side <= 1e-7)
+
+    def test_halfplane_of_a_concave_polygon_keeps_the_area(self):
+        # cut the L through the notch: both sides together still make the L
+        l = mk.clip_halfplane(L_SHAPE, (15, 0), (15, 20), True)
+        r = mk.clip_halfplane(L_SHAPE, (15, 0), (15, 20), False)
+        self.assertAlmostEqual(abs(shoelace(l)) + abs(shoelace(r)), 300.0)
+
+    def test_halfplane_does_not_change_its_input_and_rejects_a_point(self):
+        original = list(SQUARE)
+        mk.clip_halfplane(SQUARE, (5, 0), (5, 10))
+        self.assertEqual(SQUARE, original)
+        with self.assertRaises(ValueError):
+            mk.clip_halfplane(SQUARE, (1, 1), (1, 1))
+
+    def test_clip_convex_is_the_intersection(self):
+        rng = random.Random(12)
+        overlapping = 0
+        for _ in range(150):
+            a = random_convex(rng, rng.uniform(-30, 30), rng.uniform(-30, 30))
+            b = random_convex(rng, rng.uniform(-30, 30), rng.uniform(-30, 30))
+            ab = mk.clip_convex(a, b)
+            ba = mk.clip_convex(b, a)
+            self.assertAlmostEqual(abs(shoelace(ab)) if ab else 0.0,
+                                   abs(shoelace(ba)) if ba else 0.0, places=5)
+            for v in ab:
+                self.assertTrue(inside_convex(a, v, 1e-6) and inside_convex(b, v, 1e-6))
+            for _ in range(10):
+                p = (rng.uniform(-130, 130), rng.uniform(-130, 130))
+                if min(abs(min_edge_distance(a, p)), abs(min_edge_distance(b, p))) < 1e-6:
+                    continue
+                both = inside_convex(a, p) and inside_convex(b, p)
+                self.assertEqual(bool(ab) and mk.point_in_polygon(p, ab), both)
+            overlapping += bool(ab)
+        self.assertGreater(overlapping, 60)         # the test really did overlap shapes
+
+    def test_clip_convex_edge_cases(self):
+        big = [(-50, -50), (50, -50), (50, 50), (-50, 50)]
+        self.assertAlmostEqual(shoelace(mk.clip_convex(SQUARE, big)), 100.0)
+        far = [(100, 100), (110, 100), (110, 110), (100, 110)]
+        self.assertEqual(mk.clip_convex(SQUARE, far), [])
+        # the clip shape may be wound either way
+        self.assertAlmostEqual(abs(shoelace(mk.clip_convex(SQUARE, big[::-1]))), 100.0)
+
+
+class Insetting(unittest.TestCase):
+    def test_square_inset_is_a_smaller_square(self):
+        inner = mk.inset_polygon(SQUARE, 2.0)
+        self.assertAlmostEqual(shoelace(inner), 36.0)
+        self.assertEqual(sorted((round(x, 6), round(y, 6)) for x, y in inner),
+                         [(2.0, 2.0), (2.0, 8.0), (8.0, 2.0), (8.0, 8.0)])
+        self.assertIsNone(mk.inset_polygon(SQUARE, 5.0))         # exactly gone
+        self.assertIsNone(mk.inset_polygon(SQUARE, 5.1))
+        self.assertIsNotNone(mk.inset_polygon(SQUARE, 4.9))
+
+    def test_regular_polygons_shrink_exactly(self):
+        for n in (3, 4, 5, 6, 8, 12):
+            for d in (0.5, 3.0, 9.0):
+                poly = regular(n, 20.0)
+                apothem = 20.0 * math.cos(math.pi / n)
+                inner = mk.inset_polygon(poly, d)
+                if d >= apothem:
+                    self.assertIsNone(inner)
+                    continue
+                self.assertAlmostEqual(abs(shoelace(inner)),
+                                       abs(shoelace(poly)) * ((apothem - d) / apothem) ** 2,
+                                       places=6)
+
+    def test_convex_inset_lies_inside_and_keeps_its_distance(self):
+        rng = random.Random(13)
+        for _ in range(150):
+            poly = random_convex(rng)
+            d = rng.uniform(0.5, 25.0)
+            inner = mk.inset_polygon(poly, d)
+            if inner is None:
+                # nothing left means no point is d away from every edge
+                c = mk.polygon_centroid(poly)
+                self.assertLess(min_edge_distance(poly, c), d + 1e-6)
+                continue
+            self.assertLess(shoelace(inner), shoelace(poly))
+            for v in inner:
+                self.assertGreaterEqual(min_edge_distance(poly, v), d - 1e-6)
+            self.assertTrue(mk.is_convex(inner))
+
+    def test_a_large_inset_collapses_to_none(self):
+        rng = random.Random(14)
+        for _ in range(120):
+            poly = random_convex(rng)
+            self.assertIsNone(mk.inset_polygon(poly, 1000.0))
+            self.assertIsNone(mk.inset_polygon(poly, 101.0))   # more than any radius here
+
+    def test_inset_keeps_the_winding_and_zero_returns_a_copy(self):
+        cw = SQUARE[::-1]
+        inner = mk.inset_polygon(cw, 1.0)
+        self.assertLess(shoelace(inner), 0.0)
+        self.assertAlmostEqual(abs(shoelace(inner)), 64.0)
+        same = mk.inset_polygon(SQUARE, 0.0)
+        self.assertEqual(same, SQUARE)
+        self.assertIsNot(same, SQUARE)
+
+    def test_concave_inset_of_the_l_shape_is_exact(self):
+        inner = mk.inset_polygon(L_SHAPE, 2.0)
+        self.assertIsNotNone(inner)
+        self.assertAlmostEqual(shoelace(inner), 156.0)
+        want = {(2.0, 2.0), (18.0, 2.0), (18.0, 8.0), (8.0, 8.0), (8.0, 18.0), (2.0, 18.0)}
+        self.assertEqual({(round(x, 6), round(y, 6)) for x, y in inner}, want)
+        # the arm is 10 wide: an inset of 5 or more takes it away entirely
+        self.assertIsNone(mk.inset_polygon(L_SHAPE, 5.0))
+
+    def test_concave_inset_is_valid_whenever_it_answers(self):
+        rng = random.Random(15)
+        answered = 0
+        for _ in range(150):
+            poly = random_star(rng)
+            d = rng.uniform(1.0, 8.0)
+            inner = mk.inset_polygon(poly, d)
+            if inner is None:
+                continue
+            answered += 1
+            self.assertTrue(mk.polygon_is_simple(inner))
+            self.assertGreater(shoelace(inner), 0.0)
+            self.assertLess(shoelace(inner), shoelace(poly))
+            self.assertTrue(mk.polygon_contains_polygon(poly, inner))
+            for v in inner:
+                self.assertGreaterEqual(mk.distance_to_boundary(v, poly), d - 1e-6)
+            for a, b in mk.polygon_edges(inner):
+                for c, e in mk.polygon_edges(poly):
+                    self.assertGreaterEqual(
+                        min(mk.point_segment_distance(a, c, e),
+                            mk.point_segment_distance(b, c, e),
+                            mk.point_segment_distance(c, a, b),
+                            mk.point_segment_distance(e, a, b)), d - 1e-6)
+        self.assertGreater(answered, 90)           # it does answer for ordinary shapes
+
+    def test_negative_inset_grows(self):
+        grown = mk.inset_polygon(SQUARE, -1.0)
+        self.assertAlmostEqual(shoelace(grown), 144.0)
+
+
+class Offsetting(unittest.TestCase):
+    def test_square_grows_with_sharp_corners(self):
+        out = mk.offset_polygon(SQUARE, 2.0)
+        self.assertAlmostEqual(shoelace(out), 196.0)
+        self.assertEqual(len(out), 4)
+        self.assertEqual(mk.offset_polygon(SQUARE, 0.0), SQUARE)
+
+    def test_offset_contains_the_original_and_keeps_its_distance(self):
+        rng = random.Random(16)
+        for _ in range(150):
+            poly = random_convex(rng)
+            d = rng.uniform(0.5, 30.0)
+            out = mk.offset_polygon(poly, d)
+            self.assertGreater(shoelace(out), shoelace(poly))
+            self.assertTrue(mk.polygon_is_simple(out))
+            self.assertTrue(mk.polygon_contains_polygon(out, poly))
+            for v in out:
+                self.assertGreaterEqual(mk.distance_to_boundary(v, poly), d - 1e-6)
+
+    def test_offset_then_inset_returns_to_the_start_for_convex_shapes(self):
+        rng = random.Random(17)
+        for _ in range(100):
+            poly = random_convex(rng)
+            d = rng.uniform(1.0, 10.0)
+            back = mk.inset_polygon(mk.offset_polygon(poly, d, miter_limit=100.0), d)
+            self.assertAlmostEqual(shoelace(back), shoelace(poly), places=4)
+
+    def test_sharp_corners_are_bevelled_at_the_miter_limit(self):
+        spike = [(0.0, 0.0), (100.0, 0.0), (90.0, 15.0)]         # a corner near 9 degrees
+        limit = 2.5
+        out = mk.offset_polygon(spike, 5.0, miter_limit=limit)
+        self.assertGreater(len(out), 3)
+        for v in out:
+            self.assertLessEqual(min(mk.dist(v, c) for c in spike), limit * 5.0 + 1e-6)
+        loose = mk.offset_polygon(spike, 5.0, miter_limit=1000.0)
+        self.assertEqual(len(loose), 3)                          # no bevel
+        self.assertGreater(max(min(mk.dist(v, c) for c in spike) for v in loose),
+                           limit * 5.0)
+
+    def test_concave_offset_is_always_a_simple_polygon_around_the_original(self):
+        rng = random.Random(18)
+        for _ in range(150):
+            poly = random_star(rng)
+            d = rng.uniform(1.0, 60.0)                      # up to "far too much"
+            out = mk.offset_polygon(poly, d)
+            self.assertTrue(mk.polygon_is_simple(out), (poly, d))
+            self.assertTrue(mk.polygon_contains_polygon(out, poly), (poly, d))
+
+    def test_offset_keeps_the_winding_and_a_negative_offset_shrinks(self):
+        self.assertLess(shoelace(mk.offset_polygon(SQUARE[::-1], 1.0)), 0.0)
+        self.assertAlmostEqual(shoelace(mk.offset_polygon(SQUARE, -1.0)), 64.0)
+        self.assertEqual(mk.offset_polygon(SQUARE, -6.0), [])
+
+
 # @@TESTS@@

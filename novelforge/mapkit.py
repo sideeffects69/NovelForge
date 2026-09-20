@@ -335,4 +335,404 @@ def polygon_contains_polygon(outer: Sequence[Point], inner: Sequence[Point],
     return True
 
 
+# ---------------------------------------------------------------------------
+# Polygon operations
+# ---------------------------------------------------------------------------
+
+def _clean(points: Iterable[Point]) -> Polygon:
+    """Drop consecutive duplicates and a repeated closing point. Returns []
+    when what is left has fewer than 3 points or no area."""
+    out: Polygon = []
+    for p in points:
+        if not out or dist(p, out[-1]) > EPS:
+            out.append((float(p[0]), float(p[1])))
+    while len(out) > 1 and dist(out[0], out[-1]) <= EPS:
+        out.pop()
+    if len(out) < 3 or abs(polygon_area(out)) < EPS:
+        return []
+    return out
+
+
+def convex_hull(points: Iterable[Point]) -> Polygon:
+    """Convex hull, counter-clockwise, collinear points dropped (monotone
+    chain). Fewer than 3 distinct points give back those points."""
+    pts = sorted(set((float(x), float(y)) for x, y in points))
+    if len(pts) < 3:
+        return pts
+
+    def half(seq):
+        chain: Polygon = []
+        for p in seq:
+            while len(chain) >= 2 and cross(chain[-2], chain[-1], p) <= 0.0:
+                chain.pop()
+            chain.append(p)
+        return chain
+
+    lower, upper = half(pts), half(reversed(pts))
+    return lower[:-1] + upper[:-1]
+
+
+def _cut_point(p: Point, q: Point, sp: float, sq: float) -> Point:
+    """Where p->q crosses the clip line, given the signed distances of its ends."""
+    t = sp / (sp - sq) if sp != sq else 0.0
+    t = 0.0 if t < 0.0 else 1.0 if t > 1.0 else t
+    return (p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t)
+
+
+def clip_halfplane(poly: Sequence[Point], a: Point, b: Point,
+                   keep_left: bool = True) -> Polygon:
+    """The part of ``poly`` on one side of the line through ``a`` and ``b``.
+
+    "Left" is the side you turn towards walking from ``a`` to ``b`` (y-up), so
+    for a counter-clockwise polygon it is the inside of the edge a->b. Returns
+    ``[]`` when nothing is left. Exact for convex polygons. For a concave
+    polygon the result can be a single polygon that joins its pieces along the
+    line with zero-width bridges (Sutherland-Hodgman); ``polygon_is_simple``
+    tells them apart.
+    """
+    if len(poly) < 3:
+        return []
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    length = math.hypot(dx, dy)
+    if length <= 0.0:
+        raise ValueError("clip_halfplane needs two distinct points")
+    sign = 1.0 if keep_left else -1.0
+
+    def side(p: Point) -> float:            # distance to the line, + = kept side
+        return sign * (dx * (p[1] - a[1]) - dy * (p[0] - a[0])) / length
+
+    out: Polygon = []
+    prev = poly[-1]
+    sp = side(prev)
+    for cur in poly:
+        sc = side(cur)
+        if sc >= -EPS:
+            if sp < -EPS:
+                out.append(_cut_point(prev, cur, sp, sc))
+            out.append(cur)
+        elif sp >= -EPS:
+            out.append(_cut_point(prev, cur, sp, sc))
+        prev, sp = cur, sc
+    return _clean(out)
+
+
+def clip_convex(poly: Sequence[Point], convex_clip: Sequence[Point]) -> Polygon:
+    """``poly`` cut down to the inside of a convex polygon (any winding).
+
+    The clip shape must be convex; ``poly`` may be anything ``clip_halfplane``
+    accepts. Returns ``[]`` when they do not overlap.
+    """
+    out: Polygon = list(poly)
+    for a, b in polygon_edges(ensure_ccw(convex_clip)):
+        if dist(a, b) <= EPS:
+            continue
+        out = clip_halfplane(out, a, b, True)
+        if not out:
+            return []
+    return out
+
+
+def _mitered(pts: Sequence[Point], d: float,
+             miter_limit: Optional[float] = None) -> Optional[Polygon]:
+    """Every edge of a counter-clockwise polygon shifted ``d`` to its left
+    (inward when d > 0, outward when d < 0) and neighbours joined at the point
+    where their shifted lines meet (a mitre).
+
+    Edges that shrink past nothing are dropped and their neighbours joined
+    (the "edge event" of a straight skeleton). With ``miter_limit`` a sharp
+    outward corner whose mitre would stick out more than that many ``|d|`` is
+    cut off flat instead. Returns None when the shape cannot be joined up
+    (fewer than 3 edges survive, or two neighbouring edges are anti-parallel).
+    """
+    n = len(pts)
+    lines: List[Tuple[Point, Point]] = []          # (point on shifted line, direction)
+    for i in range(n):
+        a, b = pts[i], pts[(i + 1) % n]
+        length = dist(a, b)
+        ux, uy = (b[0] - a[0]) / length, (b[1] - a[1]) / length
+        lines.append(((a[0] - uy * d, a[1] + ux * d), (ux, uy)))
+    for _ in range(n + 1):
+        m = len(lines)
+        if m < 3:
+            return None
+        verts: List[Point] = []
+        for j in range(m):
+            (q1, u1), (q2, u2) = lines[j - 1], lines[j]
+            c = u1[0] * u2[1] - u1[1] * u2[0]
+            if abs(c) < 1e-12:
+                if u1[0] * u2[0] + u1[1] * u2[1] < 0.0:
+                    return None
+                verts.append(q2)
+            else:
+                t = ((q2[0] - q1[0]) * u2[1] - (q2[1] - q1[1]) * u2[0]) / c
+                verts.append((q1[0] + u1[0] * t, q1[1] + u1[1] * t))
+        worst, worst_j = 1e-12, -1
+        for j in range(m):
+            nx, ny = verts[(j + 1) % m]
+            run = (nx - verts[j][0]) * lines[j][1][0] + (ny - verts[j][1]) * lines[j][1][1]
+            if run < worst:
+                worst, worst_j = run, j
+        if worst_j < 0:
+            break
+        del lines[worst_j]                       # this edge has shrunk away
+    else:
+        return None
+    if miter_limit is None or d >= 0.0:
+        return verts
+    # Outward corners: bevel any mitre that would spike out too far.
+    out: Polygon = []
+    for j in range(len(verts)):
+        u1, u2 = lines[j - 1][1], lines[j][1]
+        c = u1[0] * u2[1] - u1[1] * u2[0]
+        if c > 0.0:                                  # a convex corner
+            phi = math.atan2(c, u1[0] * u2[0] + u1[1] * u2[1])   # how sharply it turns
+            if math.cos(phi / 2.0) < 1.0 / miter_limit:          # mitre = |d| / cos(phi/2)
+                h = abs(d) * math.tan(phi / 2.0)     # mitre point to the two feet
+                mx, my = verts[j]
+                out.append((mx - u1[0] * h, my - u1[1] * h))
+                out.append((mx + u2[0] * h, my + u2[1] * h))
+                continue
+        out.append(verts[j])
+    return out
+
+
+def _offset_ok(orig: Sequence[Point], res: Sequence[Point], d: float,
+               inward: bool) -> bool:
+    """Validate an offset of counter-clockwise ``orig`` by ``d`` > 0.
+
+    The result must be a simple counter-clockwise polygon, on the right side
+    of the original (inside for an inset, containing it for an offset), and
+    nowhere closer to the original outline than ``d``. The closest approach
+    of two polygons that do not cross is always between a vertex of one and
+    an edge of the other, so testing those pairs is exact.
+    """
+    if len(res) < 3 or not polygon_is_simple(res) or polygon_area(res) <= 0.0:
+        return False
+    area, base = polygon_area(res), polygon_area(orig)
+    if (area >= base) if inward else (area <= base):
+        return False
+    tol = 1e-6
+    outer, inner = (orig, res) if inward else (res, orig)
+    if not polygon_contains_polygon(outer, inner, tol):
+        return False
+    for a, b in polygon_edges(res):
+        for c, e in polygon_edges(orig):
+            if segments_intersect(a, b, c, e):
+                return False
+    for v in res:
+        if distance_to_boundary(v, orig) < d - tol:
+            return False
+    for v in orig:
+        if distance_to_boundary(v, res) < d - tol:
+            return False
+    return True
+
+
+def _inset_convex(pts: Sequence[Point], d: float) -> Optional[Polygon]:
+    """Exact inset of a convex counter-clockwise polygon: the polygon itself
+    clipped by each of its edges moved inward by ``d``."""
+    cur: Polygon = list(pts)
+    for a, b in polygon_edges(pts):
+        length = dist(a, b)
+        nx, ny = -(b[1] - a[1]) / length, (b[0] - a[0]) / length
+        cur = clip_halfplane(cur, (a[0] + nx * d, a[1] + ny * d),
+                             (b[0] + nx * d, b[1] + ny * d), True)
+        if not cur:
+            return None
+    return cur
+
+
+def _inset_concave(pts: Sequence[Point], d: float) -> Optional[Polygon]:
+    """Best-effort inset of a concave counter-clockwise polygon, validated."""
+    for steps in (1, 2, 4, 8):
+        cur: Optional[Polygon] = list(pts)
+        for _ in range(steps):
+            cur = _mitered(cur, d / steps)
+            cur = _clean(cur) if cur else None
+            if not cur or polygon_area(cur) <= 0.0:
+                cur = None
+                break
+        if cur and _offset_ok(pts, cur, d, inward=True):
+            return cur
+    return None
+
+
+def inset_polygon(poly: Sequence[Point], d: float) -> Optional[Polygon]:
+    """``poly`` shrunk by ``d`` on every side, or None if nothing is left.
+
+    Exact for convex polygons (the polygon clipped by each edge moved inward
+    by ``d``). For concave polygons the edges are moved in and neighbours
+    re-joined with sharp corners, edges that shrink away are dropped, and the
+    outcome is *validated* (simple, inside the original, nowhere nearer than
+    ``d`` to its outline); if that fails the shrink is retried in 2, 4 and 8
+    smaller steps, and if it still fails, or the shape splits in two, the
+    answer is None - treat that as "collapsed". The winding of the input is
+    kept. ``d`` <= 0 returns a copy (a negative ``d`` grows the polygon; see
+    ``offset_polygon``).
+    """
+    if d < 0.0:
+        return offset_polygon(poly, -d) or None
+    pts = _clean(poly)
+    if not pts:
+        return None
+    was_cw = polygon_area(pts) < 0.0
+    if was_cw:
+        pts.reverse()
+    if d == 0.0:
+        res: Optional[Polygon] = pts
+    elif is_convex(pts):
+        res = _inset_convex(pts, d)
+    else:
+        res = _inset_concave(pts, d)
+    if not res:
+        return None
+    return res[::-1] if was_cw else res
+
+
+def offset_polygon(poly: Sequence[Point], d: float,
+                   miter_limit: float = 2.5) -> Polygon:
+    """``poly`` grown outward by ``d`` (for moats, walls and margins).
+
+    Corners are sharp; a very acute corner is bevelled once its point would
+    stick out more than ``miter_limit`` times ``d``. If a concave polygon is
+    grown so far that it would cross itself, the growth is retried in smaller
+    steps and, failing that, the offset of its convex hull is returned, so the
+    result is always a simple polygon that contains the original. The winding
+    of the input is kept. A negative ``d`` shrinks (``[]`` if nothing is left).
+    """
+    if d < 0.0:
+        return inset_polygon(poly, -d) or []
+    pts = _clean(poly)
+    if not pts:
+        return list(poly)
+    was_cw = polygon_area(pts) < 0.0
+    if was_cw:
+        pts.reverse()
+    res: Optional[Polygon] = pts if d == 0.0 else None
+    if res is None:
+        for steps in (1, 2, 4, 8):
+            cur: Optional[Polygon] = list(pts)
+            for _ in range(steps):
+                cur = _mitered(cur, -d / steps, miter_limit)
+                cur = _clean(cur) if cur else None
+                if not cur:
+                    break
+            if cur and _offset_ok(pts, cur, d, inward=False):
+                res = cur
+                break
+    if res is None:
+        hull = convex_hull(pts)
+        res = _mitered(hull, -d, miter_limit) or hull
+    return res[::-1] if was_cw else res
+
+
+def interior_angle(prev: Point, cur: Point, nxt: Point) -> float:
+    """Interior angle in degrees (0-360) at ``cur`` of a counter-clockwise
+    polygon whose neighbouring vertices are ``prev`` and ``nxt``; over 180
+    means a reflex corner."""
+    ux, uy = nxt[0] - cur[0], nxt[1] - cur[1]
+    wx, wy = prev[0] - cur[0], prev[1] - cur[1]
+    a = math.atan2(ux * wy - uy * wx, ux * wx + uy * wy)
+    return math.degrees(a + 2.0 * math.pi if a < 0.0 else a)
+
+
+def compactness(poly: Sequence[Point]) -> float:
+    """Isoperimetric quotient 4*pi*area / perimeter^2: 1 for a circle, about
+    0.785 for a square, 0.6 for an equilateral triangle, near 0 for a sliver."""
+    per = polygon_perimeter(poly)
+    return 4.0 * math.pi * abs(polygon_area(poly)) / (per * per) if per > 0 else 0.0
+
+
+def _split_once(poly: Polygon, rng: random.Random, area: float, min_area: float,
+                min_angle: float, jitter: float, min_compact: float,
+                convex: bool) -> Optional[Tuple[Polygon, Polygon]]:
+    """One cut across the longest side; up to six tries, then None."""
+    n = len(poly)
+    lengths = [dist(poly[i], poly[(i + 1) % n]) for i in range(n)]
+    order = sorted(range(n), key=lambda i: (-lengths[i], i))
+    for attempt in range(6):
+        i = order[min(attempt // 3, n - 1)]       # longest side, then second longest
+        a, b = poly[i], poly[(i + 1) % n]
+        if attempt % 3 == 2:
+            ratio, tilt = 0.5, 0.0                # last try on a side: dead centre, square
+        else:
+            ratio = 0.5 + rng.uniform(-jitter, jitter)
+            tilt = math.radians(rng.uniform(-jitter, jitter) * 60.0)
+        ex, ey = (b[0] - a[0]) / lengths[i], (b[1] - a[1]) / lengths[i]
+        ct, st = math.cos(tilt), math.sin(tilt)
+        cx, cy = -ey * ct - ex * st, ex * ct - ey * st        # inward normal, tilted
+        px, py = a[0] + (b[0] - a[0]) * ratio, a[1] + (b[1] - a[1]) * ratio
+        p2 = (px + cx, py + cy)
+        left = clip_halfplane(poly, (px, py), p2, True)
+        right = clip_halfplane(poly, (px, py), p2, False)
+        if not left or not right:
+            continue
+        al, ar = polygon_area(left), polygon_area(right)
+        if al < min_area or ar < min_area or abs(al + ar - area) > 1e-6 * area:
+            continue
+        if not convex and not (polygon_is_simple(left) and polygon_is_simple(right)):
+            continue
+        ok = True
+        for piece in (left, right):
+            if compactness(piece) < min_compact:
+                ok = False
+                break
+            m = len(piece)
+            for k in range(m):
+                v = piece[k]
+                if abs(cx * (v[1] - py) - cy * (v[0] - px)) > 1e-7:
+                    continue                      # not a corner made by this cut
+                ang = interior_angle(piece[k - 1], v, piece[(k + 1) % m])
+                if ang < min_angle or ang > 360.0 - min_angle:
+                    ok = False
+                    break
+            if not ok:
+                break
+        if ok:
+            return left, right
+    return None
+
+
+def bisect_polygon(poly: Sequence[Point], rng: random.Random, min_area: float,
+                   min_angle_deg: float = 25.0, jitter: float = 0.15,
+                   min_compactness: float = 0.2, max_depth: int = 20) -> List[Polygon]:
+    """Cut a polygon into building lots (the ward / block splitter).
+
+    Recursively cuts across the longest side, near its middle: the cut point
+    is at ``0.5 +/- jitter`` along the side and the cut leans up to
+    ``jitter * 60`` degrees off square. A cut is refused - and another tried,
+    then the polygon is left whole - if either piece would be smaller than
+    ``min_area``, would make a corner sharper than ``min_angle_deg`` (or a
+    reflex spike within that of a full turn), or would be a sliver (compactness
+    under ``min_compactness``). Pieces are only split while their area is at
+    least twice ``min_area``, so lots land between ``min_area`` and roughly
+    three times it.
+
+    The lots tile the polygon exactly (no gaps, no overlaps; inset each one
+    for streets and alleys), are wound counter-clockwise, and come out in a
+    fixed order. A polygon smaller than ``min_area`` comes back as the single
+    lot. Corners the input already had are never blamed on a cut.
+    """
+    pts = _clean(poly)
+    if not pts:
+        return []
+    pts = ensure_ccw(pts)
+    convex = is_convex(pts)
+    out: List[Polygon] = []
+    stack: List[Tuple[Polygon, int]] = [(pts, 0)]
+    while stack:
+        piece, depth = stack.pop()
+        area = polygon_area(piece)
+        halves = None
+        if depth < max_depth and area >= 2.0 * min_area:
+            halves = _split_once(piece, rng, area, min_area, min_angle_deg,
+                                 jitter, min_compactness, convex)
+        if halves is None:
+            out.append(piece)
+        else:
+            stack.append((halves[1], depth + 1))
+            stack.append((halves[0], depth + 1))
+    return out
+
+
 # @@APPEND@@
