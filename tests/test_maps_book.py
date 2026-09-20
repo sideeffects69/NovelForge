@@ -55,8 +55,9 @@ class ScaleTellsTheTruth(unittest.TestCase):
     """The bar is drawn 16% of the width (at most 230 px); mapstory assumed 20%."""
 
     def test_a_distance_is_what_the_drawn_bar_says_it_is(self):
-        # Breaking it: putting `width * 0.2` back into mapstory.read_scale fails
-        # every width here except none - at 1200 px the bar is 192, not 240.
+        # Breaking it: putting `width * 0.2` back into mapstory.read_scale
+        # fails every width here (the drawn bar is 192, 230, 230 and 230 px
+        # long at these widths; the old guess was 240, 320, 360 and 480).
         for width in (1200, 1600, 1800, 2400):
             for caption, amount in CAPTIONS:
                 gm = blank(width, scale_text=caption)
