@@ -303,9 +303,15 @@ class MachineReadableFiles(unittest.TestCase):
         urls = [u.find("s:loc", ns).text for u in root.findall("s:url", ns)]
         self.assertEqual(sorted(urls), sorted(site.page_url(p) for p in site.PAGES))
         self.assertEqual(len(urls), len(set(urls)))
+        by_url = {site.page_url(p): p for p in site.PAGES}
         for u in root.findall("s:url", ns):
-            self.assertRegex(u.find("s:lastmod", ns).text, r"^\d{4}-\d{2}-\d{2}$")
-            self.assertTrue(0.0 <= float(u.find("s:priority", ns).text) <= 1.0)
+            lastmod = u.find("s:lastmod", ns).text
+            self.assertRegex(lastmod, r"^\d{4}-\d{2}-\d{2}$")
+            # The date is the page's own "updated", never the release date.
+            self.assertEqual(lastmod, by_url[u.find("s:loc", ns).text]["updated"])
+            # Google ignores these two; emitting them only suggests precision.
+            self.assertIsNone(u.find("s:priority", ns))
+            self.assertIsNone(u.find("s:changefreq", ns))
         raw = (OUT / "sitemap.xml").read_text(encoding="utf-8")
         for match in re.findall(r"<image:loc>([^<]+)</image:loc>", raw):
             self.assertTrue(to_file(match, site.SITE).is_file(), match)

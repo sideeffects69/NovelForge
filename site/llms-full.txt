@@ -87,81 +87,14 @@ It opens in about a second. Press Ctrl+Shift+P and type what you want (“story 
 
 Atomic saves, a snapshot of every scene before each save, verified zip backups and a crash-recovery journal that asks before it restores anything.
 
-A tool built as a story, not a checklist
+What is inside
 
-## What it actually feels like to use
+## Plan it, understand it, map it, protect it
 
-Corkboard — The Ashfall Crown
+A corkboard and nine outline frameworks for the plan. A story graph that reads your prose for the continuity. A map maker for the world. Atomic saves, snapshots and verified backups for the safety. Every one has its own page.
 
-[Image: The corkboard: every scene as an index card, grouped by chapter and colour-coded by status, ready to drag into a new order.]
-
-Plan
-
-### Know where the story is going.
-
-Nine outline frameworks (Three-Act, Save the Cat, Snowflake, Seven-Point, Story Circle,
-Hero's Journey, Romancing the Beat, Mystery/Crime and Freytag) and you can switch between
-them freely: each one's answers are kept, so trying a different shape costs nothing. The
-corkboard shows every scene as an index card you can drag into a new order.
-
-[More about planning →](https://sideeffects69.github.io/NovelForge/features/#planning)
-
-Story Graph — The Ashfall Crown
-
-[Image: The story graph window listing every character, place, item and thread the manuscript mentions, and how connected each one is.]
-
-Understand
-
-### See what your manuscript knows.
-
-NovelForge reads your whole manuscript and builds a map of it: every character, place,
-object and thread, and every scene each one appears in. It finds them two ways, links you
-set by hand and names it spots in your actual prose, which is how it notices what you
-forgot to link. A 15-point continuity checker runs on the same graph: dropped plot threads,
-dates running backwards, a character who appears before they are born.
-
-[More about the story graph →](https://sideeffects69.github.io/NovelForge/features/#story-graph)
-
-Map Maker — Highfield
-
-[Image: The map maker: a tool rail, terrain and layer palettes, a generated fantasy world with mountain ranges, forests, rivers, roads and named towns, and a properties panel.]
-
-Build worlds
-
-### Draw the world behind the words.
-
-Press Surprise Me for a complete fantasy world: ragged coastlines, mountain
-ranges, rivers that run from the highlands to the sea, forests, deserts, roads that follow the
-land and dozens of named settlements. It comes with a seed you can save and regenerate
-exactly. Prefer to draw it yourself? Freehand coastlines, 13 terrain types and 20 pin types are
-there too, in four art styles.
-
-[Meet the map maker →](https://sideeffects69.github.io/NovelForge/map-maker/)
-
-◆
-
-Atomic writesEvery file is written to a temporary name and swapped in, so a crash mid-save cannot leave a half-written file.
-
-◆
-
-Version snapshotsEvery scene is copied before each save. Restore any of them without losing the current version.
-
-◆
-
-Verified backupsA zip of the whole project, opened again and checksum-verified before it is trusted.
-
-◆
-
-Crash recoveryA journal that asks before it restores anything, and never silently overwrites what you have.
-
-Protect your work
-
-### Your novel stays yours.
-
-Nothing here depends on a server staying online, a company staying in business or a
-subscription staying paid. Full undo and redo covers structural edits too: delete a chapter,
-get it back, files included. That is the whole reason NovelForge writes real Word documents in
-the first place.
+[See every feature](https://sideeffects69.github.io/NovelForge/features/)
+[Meet the map maker](https://sideeffects69.github.io/NovelForge/map-maker/)
 
 How it compares
 
@@ -169,23 +102,15 @@ How it compares
 
 Scrivener and Atticus are excellent, mature tools; this is not a claim to beat them at everything. Here is the short version.
 
-| | NovelForge | Scrivener | Atticus | Obsidian |
+| | NovelForgeversion 2.2.0 | Scrivenerchecked 2026-09-20 | Atticuschecked 2026-09-20 | Obsidianchecked 2026-09-20 |
 
 | Price | Free | Paid licence | Paid licence | Free |
 
 | Where your book lives | Real .docx files | Project file | Cloud-synced project | Markdown files |
 
-| Built-in outline frameworks | 9 | Templates | Not built in | Via plugins |
-
-| Story graph and continuity checks | Yes | No | No | Note graph, not story-aware |
-
-| Procedural fantasy map maker | Yes | No | No | No |
-
-| Open source | Yes (MIT) | No | No | No |
-
 | Runs on | Windows | Windows, Mac, iOS | Desktop and web | Windows, Mac, Linux, mobile |
 
-Prices and features are as we understand them in September 2026; please check each vendor. [Read the full, honest comparison, including when to pick something else →](https://sideeffects69.github.io/NovelForge/compare/)
+Each column is stamped with the date we last looked at that product; please check each vendor before you decide. [Read the full, honest comparison, including when to pick something else →](https://sideeffects69.github.io/NovelForge/compare/)
 
 Getting started
 
@@ -230,10 +155,6 @@ Is NovelForge really free?
 
 Yes. It is free and open source under the MIT licence. There is no trial period, no subscription, no locked feature and no account. If it helps you, a donation is welcome but never expected.
 
-Does NovelForge work offline?
-
-Completely. It never connects to the internet: no telemetry, no update check, no cloud. The only time you need a connection is to download it and, on first run, to fetch two small Python libraries once.
-
 Where are my files stored?
 
 In a normal folder on your own computer, Projects\Your Novel\. Every scene is its own Word (.docx) file. A small project.json remembers only ordering, links and word counts, never your prose.
@@ -245,14 +166,6 @@ No. There is no generative AI in NovelForge and nothing reads your manuscript ex
 Does it work on Mac or Linux?
 
 Not yet. The engine is plain Python, but the interface has only been built and tested on Windows 10 and 11. If Mac or Linux support would get you using it, please [say so on GitHub](https://github.com/sideeffects69/NovelForge/issues).
-
-Can I bring in a manuscript I have already written?
-
-Yes. Copy your existing .docx files into a chapter folder and choose Manuscript → Import Loose .docx Files. Each file becomes a scene with its word count read in.
-
-Is it good for fantasy worldbuilding?
-
-It was built for it. Reference sheets for characters, places, items and factions, a timeline that sorts invented calendars correctly, and a map maker that generates whole worlds you can then edit and link back to your Location sheets. [See the map maker](https://sideeffects69.github.io/NovelForge/map-maker/).
 
 [All the questions and answers →](https://sideeffects69.github.io/NovelForge/faq/)
 
@@ -550,7 +463,7 @@ Honest comparison
 
 Scrivener, Atticus and Word are excellent, mature tools, and Obsidian is a superb notebook. This is not a claim that NovelForge beats them at everything. It is a plain account of where each one is strongest, so you can pick the right one, even when that is not us.
 
-| | NovelForge | Scrivener | Atticus | Obsidian | Microsoft Word |
+| | NovelForgeversion 2.2.0 | Scrivenerchecked 2026-09-20 | Atticuschecked 2026-09-20 | Obsidianchecked 2026-09-20 | Microsoft Wordchecked 2026-09-20 |
 
 | Price | Free | One-time purchase | One-time purchase | Free (paid sync and publish) | Subscription or one-time |
 
@@ -582,7 +495,7 @@ Scrivener, Atticus and Word are excellent, mature tools, and Obsidian is a super
 
 | Real-time collaboration | No | No | See vendor | Not built in | Yes |
 
-Prices and features are as we understand them in September 2026. Vendors change things, so please confirm on their own sites before you decide. Corrections are welcome: [open an issue](https://github.com/sideeffects69/NovelForge/issues).
+Each column is stamped with the date we last looked at that product. Where we could not confirm a fact, the cell says See vendor instead of guessing. Vendors change things, so please confirm on their own sites before you decide. Corrections are welcome: [open an issue](https://github.com/sideeffects69/NovelForge/issues).
 
 ## When NovelForge is the right choice
 

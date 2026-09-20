@@ -30,9 +30,8 @@
 <link rel="manifest" href="site.webmanifest">
 <link rel="alternate" type="text/plain" href="llms.txt" title="Plain-text summary for language models">
 <link rel="sitemap" type="application/xml" href="sitemap.xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,500;7..72,600;7..72,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preload" href="assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/literata-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
 <script type="application/ld+json">
 {
@@ -144,14 +143,6 @@
     },
     {
      "@type": "Question",
-     "name": "Does NovelForge work offline?",
-     "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Completely. It never connects to the internet: no telemetry, no update check, no cloud. The only time you need a connection is to download it and, on first run, to fetch two small Python libraries once."
-     }
-    },
-    {
-     "@type": "Question",
      "name": "Where are my files stored?",
      "acceptedAnswer": {
       "@type": "Answer",
@@ -172,22 +163,6 @@
      "acceptedAnswer": {
       "@type": "Answer",
       "text": "Not yet. The engine is plain Python, but the interface has only been built and tested on Windows 10 and 11. If Mac or Linux support would get you using it, please [say so on GitHub](https://github.com/sideeffects69/NovelForge/issues)."
-     }
-    },
-    {
-     "@type": "Question",
-     "name": "Can I bring in a manuscript I have already written?",
-     "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes. Copy your existing .docx files into a chapter folder and choose Manuscript → Import Loose .docx Files. Each file becomes a scene with its word count read in."
-     }
-    },
-    {
-     "@type": "Question",
-     "name": "Is it good for fantasy worldbuilding?",
-     "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "It was built for it. Reference sheets for characters, places, items and factions, a timeline that sorts invented calendars correctly, and a map maker that generates whole worlds you can then edit and link back to your Location sheets. [See the map maker](map-maker/)."
      }
     }
    ]
@@ -290,83 +265,13 @@
 <section id="story">
   <div class="wrap">
     <div class="section-head" data-reveal>
-      <span class="kicker">A tool built as a story, not a checklist</span>
-      <h2>What it actually feels like to use</h2>
+      <span class="kicker">What is inside</span>
+      <h2>Plan it, understand it, map it, protect it</h2>
+      <p>A corkboard and nine outline frameworks for the plan. A story graph that reads your prose for the continuity. A map maker for the world. Atomic saves, snapshots and verified backups for the safety. Every one has its own page.</p>
     </div>
-
-    <div class="narrative" data-reveal>
-      <div class="narrative-shot">
-        <div class="window-chrome">
-          <div class="chrome-bar"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span><span class="chrome-title">Corkboard — The Ashfall Crown</span></div>
-          <img width="1280" height="665" src="assets/screenshots/corkboard.png" loading="lazy" alt="The corkboard: every scene as an index card, grouped by chapter and colour-coded by status, ready to drag into a new order.">
-        </div>
-      </div>
-      <div class="narrative-text">
-        <span class="kicker">Plan</span>
-        <h3>Know where the story is going.</h3>
-        <p>Nine outline frameworks (Three-Act, Save the Cat, Snowflake, Seven-Point, Story Circle,
-          Hero's Journey, Romancing the Beat, Mystery/Crime and Freytag) and you can switch between
-          them freely: each one's answers are kept, so trying a different shape costs nothing. The
-          corkboard shows every scene as an index card you can drag into a new order.</p>
-        <p><a href="features/#planning">More about planning →</a></p>
-      </div>
-    </div>
-
-    <div class="narrative" data-reveal>
-      <div class="narrative-shot">
-        <div class="window-chrome">
-          <div class="chrome-bar"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span><span class="chrome-title">Story Graph — The Ashfall Crown</span></div>
-          <img width="940" height="665" src="assets/screenshots/story-graph.png" loading="lazy" alt="The story graph window listing every character, place, item and thread the manuscript mentions, and how connected each one is.">
-        </div>
-      </div>
-      <div class="narrative-text">
-        <span class="kicker">Understand</span>
-        <h3>See what your manuscript knows.</h3>
-        <p>NovelForge reads your whole manuscript and builds a map of it: every character, place,
-          object and thread, and every scene each one appears in. It finds them two ways, links you
-          set by hand and names it spots in your actual prose, which is how it notices what you
-          forgot to link. A 15-point continuity checker runs on the same graph: dropped plot threads,
-          dates running backwards, a character who appears before they are born.</p>
-        <p><a href="features/#story-graph">More about the story graph →</a></p>
-      </div>
-    </div>
-
-    <div class="narrative" data-reveal>
-      <div class="narrative-shot">
-        <div class="window-chrome">
-          <div class="chrome-bar"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span><span class="chrome-title">Map Maker — Highfield</span></div>
-          <img width="1340" height="680" src="assets/screenshots/map-maker.png" loading="lazy" alt="The map maker: a tool rail, terrain and layer palettes, a generated fantasy world with mountain ranges, forests, rivers, roads and named towns, and a properties panel.">
-        </div>
-      </div>
-      <div class="narrative-text">
-        <span class="kicker">Build worlds</span>
-        <h3>Draw the world behind the words.</h3>
-        <p>Press <strong>Surprise Me</strong> for a complete fantasy world: ragged coastlines, mountain
-          ranges, rivers that run from the highlands to the sea, forests, deserts, roads that follow the
-          land and dozens of named settlements. It comes with a seed you can save and regenerate
-          exactly. Prefer to draw it yourself? Freehand coastlines, 13 terrain types and 20 pin types are
-          there too, in four art styles.</p>
-        <p><a href="map-maker/">Meet the map maker →</a></p>
-      </div>
-    </div>
-
-    <div class="narrative" data-reveal>
-      <div class="narrative-shot">
-        <div class="protect-list">
-          <div class="protect-item"><span class="glyph">◆</span><div><strong>Atomic writes</strong><span>Every file is written to a temporary name and swapped in, so a crash mid-save cannot leave a half-written file.</span></div></div>
-          <div class="protect-item"><span class="glyph">◆</span><div><strong>Version snapshots</strong><span>Every scene is copied before each save. Restore any of them without losing the current version.</span></div></div>
-          <div class="protect-item"><span class="glyph">◆</span><div><strong>Verified backups</strong><span>A zip of the whole project, opened again and checksum-verified before it is trusted.</span></div></div>
-          <div class="protect-item"><span class="glyph">◆</span><div><strong>Crash recovery</strong><span>A journal that asks before it restores anything, and never silently overwrites what you have.</span></div></div>
-        </div>
-      </div>
-      <div class="narrative-text">
-        <span class="kicker">Protect your work</span>
-        <h3>Your novel stays yours.</h3>
-        <p>Nothing here depends on a server staying online, a company staying in business or a
-          subscription staying paid. Full undo and redo covers structural edits too: delete a chapter,
-          get it back, files included. That is the whole reason NovelForge writes real Word documents in
-          the first place.</p>
-      </div>
+    <div class="btn-row btn-row-center">
+      <a class="btn btn-primary" href="features/">See every feature</a>
+      <a class="btn" href="map-maker/">Meet the map maker</a>
     </div>
   </div>
 </section>
@@ -380,19 +285,15 @@
     </div>
     <div class="compare-table-wrap" data-reveal>
       <table class="compare-table">
-        <thead><tr><th></th><th class="us">NovelForge</th><th>Scrivener</th><th>Atticus</th><th>Obsidian</th></tr></thead>
+        <thead><tr><th></th><th class="us">NovelForge<small>version 2.2.0</small></th><th>Scrivener<small>checked 2026-09-20</small></th><th>Atticus<small>checked 2026-09-20</small></th><th>Obsidian<small>checked 2026-09-20</small></th></tr></thead>
         <tbody>
           <tr><td>Price</td><td class="us">Free</td><td>Paid licence</td><td>Paid licence</td><td>Free</td></tr>
           <tr><td>Where your book lives</td><td class="us">Real .docx files</td><td>Project file</td><td>Cloud-synced project</td><td>Markdown files</td></tr>
-          <tr><td>Built-in outline frameworks</td><td class="us">9</td><td>Templates</td><td>Not built in</td><td>Via plugins</td></tr>
-          <tr><td>Story graph and continuity checks</td><td class="us yes">Yes</td><td class="no">No</td><td class="no">No</td><td class="no">Note graph, not story-aware</td></tr>
-          <tr><td>Procedural fantasy map maker</td><td class="us yes">Yes</td><td class="no">No</td><td class="no">No</td><td class="no">No</td></tr>
-          <tr><td>Open source</td><td class="us yes">Yes (MIT)</td><td class="no">No</td><td class="no">No</td><td class="no">No</td></tr>
           <tr><td>Runs on</td><td class="us">Windows</td><td>Windows, Mac, iOS</td><td>Desktop and web</td><td>Windows, Mac, Linux, mobile</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="compat-note" data-reveal>Prices and features are as we understand them in September 2026; please check each vendor. <a href="compare/">Read the full, honest comparison, including when to pick something else →</a></p>
+    <p class="compat-note" data-reveal>Each column is stamped with the date we last looked at that product; please check each vendor before you decide. <a href="compare/">Read the full, honest comparison, including when to pick something else →</a></p>
   </div>
 </section>
 
@@ -425,12 +326,9 @@
     </div>
     <div class="faq prose wide" style="max-width: 820px; margin: 0 auto;" data-reveal>
       <details><summary>Is NovelForge really free?</summary><div class="answer"><p>Yes. It is free and open source under the MIT licence. There is no trial period, no subscription, no locked feature and no account. If it helps you, a donation is welcome but never expected.</p></div></details>
-      <details><summary>Does NovelForge work offline?</summary><div class="answer"><p>Completely. It never connects to the internet: no telemetry, no update check, no cloud. The only time you need a connection is to download it and, on first run, to fetch two small Python libraries once.</p></div></details>
       <details><summary>Where are my files stored?</summary><div class="answer"><p>In a normal folder on your own computer, <code>Projects\Your Novel\</code>. Every scene is its own Word (.docx) file. A small project.json remembers only ordering, links and word counts, never your prose.</p></div></details>
       <details><summary>Does it use AI?</summary><div class="answer"><p>No. There is no generative AI in NovelForge and nothing reads your manuscript except the program on your machine. The prose checks are ordinary offline rules that point at problems; they never rewrite your text.</p></div></details>
       <details><summary>Does it work on Mac or Linux?</summary><div class="answer"><p>Not yet. The engine is plain Python, but the interface has only been built and tested on Windows 10 and 11. If Mac or Linux support would get you using it, please <a href="https://github.com/sideeffects69/NovelForge/issues" rel="noopener">say so on GitHub</a>.</p></div></details>
-      <details><summary>Can I bring in a manuscript I have already written?</summary><div class="answer"><p>Yes. Copy your existing .docx files into a chapter folder and choose <strong>Manuscript → Import Loose .docx Files</strong>. Each file becomes a scene with its word count read in.</p></div></details>
-      <details><summary>Is it good for fantasy worldbuilding?</summary><div class="answer"><p>It was built for it. Reference sheets for characters, places, items and factions, a timeline that sorts invented calendars correctly, and a map maker that generates whole worlds you can then edit and link back to your Location sheets. <a href="map-maker/">See the map maker</a>.</p></div></details>
     </div>
     <p class="compat-note" data-reveal><a href="faq/">All the questions and answers →</a></p>
   </div>

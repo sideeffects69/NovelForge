@@ -45,47 +45,47 @@ VERIFICATION = "QoWigTsy_QxyrPABYvUnfKJEMl4INe3RrdUJNUFvf2E"   # Google Search C
 # `nav` is the menu label (empty = not in the menu). Titles stay under about 60
 # characters and descriptions under about 160 so search results do not cut them.
 PAGES: List[Dict] = [
-    dict(slug="home", path="", nav="", priority="1.0", freq="weekly",
+    dict(slug="home", published="2026-09-18", updated="2026-09-20", path="", nav="",
          title="NovelForge: Free Novel Writing Software for Windows",
          description="Free, open-source novel writing software for Windows. Real Word .docx "
                      "scenes, nine outline frameworks, a story graph and a fantasy map "
                      "maker. No account, no cloud.",
          image="assets/brand/og-image.jpg"),
-    dict(slug="features", path="features/", nav="Features", priority="0.9", freq="monthly",
+    dict(slug="features", published="2026-09-20", updated="2026-09-20", path="features/", nav="Features",
          title="Features: outlining, corkboard, story graph, maps | NovelForge",
          description="Everything in NovelForge: a binder and corkboard, nine outline "
                      "frameworks, a timeline, a story graph, a map maker, compile and "
                      "diagnostics. All offline.",
          image="assets/screenshots/main-editor.png"),
-    dict(slug="map-maker", path="map-maker/", nav="Map Maker", priority="0.9", freq="monthly",
+    dict(slug="map-maker", published="2026-09-20", updated="2026-09-20", path="map-maker/", nav="Map Maker",
          title="Free Fantasy Map Maker for Authors | NovelForge",
          description="Build a whole fantasy world in one click: coastlines, mountain ranges, "
                      "rivers, forests, roads and named towns. Edit it by hand, export PNG, "
                      "SVG or Word.",
          image="assets/maps/map-classic.jpg"),
-    dict(slug="compare", path="compare/", nav="Compare", priority="0.8", freq="monthly",
+    dict(slug="compare", published="2026-09-20", updated="2026-09-20", path="compare/", nav="Compare",
          title="NovelForge vs Scrivener, Atticus, Obsidian and Word",
          description="An honest comparison of NovelForge with Scrivener, Atticus, Obsidian "
                      "and Microsoft Word: price, file format, planning tools, and when you "
                      "should pick something else.",
          image="assets/brand/og-image.jpg"),
-    dict(slug="download", path="download/", nav="Download", priority="0.9", freq="monthly",
+    dict(slug="download", published="2026-09-20", updated="2026-09-20", path="download/", nav="Download",
          title="Download NovelForge: free for Windows 10 and 11",
          description="Download NovelForge free: install Python, unzip the release and "
                      "double-click Write.bat, which adds its two small libraries itself. "
                      "Windows 10 or 11.",
          image="assets/brand/og-image.jpg"),
-    dict(slug="faq", path="faq/", nav="FAQ", priority="0.8", freq="monthly",
+    dict(slug="faq", published="2026-09-20", updated="2026-09-20", path="faq/", nav="FAQ",
          title="FAQ: is NovelForge free, offline, and private?",
          description="Answers about NovelForge: price, offline use, where your files live, AI, "
                      "Mac and Linux, importing from Word or Scrivener, backups, and maps.",
          image="assets/brand/og-image.jpg"),
-    dict(slug="changelog", path="changelog/", nav="", priority="0.5", freq="monthly",
+    dict(slug="changelog", published="2026-09-20", updated="2026-09-20", path="changelog/", nav="",
          title="Changelog: what is new in NovelForge",
          description="Every NovelForge release, newest first: the modern interface, the "
                      "rebuilt map maker, and the fixes found by testing every button.",
          image="assets/brand/og-image.jpg"),
-    dict(slug="support", path="support/", nav="", priority="0.4", freq="yearly",
+    dict(slug="support", published="2026-09-20", updated="2026-09-20", path="support/", nav="",
          title="Support NovelForge: donate or contribute",
          description="NovelForge is free and always will be. If it helps your writing, you "
                      "can donate by PayPal or UPI, report a bug, or contribute code.",
@@ -103,6 +103,10 @@ CRAWLERS = [
 
 def read(name: str) -> str:
     return (SOURCE / name).read_text(encoding="utf-8")
+
+
+def home_page() -> Dict:
+    return next(p for p in PAGES if p["slug"] == "home")
 
 
 def page_url(page: Dict) -> str:
@@ -173,8 +177,8 @@ def software_graph() -> Dict:
         "operatingSystem": "Windows 10, Windows 11",
         "softwareRequirements": "Python 3.13 or newer; python-docx and Pillow libraries",
         "softwareVersion": VERSION,
-        "datePublished": "2026-09-18",
-        "dateModified": RELEASED,
+        "datePublished": home_page()["published"],
+        "dateModified": home_page()["updated"],
         "inLanguage": "en",
         "isAccessibleForFree": True,
         "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD",
@@ -392,9 +396,8 @@ def head(page: Dict, jsonld: Dict) -> str:
 <link rel="manifest" href="{root}site.webmanifest">
 <link rel="alternate" type="text/plain" href="{root}llms.txt" title="Plain-text summary for language models">
 <link rel="sitemap" type="application/xml" href="{root}sitemap.xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,500;7..72,600;7..72,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preload" href="{root}assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="{root}assets/fonts/literata-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="{root}style.css">
 <script type="application/ld+json">
 {json.dumps(jsonld, indent=1, ensure_ascii=False)}
@@ -420,7 +423,8 @@ def render(page: Dict) -> str:
                       "url": page_url(page), "name": page["title"],
                       "description": page["description"], "inLanguage": "en",
                       "isPartOf": {"@id": SITE + "#website"},
-                      "about": {"@id": SITE + "#software"}, "dateModified": RELEASED})
+                      "about": {"@id": SITE + "#software"},
+                      "datePublished": page["published"], "dateModified": page["updated"]})
     jsonld = {"@context": "https://schema.org", "@graph": graph}
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -442,7 +446,7 @@ def render(page: Dict) -> str:
 
 def not_found() -> str:
     """The 404 page: absolute links throughout, since it is served at any address."""
-    page = dict(slug="404", path="", nav="", priority="0", freq="never",
+    page = dict(slug="404", published="2026-09-20", updated="2026-09-20", path="", nav="",
                 title="Page not found | NovelForge", image="assets/brand/og-image.jpg",
                 description="That page does not exist. Try the NovelForge home page.")
     body = fill(read("pages/404.html"), page)
@@ -488,9 +492,7 @@ def sitemap() -> str:
             for p in shots.get(page["path"], []))
         rows.append(f"""  <url>
     <loc>{page_url(page)}</loc>
-    <lastmod>{RELEASED}</lastmod>
-    <changefreq>{page['freq']}</changefreq>
-    <priority>{page['priority']}</priority>{images}
+    <lastmod>{page['updated']}</lastmod>{images}
   </url>""")
     return ('<?xml version="1.0" encoding="UTF-8"?>\n'
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
