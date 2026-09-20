@@ -37,22 +37,24 @@ The research is in `docs/research/`: `maps-fantasy.md`, `maps-other-types.md`, `
 - All agents share one usage quota. Waves are kept small; reports are written to disk as they go.
 - New behaviour gets tests, and each new test is proven able to fail. Rules in `CLAUDE.md` apply (speed, theme tokens, windows fit the screen, `.docx` is the truth).
 
-## Status board
+## Status board (updated 2026-09-20 17:00)
+
+The four running builds were stopped by the shared usage limit (it resets 20:50); their work is committed as work-in-progress on their branches and they are resumable. Builds share one usage window, so waves are kept small.
 
 | Package | What | State |
 |---|---|---|
 | R1-R4 | Research: fantasy maps, other map types, Obsidian, website | done |
-| O1 | Go to, Connections panel + mention index, scene tags | building |
-| MK | `mapkit.py` geometry kit | queued |
-| MC1 | Book-ready maps: scale fix, units, author-only layers, print export, legend, child-map fields, new-kind registry | queued |
-| WS1 | Website foundation: docs machinery, design, search, tests, small fixes | queued |
-| MC2 | World features: realms, rain shadow, coasts, travel and journeys | after MK, MC1 |
-| MC3 | Curved labels and names for rivers, ranges, seas, lakes | after MC1 |
-| GA/GB/GC | Generators: dungeon + floor plan; city + castle; sector + system + treasure | after MK, MC1 |
+| O1 | Go to, Connections panel + mention index, scene tags | Go to done; Connections in progress (paused) |
+| MK | mapkit.py geometry kit | module written; tests pending (paused) |
+| MC1 | Book-ready maps: scale fix, units, author-only layers, print export, legend, child-map fields, new-kind registry | scale fix mostly done; rest pending (paused) |
+| WS1 | Website foundation: docs machinery, design, search, tests, small fixes | step 1 done, step 2 in progress (paused; site build broken mid-rename on its branch) |
+| MC2 | World features: realms, rain shadow, names, travel and journeys | brief written; waits for MK, MC1 |
+| MC3 | Curved labels, coast roughening, cartouche | brief written; waits for MC1 |
+| GA/GB/GC | Generators: dungeon + floor plan; city + castle; sector + system + treasure | briefs written; wait for MK, MC1 |
 | MU | Map editor: generate dialogs, measure/travel/journey tools, print export, legend, sub-map links | after generators |
-| O2 | Scene Table, saved views, vault export | after O1 |
-| O3 | Peek, Plot Board (`.canvas`) | if budget allows |
+| O2 | Scene Table, saved views, vault export | brief written; after O1 |
+| O3 | Peek, Plot Board (.canvas) | only if budget allows |
 | WS2 | Docs and guides content, screenshots from the merged build | after features |
-| PK | Packaging, CLI (`doctor`, `map`), shortcuts, exe evaluation | queued |
-| RF | Repo files: `.gitattributes`, SECURITY, issue forms, CHANGELOG, CITATION | queued |
+| PK | Packaging, CLI (doctor, map), shortcuts, exe evaluation | brief written |
+| RF | Repo files: .gitattributes, SECURITY, issue forms, CHANGELOG, CITATION | brief written |
 | QA | Full suite, screenshots, review, docs, CLAUDE.md | last |
