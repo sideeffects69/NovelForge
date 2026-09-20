@@ -18,6 +18,7 @@ import json
 import math
 import os
 import random
+import re
 import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -204,6 +205,10 @@ class Layer:
     name: str = "Base"
     visible: bool = True
     locked: bool = False
+    # Secrets: a layer the author keeps for themselves (unfinished places, plot
+    # spoilers, GM notes). Everything drawn for the *reader edition* leaves it
+    # out - the picture, the SVG, the Word listing, the alt text.
+    author_only: bool = False
 
 
 @dataclass
@@ -250,6 +255,9 @@ class Pin:
     notes: str = ""
     size: float = 7.0
     layer: str = "Base"
+    # The map that shows this place from the inside (a village under a world
+    # pin, a floor plan under a town pin). Empty when there is none.
+    child_map_id: str = ""
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -300,6 +308,16 @@ class GameMap:
     labels: List[MapLabel] = field(default_factory=list)
     created: str = field(default_factory=now_iso)
     modified: str = field(default_factory=now_iso)
+    # How long the scale bar is drawn, in map pixels. 0 means "the default for
+    # this map's width" (see `scale_bar`); `apply_scale` sets it so the bar can
+    # be a round number of units. The picture, the label placer and every
+    # distance NovelForge reports all read it through the one `scale_bar`.
+    scale_px: float = 0.0
+    # An on-map key: a swatch and a name for every kind of thing drawn.
+    legend: bool = False
+    # For a map that is a pin's inside (a city under a world pin, a floor plan
+    # under a city pin): {"map_id": ..., "pin_id": ...}. Empty for a top map.
+    parent: Dict[str, str] = field(default_factory=dict)
 
     # Not part of the map: a memo of the last label-placement pass, so panning
     # and zooming (which change nothing about where pins and labels sit) do
@@ -332,6 +350,8 @@ class GameMap:
             "hide_colliding_labels": self.hide_colliding_labels,
             "auto_place_labels": self.auto_place_labels,
             "notes": self.notes, "seed": self.seed,
+            "scale_px": self.scale_px, "legend": self.legend,
+            "parent": dict(self.parent or {}),
             "layers": [to_dict(l) for l in self.layers],
             "shapes": [
                 {**to_dict(s), "points": [[p[0], p[1]] for p in s.points]}
@@ -354,6 +374,15 @@ class GameMap:
         obj.shapes = [from_dict(Shape, d) for d in (data.get("shapes") or [])]
         obj.pins = [from_dict(Pin, d) for d in (data.get("pins") or [])]
         obj.labels = [from_dict(MapLabel, d) for d in (data.get("labels") or [])]
+        # Files from before these fields existed simply lack them; a hand-edited
+        # one might hold nonsense. Either way the map should still open.
+        if not isinstance(obj.parent, dict):
+            obj.parent = {}
+        try:
+            obj.scale_px = max(0.0, float(obj.scale_px or 0.0))
+        except (TypeError, ValueError):
+            obj.scale_px = 0.0
+        obj.legend = bool(obj.legend)
         return obj
 
     # -- helpers --------------------------------------------------------
@@ -363,8 +392,17 @@ class GameMap:
     def layer_names(self) -> List[str]:
         return [l.name for l in self.layers]
 
-    def visible_layers(self) -> set:
-        return {l.name for l in self.layers if l.visible}
+    def visible_layers(self, edition: str = "author") -> set:
+        """
+        Names of the layers that are drawn.
+
+        `edition="reader"` is the copy that leaves the building - a printed
+        book, an ebook, a Word file for a proofreader - so it also drops every
+        layer marked author-only. The author's own view keeps them.
+        """
+        reader = edition == "reader"
+        return {l.name for l in self.layers
+                if l.visible and not (reader and l.author_only)}
 
     def layer(self, name: str) -> Optional[Layer]:
         return next((l for l in self.layers if l.name == name), None)
@@ -807,6 +845,219 @@ def boxes_overlap(a: Box, b: Box, pad: float = 1.5) -> bool:
                 or a[3] + pad < b[1] or b[3] + pad < a[1])
 
 
+# --------------------------------------------------------------------------
+# Scale
+#
+# One place decides how long the scale bar is and what it stands for. The
+# renderer draws it, the label placer keeps names off it, and mapstory reads
+# every distance from it - so a distance NovelForge reports is always the
+# distance the picture shows. They used to disagree: the bar was drawn at 16%
+# of the map's width (capped at 230 px) while mapstory assumed 20%, so every
+# distance came out at 64-72% of what the caption said.
+# --------------------------------------------------------------------------
+
+_MILE = 1.0
+_FOOT = _MILE / 5280.0
+
+#: (singular, plural, other spellings, miles in one). Lower case; matching is
+#: case-blind. Abbreviations stay as the writer typed them (`10 ft`, `3 AU`);
+#: spelled-out words agree with the number (`1 mile`, `5 miles`).
+UNIT_TABLE: Tuple[Tuple[str, str, Tuple[str, ...], float], ...] = (
+    ("foot", "feet", ("ft", "foots"), _FOOT),
+    ("yard", "yards", ("yd", "yds"), 3 * _FOOT),
+    ("pace", "paces", (), 2.5 * _FOOT),
+    ("metre", "metres", ("meter", "meters", "m"), 0.000621371),
+    ("kilometre", "kilometres", ("kilometer", "kilometers", "km", "kms"),
+     0.621371),
+    ("mile", "miles", ("mi",), _MILE),
+    ("league", "leagues", (), 3.0),
+    ("day", "days", (), 20.0),                       # a day's march
+    ("march", "marches", (), 20.0),
+    ("parsec", "parsecs", ("pc",), 1.9174e13),
+    ("astronomical unit", "astronomical units", ("au",), 92955807.0),
+    ("light-year", "light-years",
+     ("light year", "light years", "lightyear", "lightyears", "ly"), 5.8786e12),
+)
+
+#: Units too big for "about N miles" to help, or for a horse-speed check.
+ASTRONOMICAL_UNITS = frozenset(
+    {"parsec", "parsecs", "pc", "astronomical unit", "astronomical units", "au",
+     "light-year", "light-years", "light year", "light years", "lightyear",
+     "lightyears", "ly"})
+
+_UNIT_BY_WORD: Dict[str, Tuple[str, str, Tuple[str, ...], float]] = {}
+for _row in UNIT_TABLE:
+    for _word in (_row[0], _row[1]) + _row[2]:
+        _UNIT_BY_WORD[_word] = _row
+
+
+def unit_info(word: str) -> Optional[Tuple[str, str, Tuple[str, ...], float]]:
+    """The row of `UNIT_TABLE` a caption's unit word means, or None."""
+    return _UNIT_BY_WORD.get(re.sub(r"\s+", " ", (word or "").strip().lower()))
+
+
+_CAPTION_RE = re.compile(
+    r"(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)"      # 1,500 or 12.5
+    r"\s*([A-Za-z][A-Za-z\-]*)?(?:\s+([A-Za-z][A-Za-z\-]*))?")
+
+
+def parse_scale_caption(text: str) -> Optional[Tuple[float, str]]:
+    """
+    (amount, unit word) from a caption such as "100 leagues" or "3 light years".
+
+    The unit is "units" when the caption has a number but no word. None when it
+    has no usable number at all ("a long walk"), which means the scale is
+    unknown - never a guess.
+    """
+    match = _CAPTION_RE.search(text or "")
+    if not match:
+        return None
+    amount = float(match.group(1).replace(",", ""))
+    if amount <= 0:
+        return None
+    first, second = match.group(2), match.group(3)
+    if first and second and unit_info(f"{first} {second}"):
+        return amount, f"{first} {second}".lower()
+    return amount, (first or "units").lower()
+
+
+def nice_number(value: float, mode: str = "floor") -> float:
+    """
+    A round number: 1, 2 or 5 times a power of ten.
+
+    "floor" is the largest one not above `value`, "ceil" the smallest not
+    below it, and "round" the nearest on a logarithmic scale. A scale bar is
+    always one of these - nobody wants a bar labelled 137 miles.
+    """
+    if not value or value <= 0 or math.isinf(value) or math.isnan(value):
+        return 0.0
+    exponent = math.floor(math.log10(value))
+    base = value / 10.0 ** exponent
+    if base >= 10.0:                       # log10 is not exact at the edges
+        exponent, base = exponent + 1, base / 10.0
+    elif base < 1.0:
+        exponent, base = exponent - 1, base * 10.0
+    steps = (1.0, 2.0, 5.0, 10.0)
+    if mode == "ceil":
+        pick = next((s for s in steps if s >= base * (1 - 1e-9)), 10.0)
+    elif mode == "round":
+        pick = min(steps, key=lambda s: abs(math.log(base / s)))
+    else:
+        pick = max((s for s in steps if s <= base * (1 + 1e-9)), default=1.0)
+    return float(f"{pick:g}e{exponent}")
+
+
+def default_bar_px(width: float) -> float:
+    """
+    How long the scale bar is drawn on a map that has not been given its own
+    length: 16% of the width, but never more than 230 px. Every map made before
+    `scale_px` existed was drawn this way, so it stays true to them.
+    """
+    return min(float(width) * 0.16, 230.0)
+
+
+@dataclass(frozen=True)
+class ScaleBar:
+    """The scale bar as drawn: where, how long, and what its length means."""
+
+    px: float = 0.0            # drawn length, in map pixels
+    value: float = 0.0         # what that length stands for, in `unit`
+    unit: str = ""             # the word after the number, lower case
+    label: str = ""            # the caption printed above the bar
+    x: float = 0.0             # left end
+    y: float = 0.0             # top edge
+    thickness: float = 0.0     # how tall the bar is
+    area: Box = (0.0, 0.0, 0.0, 0.0)   # what it keeps clear of names
+
+    @property
+    def known(self) -> bool:
+        """True when the caption holds a number, so distances can be worked out."""
+        return self.value > 0 and self.px > 0
+
+    @property
+    def units_per_pixel(self) -> float:
+        return self.value / self.px if self.known else 0.0
+
+
+def scale_bar(gm: Any) -> ScaleBar:
+    """
+    The one description of a map's scale bar.
+
+    The bar is `gm.scale_px` long when the map has set that (`apply_scale`
+    does), otherwise `default_bar_px(width)`; the caption says what that length
+    is worth. A map with no caption has no bar (an empty label). Anything that
+    draws the bar, keeps names off it or turns pixels into miles goes through
+    here, so they cannot disagree. Works on anything with the map's attributes.
+    """
+    width = float(getattr(gm, "width", 1600) or 1600)
+    height = float(getattr(gm, "height", 1100) or 1100)
+    caption = str(getattr(gm, "scale_text", "") or "").strip()
+    custom = float(getattr(gm, "scale_px", 0.0) or 0.0)
+    px = custom if custom > 0 else default_bar_px(width)
+    px = max(4.0, min(px, width * 0.9))
+    parsed = parse_scale_caption(caption)
+    x, y = width * 0.045, height - height * 0.052
+    thickness = max(7.0, height * 0.011)
+    area = (x - 6, y - height * 0.03, x + px + 6, y + height * 0.02)
+    if caption:
+        words = text_box(x + px / 2.0, y - thickness * 1.5, caption,
+                         max(9, int(height * 0.016)), "center")
+        area = (min(area[0], words[0]), min(area[1], words[1]),
+                max(area[2], words[2]), max(area[3], words[3]))
+    return ScaleBar(px=px, value=parsed[0] if parsed else 0.0,
+                    unit=parsed[1] if parsed else "", label=caption,
+                    x=x, y=y, thickness=thickness, area=area)
+
+
+def _plain_number(value: float) -> str:
+    if value >= 1000 and abs(value - round(value)) < 1e-9:
+        return f"{int(round(value)):,}"
+    return f"{value:.6f}".rstrip("0").rstrip(".")
+
+
+def scale_caption(value: float, unit: str) -> str:
+    """"10 ft", "1 mile", "5 miles": a number and a unit that agree."""
+    typed = (unit or "").strip()
+    row = unit_info(typed)
+    word = typed
+    if row is not None and typed.lower() in (row[0], row[1]):
+        word = row[0] if abs(value - 1.0) < 1e-9 else row[1]
+    return f"{_plain_number(value)} {word}".strip()
+
+
+def apply_scale(gm: Any, unit: str, per_cell: float,
+                cell_px: Optional[float] = None) -> ScaleBar:
+    """
+    Give a map a scale: `per_cell` `unit`s to one grid square.
+
+    Sets the caption, the bar's drawn length and the grid square together, so
+    the caption, the bar and the grid cannot disagree: with `cell_px` the grid
+    square is that many map pixels (rounded to a whole pixel), otherwise the
+    map's `grid_size` is kept. The bar is the largest round number (1, 2 or 5
+    times a power of ten) of `unit` that fits the space a bar normally gets, so
+    "5 ft per square" on a 60 px grid gives a bar reading "10 ft", 120 px long.
+    Returns the resulting `ScaleBar`.
+    """
+    per_cell = float(per_cell)
+    if per_cell <= 0 or math.isnan(per_cell) or math.isinf(per_cell):
+        raise ValueError("per_cell must be a positive number")
+    if cell_px is not None:
+        gm.grid_size = max(4, int(round(float(cell_px))))
+    cell = max(1.0, float(gm.grid_size))
+    units_per_px = per_cell / cell
+    room = default_bar_px(float(gm.width))
+    value = nice_number(room * units_per_px, "floor")
+    gm.scale_text = scale_caption(value, unit)
+    gm.scale_px = value / units_per_px
+    return scale_bar(gm)
+
+
+def cell_units(gm: Any) -> float:
+    """How many of the scale's units one grid square is worth (0 if unknown)."""
+    bar = scale_bar(gm)
+    return bar.units_per_pixel * float(getattr(gm, "grid_size", 0) or 0)
+
+
 def _label_fingerprint(gm: GameMap, visible: set) -> tuple:
     """
     Everything `layout_pin_labels` actually reads, rounded to a tenth of a
@@ -817,7 +1068,7 @@ def _label_fingerprint(gm: GameMap, visible: set) -> tuple:
     """
     return (
         gm.title_on_map, gm.name, gm.compass, gm.width, gm.height,
-        gm.scale_text, gm.hide_colliding_labels, frozenset(visible),
+        gm.scale_text, gm.scale_px, gm.hide_colliding_labels, frozenset(visible),
         tuple(
             (l.layer, round(l.x, 1), round(l.y, 1), l.text, l.size, l.tracking)
             for l in gm.labels
@@ -867,12 +1118,9 @@ def layout_pin_labels(gm: GameMap, visible: Optional[set] = None
         r = min(gm.width, gm.height) * 0.055
         cx, cy = gm.width - r * 2.1, gm.height - r * 2.1
         placed.append((cx - r * 1.5, cy - r * 1.8, cx + r * 1.5, cy + r * 1.5))
-    if gm.scale_text.strip():
-        bar = min(gm.width * 0.16, 230.0)
-        x0 = gm.width * 0.045
-        y0 = gm.height - gm.height * 0.052
-        placed.append((x0 - 6, y0 - gm.height * 0.03, x0 + bar + 6,
-                       y0 + gm.height * 0.02))
+    bar = scale_bar(gm)
+    if bar.label:
+        placed.append(bar.area)
 
     # Free-standing labels (region and ocean names) always win.
     for label in gm.labels:
@@ -1257,14 +1505,12 @@ def _compass_primitives(gm: GameMap) -> List[tuple]:
 
 
 def _scale_primitives(gm: GameMap) -> List[tuple]:
-    if not gm.scale_text.strip():
+    scale = scale_bar(gm)
+    if not scale.label:
         return []
     palette = gm.palette()
     ink, paper = palette["ink"], palette["paper"]
-    bar = min(gm.width * 0.16, 230.0)
-    x0 = gm.width * 0.045
-    y0 = gm.height - gm.height * 0.052
-    height = max(7.0, gm.height * 0.011)
+    bar, x0, y0, height = scale.px, scale.x, scale.y, scale.thickness
     out: List[tuple] = []
     segments = 4
     for i in range(segments):
@@ -1273,7 +1519,7 @@ def _scale_primitives(gm: GameMap) -> List[tuple]:
                     [(sx, y0), (sx + bar / segments, y0),
                      (sx + bar / segments, y0 + height), (sx, y0 + height)],
                     ink if i % 2 == 0 else paper, ink, 1.1, False))
-    out.append(("text", x0 + bar / 2, y0 - height * 1.5, gm.scale_text,
+    out.append(("text", x0 + bar / 2, y0 - height * 1.5, scale.label,
                 max(9, int(gm.height * 0.016)), ink, "center", True, False, 0.0))
     return out
 
@@ -1319,7 +1565,7 @@ def _primitive_key(gm: GameMap, furniture: bool) -> tuple:
     """Everything the display list depends on. Views (zoom, pan, selection) are not in it."""
     return (
         gm.style, gm.width, gm.height, gm.grid, gm.grid_size, gm.scale_text,
-        gm.compass, gm.border, gm.title_on_map, gm.name, gm.seed,
+        gm.scale_px, gm.compass, gm.border, gm.title_on_map, gm.name, gm.seed,
         gm.hide_colliding_labels, gm.auto_place_labels, furniture,
         frozenset(gm.visible_layers()),
         tuple((s.id, s.kind, s.layer, s.fill, s.outline, s.width, s.label,

@@ -35,16 +35,26 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from . import mapmaker as mm
 
 #: Words that mean "a unit of distance" in the scale caption, and how many
-#: miles one of them is. Only used to phrase warnings in something familiar;
-#: the checks themselves work in whatever unit the writer chose.
-_UNITS = {
-    "league": 3.0, "leagues": 3.0,
-    "mile": 1.0, "miles": 1.0,
-    "km": 0.621, "kilometre": 0.621, "kilometres": 0.621,
-    "kilometer": 0.621, "kilometers": 0.621,
-    "day": 20.0, "days": 20.0,          # a day's march
-    "march": 20.0, "marches": 20.0,
+#: miles one of them is: feet, yards, paces, metres, kilometres, miles, leagues
+#: (three miles), days' march, parsecs, AU and light-years, spelled out,
+#: plural or abbreviated (ft, yd, m, km, mi, pc, AU, ly). Only used to phrase
+#: warnings in something familiar; the checks themselves work in whatever unit
+#: the writer chose. The table itself lives in `mapmaker.UNIT_TABLE`, next to
+#: the code that formats a caption, so the two cannot drift apart.
+_UNITS: Dict[str, float] = {
+    word: row[3]
+    for word, row in mm._UNIT_BY_WORD.items()
 }
+
+#: Units for which "about N miles" is no help and a horse-speed check is
+#: meaningless.
+_ASTRONOMICAL = mm.ASTRONOMICAL_UNITS
+
+# One scale, one implementation: the map maker owns how a scale bar is drawn
+# and what it is worth; these are the names the rest of the app already reads.
+apply_scale = mm.apply_scale
+scale_bar = mm.scale_bar
+nice_number = mm.nice_number
 
 
 # --------------------------------------------------------------------------
@@ -161,6 +171,11 @@ class Scale:
     def known(self) -> bool:
         return self.units_per_pixel > 0
 
+    @property
+    def astronomical(self) -> bool:
+        """Parsecs, AU, light-years: distances a "miles" phrasing cannot help."""
+        return self.unit.lower() in _ASTRONOMICAL
+
     def to_miles(self, amount: float) -> Optional[float]:
         factor = _UNITS.get(self.unit.lower())
         return amount * factor if factor else None
@@ -170,24 +185,18 @@ def read_scale(game_map) -> Scale:
     """
     Work out the map's scale from its caption, e.g. "100 leagues".
 
-    The scale bar is drawn at a fixed fraction of the map width, which is what
-    makes the caption mean anything at all. If the caption has no number, the
-    scale is unknown and every distance check quietly stands down rather than
-    inventing a number.
+    The caption says what the *drawn scale bar* is worth, so the length in
+    pixels comes from the very function that draws it (`mapmaker.scale_bar`).
+    It used to be assumed here as a fifth of the map's width while the picture
+    drew 16% (at most 230 px), which made every distance 64-72% of the truth.
+    If the caption has no number, the scale is unknown and every distance check
+    quietly stands down rather than inventing a number.
     """
-    caption = (getattr(game_map, "scale_text", "") or "").strip()
-    if not caption:
+    bar = mm.scale_bar(game_map)
+    if not bar.known:
         return Scale()
-    match = re.search(r"(\d+(?:\.\d+)?)\s*([A-Za-z]+)?", caption)
-    if not match:
-        return Scale()
-    amount = float(match.group(1))
-    unit = (match.group(2) or "units").lower()
-    if amount <= 0:
-        return Scale()
-    # Matches the bar drawn by the renderer: a fifth of the map width.
-    bar = max(1.0, float(getattr(game_map, "width", 1600)) * 0.2)
-    return Scale(units_per_pixel=amount / bar, unit=unit, bar_pixels=bar)
+    return Scale(units_per_pixel=bar.units_per_pixel, unit=bar.unit or "units",
+                 bar_pixels=bar.px)
 
 
 def distance(game_map, a, b) -> Optional[float]:
@@ -205,9 +214,16 @@ def describe_distance(game_map, a, b) -> str:
         return ""
     scale = read_scale(game_map)
     miles = scale.to_miles(value)
-    text = f"{value:,.0f} {scale.unit}"
-    if miles and scale.unit not in ("mile", "miles"):
-        text += f" (about {miles:,.0f} miles)"
+    # Small distances (a room in feet) need their decimals; a whole kingdom
+    # does not.
+    shown = (f"{value:,.0f}" if value >= 10 or value == 0
+             else f"{value:,.1f}".rstrip("0").rstrip("."))
+    text = f"{shown} {scale.unit}"
+    if miles and not scale.astronomical \
+            and mm.unit_info(scale.unit) is not None \
+            and mm.unit_info(scale.unit)[0] != "mile":
+        text += f" (about {miles:,.0f} miles)" if miles >= 10 \
+            else f" (about {miles:,.2f} miles)"
     return text
 
 
@@ -405,6 +421,8 @@ def check_maps(project, graph) -> List:
             if gap is None:
                 continue
             scale = read_scale(game_map)
+            if scale.astronomical:
+                continue          # 300 miles means nothing between the stars
             miles = scale.to_miles(gap)
             if miles is None or miles < 300:
                 continue
