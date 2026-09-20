@@ -285,5 +285,244 @@ class OtherScaleUsers(unittest.TestCase):
         self.assertEqual(text, "200 leagues (about 600 miles)")
 
 
+def square(x, y, size):
+    return [(x, y), (x + size, y), (x + size, y + size), (x, y + size)]
+
+
+def secret_map():
+    """
+    A small world with a secret layer (author-only), a hidden layer and notes.
+
+    Base: Harrowgate (capital), Dunmere, Whisperwood (a named forest), "The Grey
+    Sea". Spoilers (author-only): the Vault of Kings, Lost Isle, "The Void".
+    Hidden (switched off): Old Fort and Buried Ruins.
+    """
+    gm = mm.GameMap(
+        name="The Broken Coast", kind="world", style="parchment", width=800,
+        height=550, scale_text="50 miles",
+        notes="The king is a fraud.\n\nThe vault holds the real crown.",
+        layers=[mm.Layer(name="Base"),
+                mm.Layer(name="Spoilers", author_only=True),
+                mm.Layer(name="Hidden", visible=False)])
+    gm.shapes = [
+        mm.Shape(kind="land", layer="Base", points=square(60, 90, 460)),
+        mm.Shape(kind="forest", layer="Base", label="Whisperwood",
+                 points=square(150, 200, 160)),
+        mm.Shape(kind="land", layer="Spoilers", label="Lost Isle",
+                 points=square(560, 300, 190)),
+        mm.Shape(kind="land", layer="Hidden", label="Buried Ruins",
+                 points=square(560, 60, 90)),
+    ]
+    gm.pins = [
+        mm.Pin(x=200, y=170, kind="capital", label="Harrowgate", layer="Base",
+               notes="A tunnel runs under the well.", entity_id="loc_1"),
+        mm.Pin(x=420, y=330, kind="town", label="Dunmere", layer="Base"),
+        mm.Pin(x=650, y=390, kind="treasure", label="Vault of Kings",
+               layer="Spoilers", notes="The crown is here."),
+        mm.Pin(x=600, y=90, kind="ruin", label="Old Fort", layer="Hidden",
+               notes="Forgotten garrison."),
+    ]
+    gm.labels = [
+        mm.MapLabel(x=400, y=500, text="The Grey Sea", size=22, layer="Base"),
+        mm.MapLabel(x=700, y=500, text="The Void", size=18, layer="Spoilers"),
+    ]
+    # Ids seed the trees, and are random unless set: two calls must draw alike.
+    for i, item in enumerate(gm.shapes + gm.pins + gm.labels):
+        item.id = f"item_{i}"
+    return gm
+
+
+def texts(prims):
+    return [p[3] for p in prims if p[0] == "text"]
+
+
+class SecretLayers(unittest.TestCase):
+    def test_a_layer_is_public_unless_marked_author_only(self):
+        self.assertFalse(mm.Layer().author_only)
+        gm = secret_map()
+        again = mm.GameMap.from_json(gm.to_json())
+        self.assertEqual([l.author_only for l in again.layers], [False, True, False])
+        old = mm.GameMap.from_json({"layers": [{"name": "Base", "visible": True}]})
+        self.assertFalse(old.layers[0].author_only)
+
+    def test_the_editions_see_different_layers(self):
+        gm = secret_map()
+        self.assertEqual(gm.visible_layers(), {"Base", "Spoilers"})
+        self.assertEqual(gm.visible_layers("author"), {"Base", "Spoilers"})
+        self.assertEqual(gm.visible_layers("reader"), {"Base"})
+        with self.assertRaises(ValueError):
+            gm.visible_layers("Reader")           # a typo must not mean "author"
+
+    def test_the_reader_display_list_has_no_secrets(self):
+        # Breaking it: make visible_layers ignore author_only, and the reader's
+        # list names the vault.
+        gm = secret_map()
+        author = texts(mm.build_primitives(gm))
+        reader = texts(mm.build_primitives(gm, edition="reader"))
+        for name in ("Vault of Kings", "The Void", "Lost Isle"):
+            self.assertIn(name, author)
+            self.assertNotIn(name, reader)
+        for name in ("Harrowgate", "Dunmere", "The Grey Sea", "Whisperwood"):
+            self.assertIn(name, reader)
+        for name in ("Old Fort", "Buried Ruins"):        # switched off: in neither
+            self.assertNotIn(name, author)
+            self.assertNotIn(name, reader)
+
+    def test_asking_for_one_edition_never_serves_the_other_from_the_cache(self):
+        gm = secret_map()
+        first = mm.build_primitives(gm)
+        reader = mm.build_primitives(gm, edition="reader")
+        again = mm.build_primitives(gm)
+        self.assertEqual(first, again)
+        self.assertNotEqual(first, reader)
+        self.assertEqual(mm.build_primitives(gm, edition="reader"), reader)
+
+    def test_a_default_call_is_still_the_authors_copy(self):
+        gm = secret_map()
+        self.assertEqual(mm.build_primitives(gm),
+                         mm.build_primitives(gm, edition="author"))
+        gm2 = mapgen.generate(mapgen.preset("Classic fantasy world", 3))
+        self.assertEqual(mm.build_primitives(gm2),
+                         mm.build_primitives(gm2, edition="author"))
+
+    def test_a_map_with_no_secrets_reads_the_same_in_both_editions(self):
+        gm = mapgen.generate(mapgen.preset("Classic fantasy world", 3))
+        self.assertEqual(mm.build_primitives(gm),
+                         mm.build_primitives(gm, edition="reader"))
+
+
+class SecretsStayOutOfTheExports(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.dir = Path(cls.folder.name)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_the_reader_svg_leaves_them_out_and_describes_only_what_it_shows(self):
+        gm = secret_map()
+        author = mm.render_svg(gm, self.dir / "a.svg").read_text(encoding="utf-8")
+        reader = mm.render_svg(gm, self.dir / "r.svg", edition="reader"
+                               ).read_text(encoding="utf-8")
+        self.assertIn("Vault of Kings", author)
+        self.assertNotIn("Vault of Kings", reader)
+        self.assertNotIn("Lost Isle", reader)
+        self.assertIn("<desc>", reader)
+        self.assertIn("Harrowgate", reader)
+
+    def test_the_reader_picture_is_the_picture_without_that_layer(self):
+        from PIL import Image
+
+        gm = secret_map()
+        for layer_edition in ("author", "reader"):
+            mm.render_png(gm, self.dir / f"{layer_edition}.png", scale=0.5,
+                          edition=layer_edition)
+        without = secret_map()
+        without.layers[1].visible = False                # the same, layer off
+        mm.render_png(without, self.dir / "off.png", scale=0.5)
+        with Image.open(self.dir / "reader.png") as r, \
+                Image.open(self.dir / "off.png") as off, \
+                Image.open(self.dir / "author.png") as a:
+            self.assertEqual(r.convert("RGB").tobytes(), off.convert("RGB").tobytes())
+            self.assertNotEqual(r.convert("RGB").tobytes(), a.convert("RGB").tobytes())
+
+    def word_text(self, path):
+        from docx import Document
+
+        doc = Document(str(path))
+        parts = [p.text for p in doc.paragraphs]
+        for table in doc.tables:
+            for row in table.rows:
+                parts += [cell.text for cell in row.cells]
+        return "\n".join(parts), doc
+
+    def test_the_word_file_lists_only_what_is_on_the_map(self):
+        # The leak: render_docx listed every pin (notes and all) and every named
+        # shape whatever its layer. Breaking it: list `gm.pins` again.
+        gm = secret_map()
+        text, _ = self.word_text(mm.render_docx(
+            gm, None, self.dir / "author.docx", {"loc_1": "Harrowgate Keep"}))
+        for shown in ("Harrowgate", "A tunnel runs under the well.", "Vault of Kings",
+                      "The crown is here.", "Harrowgate Keep", "Whisperwood",
+                      "The king is a fraud.", "Lost Isle"):
+            self.assertIn(shown, text)
+        for hidden in ("Old Fort", "Forgotten garrison.", "Buried Ruins"):
+            self.assertNotIn(hidden, text, "a switched-off layer leaked")
+
+    def test_the_reader_word_file_has_no_secrets_and_no_notes(self):
+        gm = secret_map()
+        text, _ = self.word_text(mm.render_docx(
+            gm, None, self.dir / "reader.docx", {"loc_1": "Harrowgate Keep"},
+            edition="reader"))
+        for shown in ("Harrowgate", "Dunmere", "Whisperwood", "50 miles"):
+            self.assertIn(shown, text)
+        for hidden in ("Vault of Kings", "The crown is here.", "Lost Isle",
+                       "Old Fort", "Buried Ruins", "A tunnel runs under the well.",
+                       "The king is a fraud.", "Harrowgate Keep", "Location sheet",
+                       "Notes"):
+            self.assertNotIn(hidden, text, hidden)
+        self.assertIn("2 pins, 1 labels", text)          # counts what is shown
+
+    def test_the_picture_in_the_word_file_carries_alt_text(self):
+        gm = secret_map()
+        for edition in ("author", "reader"):
+            _, doc = self.word_text(mm.render_docx(
+                gm, None, self.dir / f"alt_{edition}.docx", edition=edition))
+            self.assertEqual(len(doc.inline_shapes), 1)
+            props = doc.inline_shapes[0]._inline.docPr
+            self.assertEqual(props.get("descr"), mm.describe_map(gm, edition))
+            self.assertTrue(props.get("descr"))
+        reader = doc.inline_shapes[0]._inline.docPr.get("descr")
+        self.assertNotIn("Vault", reader)
+
+    def test_a_png_carries_its_description(self):
+        from PIL import Image
+
+        gm = secret_map()
+        mm.render_png(gm, self.dir / "d.png", scale=0.3, edition="reader")
+        with Image.open(self.dir / "d.png") as image:
+            image.load()
+            self.assertEqual(image.text.get("Description"),
+                             mm.describe_map(gm, "reader"))
+
+
+class AltText(unittest.TestCase):
+    def test_it_says_what_kind_of_map_what_it_shows_and_who_lives_there(self):
+        # Breaking it: build the description from every layer, not the
+        # edition's, and the reader's alt text names the vault.
+        gm = secret_map()
+        author, reader = mm.describe_map(gm), mm.describe_map(gm, "reader")
+        self.assertTrue(author.startswith('A world map titled "The Broken Coast"'))
+        self.assertIn("Parchment", author)
+        self.assertIn("land and forests", author)
+        self.assertIn("7 places are named, including Harrowgate", author)
+        self.assertIn("4 places are named, including Harrowgate", reader)
+        self.assertNotIn("Vault of Kings", reader)
+        self.assertNotIn("Lost Isle", reader)
+        self.assertIn("The scale bar reads 50 miles.", reader)
+        self.assertNotIn("fraud", author + reader)       # never a note
+        self.assertNotIn("tunnel", author + reader)
+
+    def test_capitals_lead_and_the_list_is_short(self):
+        gm = mapgen.generate(mapgen.preset("Classic fantasy world", 3))
+        text = mm.describe_map(gm)
+        capital = next(p.label for p in gm.pins if p.kind == "capital")
+        self.assertIn(f"including {capital}", text)
+        self.assertLessEqual(len(text), 420)
+
+    def test_an_empty_or_odd_map_still_gets_a_sentence(self):
+        text = mm.describe_map(mm.GameMap(name="", kind=""))
+        self.assertTrue(text.startswith("A map, drawn in"), text)
+        self.assertIn("Nothing on it is named.", text)
+        self.assertTrue(mm.describe_map(mm.GameMap(name="x", kind="starfield"))
+                        .startswith('A starfield map titled "x"'))
+        one = mm.GameMap(name="Solo", kind="dungeon")
+        one.pins.append(mm.Pin(label="The Pit", kind="danger"))
+        self.assertIn("One place is named: The Pit.", mm.describe_map(one))
+        self.assertTrue(mm.describe_map(one).startswith("A dungeon map"))
+
+
 if __name__ == "__main__":
     unittest.main()

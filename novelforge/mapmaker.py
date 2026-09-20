@@ -194,6 +194,12 @@ MAP_KINDS = {
 
 GRID_KINDS = {"none": "None", "square": "Square", "hex": "Hex"}
 
+#: Who a picture is for. "author" is the working copy (every visible layer,
+#: notes and all); "reader" is what leaves the building - a book, an ebook, a
+#: Word file for a proofreader - and drops every author-only layer and every
+#: note.
+EDITIONS = ("author", "reader")
+
 
 # ==========================================================================
 # Model
@@ -400,6 +406,9 @@ class GameMap:
         book, an ebook, a Word file for a proofreader - so it also drops every
         layer marked author-only. The author's own view keeps them.
         """
+        if edition not in EDITIONS:
+            # A typo must not quietly fall back to the author's copy.
+            raise ValueError(f"edition must be one of {EDITIONS}, not {edition!r}")
         reader = edition == "reader"
         return {l.name for l in self.layers
                 if l.visible and not (reader and l.author_only)}
@@ -1561,13 +1570,17 @@ def _points_key(points: Sequence[Point]) -> int:
     return hash(tuple(map(tuple, points)))
 
 
-def _primitive_key(gm: GameMap, furniture: bool) -> tuple:
-    """Everything the display list depends on. Views (zoom, pan, selection) are not in it."""
+def _primitive_key(gm: GameMap, furniture: bool, visible: set) -> tuple:
+    """
+    Everything the display list depends on. Views (zoom, pan, selection) are
+    not in it. The edition is not either, on purpose: it matters only through
+    which layers it leaves visible, and that set is in here.
+    """
     return (
         gm.style, gm.width, gm.height, gm.grid, gm.grid_size, gm.scale_text,
         gm.scale_px, gm.compass, gm.border, gm.title_on_map, gm.name, gm.seed,
         gm.hide_colliding_labels, gm.auto_place_labels, furniture,
-        frozenset(gm.visible_layers()),
+        frozenset(visible),
         tuple((s.id, s.kind, s.layer, s.fill, s.outline, s.width, s.label,
                s.closed, _points_key(s.points)) for s in gm.shapes),
         tuple((p.id, p.layer, p.x, p.y, p.kind, p.label, p.label_side, p.size)
@@ -1577,8 +1590,8 @@ def _primitive_key(gm: GameMap, furniture: bool) -> tuple:
     )
 
 
-def build_primitives(gm: GameMap, include_furniture: bool = True
-                     ) -> List[tuple]:
+def build_primitives(gm: GameMap, include_furniture: bool = True,
+                     edition: str = "author") -> List[tuple]:
     """
     Turn a map into an ordered display list. This is the single source of truth.
 
@@ -1586,12 +1599,14 @@ def build_primitives(gm: GameMap, include_furniture: bool = True
     share of it is remembered until that shape does: zooming, panning and
     selecting rebuild nothing, and dragging one vertex re-scatters the trees of
     one forest, not all of them.
+
+    `edition="reader"` leaves out every author-only layer (see `EDITIONS`).
     """
-    key = _primitive_key(gm, include_furniture)
+    key = _primitive_key(gm, include_furniture, gm.visible_layers(edition))
     cached = gm._prim_cache
     if cached is not None and cached[0] == key:
         return list(cached[1])
-    prims = _build_primitives(gm, include_furniture)
+    prims = _build_primitives(gm, include_furniture, edition)
     gm._prim_cache = (key, prims)
     return list(prims)
 
@@ -1683,14 +1698,15 @@ def _shape_body(gm: GameMap, shape: Shape, palette: Dict[str, Any]) -> List[tupl
     return out
 
 
-def _build_primitives(gm: GameMap, include_furniture: bool) -> List[tuple]:
+def _build_primitives(gm: GameMap, include_furniture: bool,
+                      edition: str = "author") -> List[tuple]:
     palette = gm.palette()
     ink = palette["ink"]
     paper = palette["paper"]
     terrain: Dict[str, str] = palette.get("terrain", {}) or {}
     land_tone = terrain.get("land") or paper
     halo = _mix(land_tone, paper, 0.25)
-    visible = gm.visible_layers()
+    visible = gm.visible_layers(edition)
     out: List[tuple] = []
 
     if gm.grid != "none":
@@ -1904,27 +1920,20 @@ def _parchment_background(gm: GameMap, scale: float):
     return base
 
 
-def render_png(gm: GameMap, path: Path | str, scale: float = 1.0,
-               supersample: int = 2) -> Path:
+def _paint(draw, prims: Sequence[tuple], effective: float,
+           min_stroke: int = 1) -> None:
     """
-    Rasterise a map to PNG.
+    Draw a display list with Pillow.
 
-    Drawn at `supersample` times the requested size and downscaled, which is
-    how the lines come out smooth - Pillow has no anti-aliased line drawing.
+    `effective` is pixels per map unit. `min_stroke` is the thinnest line, in
+    drawn pixels, that any outline may be - print export raises it so no line is
+    finer than a printer can hold.
     """
-    from PIL import Image, ImageDraw
-
-    scale = max(0.2, min(4.0, float(scale)))
-    ss = max(1, min(3, int(supersample)))
-    effective = scale * ss
-
-    image = _parchment_background(gm, effective)
-    draw = ImageDraw.Draw(image, "RGBA")
 
     def sc(points: Iterable[Point]) -> List[Tuple[float, float]]:
         return [(p[0] * effective, p[1] * effective) for p in points]
 
-    for prim in build_primitives(gm):
+    for prim in prims:
         head = prim[0]
         try:
             if head == "polygon":
@@ -1936,14 +1945,14 @@ def render_png(gm: GameMap, path: Path | str, scale: float = 1.0,
                     draw.polygon(pts, fill=fill)
                 if outline and width:
                     draw.line(pts + [pts[0]], fill=outline,
-                              width=max(1, int(round(width * effective))),
+                              width=max(min_stroke, int(round(width * effective))),
                               joint="curve")
             elif head == "line":
                 _kind, points, colour, width, dash = prim
                 pts = sc(points)
                 if len(pts) < 2 or not colour:
                     continue
-                stroke = max(1, int(round(width * effective)))
+                stroke = max(min_stroke, int(round(width * effective)))
                 if dash:
                     for seg in _dash_segments(pts, 9.0 * effective,
                                               6.0 * effective):
@@ -1963,9 +1972,10 @@ def render_png(gm: GameMap, path: Path | str, scale: float = 1.0,
                 if box[2] - box[0] < 1 or box[3] - box[1] < 1:
                     continue
                 draw.ellipse(box, fill=fill or None, outline=outline or None,
-                             width=max(1, int(round(width * effective))))
+                             width=max(min_stroke, int(round(width * effective))))
             elif head == "text":
-                x, y, text, size, colour, anchor, italic, bold, tracking, halo =                     text_parts(prim)
+                (x, y, text, size, colour, anchor, italic, bold, tracking,
+                 halo) = text_parts(prim)
                 font = _font(int(size * effective), italic, bold)
                 anchor_map = {"center": "mm", "w": "lm", "e": "rm",
                               "n": "ma", "s": "md"}
@@ -1983,13 +1993,58 @@ def render_png(gm: GameMap, path: Path | str, scale: float = 1.0,
             # One malformed primitive must not abandon the whole export.
             continue
 
-    if ss > 1:
-        target = (max(1, int(gm.width * scale)), max(1, int(gm.height * scale)))
-        image = image.resize(target, Image.LANCZOS)
 
+def _render_image(gm: GameMap, scale: float, supersample: int = 2,
+                  edition: str = "author", min_stroke: int = 1,
+                  size: Optional[Tuple[int, int]] = None):
+    """
+    The map as a Pillow RGB image, `scale` pixels per map unit.
+
+    Drawn at `supersample` times the size and shrunk, which is how the lines
+    come out smooth. `size` fixes the final pixel size (otherwise the map's size
+    times `scale`, truncated); `min_stroke` is in final pixels.
+    """
+    from PIL import Image, ImageDraw
+
+    ss = max(1, min(3, int(supersample)))
+    effective = float(scale) * ss
+    image = _parchment_background(gm, effective)
+    draw = ImageDraw.Draw(image, "RGBA")
+    _paint(draw, build_primitives(gm, edition=edition), effective,
+           max(1, int(math.ceil(min_stroke * ss))) if min_stroke > 1 else 1)
+    target = size or (max(1, int(gm.width * scale)), max(1, int(gm.height * scale)))
+    if image.size != target:
+        image = image.resize(target, Image.LANCZOS)
+    return image
+
+
+def _png_info(alt_text: str):
+    """PNG text chunks: the picture's description, for readers and for ebooks."""
+    from PIL.PngImagePlugin import PngInfo
+
+    info = PngInfo()
+    if alt_text:
+        info.add_text("Description", alt_text)
+    return info
+
+
+def render_png(gm: GameMap, path: Path | str, scale: float = 1.0,
+               supersample: int = 2, edition: str = "author") -> Path:
+    """
+    Rasterise a map to PNG.
+
+    Drawn at `supersample` times the requested size and downscaled, which is
+    how the lines come out smooth - Pillow has no anti-aliased line drawing.
+    `edition="reader"` leaves out author-only layers. The picture's plain-
+    language description (`describe_map`) is stored in the file as its
+    "Description" text chunk.
+    """
+    scale = max(0.2, min(4.0, float(scale)))
+    image = _render_image(gm, scale, supersample, edition)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    image.save(str(path), "PNG", optimize=True)
+    image.save(str(path), "PNG", optimize=True,
+               pnginfo=_png_info(describe_map(gm, edition)))
     return path
 
 
@@ -2074,11 +2129,18 @@ def _svg_escape(text: str) -> str:
             .replace(">", "&gt;").replace('"', "&quot;"))
 
 
-def render_svg(gm: GameMap, path: Path | str) -> Path:
+def render_svg(gm: GameMap, path: Path | str, edition: str = "author") -> Path:
+    """
+    Write the map as SVG. `edition="reader"` leaves out author-only layers.
+    The file carries the picture's plain-language description as its <title>
+    and <desc>, which screen readers and ebook tools use as alt text.
+    """
     palette = gm.palette()
     parts: List[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{gm.width}" '
-        f'height="{gm.height}" viewBox="0 0 {gm.width} {gm.height}">',
+        f'height="{gm.height}" viewBox="0 0 {gm.width} {gm.height}" role="img">',
+        f'<title>{_svg_escape(gm.name or "Map")}</title>',
+        f'<desc>{_svg_escape(describe_map(gm, edition))}</desc>',
         f'<rect width="{gm.width}" height="{gm.height}" '
         f'fill="{palette["paper"]}"/>',
     ]
@@ -2086,7 +2148,7 @@ def render_svg(gm: GameMap, path: Path | str) -> Path:
     def pts_attr(points: Sequence[Point]) -> str:
         return " ".join(f"{p[0]:.2f},{p[1]:.2f}" for p in points)
 
-    for prim in build_primitives(gm):
+    for prim in build_primitives(gm, edition=edition):
         head = prim[0]
         if head == "polygon":
             _k, points, fill, outline, width, dash = prim
@@ -2120,7 +2182,8 @@ def render_svg(gm: GameMap, path: Path | str) -> Path:
                 f'stroke="{outline or "none"}" stroke-width="{width:.2f}"/>'
             )
         elif head == "text":
-            x, y, text, size, colour, anchor, italic, bold, tracking, halo =                 text_parts(prim)
+            (x, y, text, size, colour, anchor, italic, bold, tracking,
+             halo) = text_parts(prim)
             anchor_svg = {"center": "middle", "w": "start", "e": "end",
                           "n": "middle", "s": "middle"}.get(anchor, "middle")
             baseline = {"n": "hanging", "s": "auto"}.get(anchor, "central")
@@ -2148,18 +2211,133 @@ def render_svg(gm: GameMap, path: Path | str) -> Path:
 # ==========================================================================
 
 
-def render_docx(gm: GameMap, png_path: Path, out_path: Path,
-                location_lookup: Optional[Dict[str, str]] = None) -> Path:
+# What each kind of shape is called when a sentence lists what a map shows.
+_SHAPE_NOUNS = {
+    "land": "land", "water": "water", "forest": "forests",
+    "mountains": "mountain ranges", "hills": "hills", "desert": "deserts",
+    "swamp": "marshes", "ice": "ice and tundra", "region": "borders",
+    "river": "rivers", "road": "roads", "wall": "walls", "route": "routes",
+}
+
+# How each kind of map is introduced in a description.
+_MAP_PHRASE = {
+    "world": "a world map", "continent": "a map of a continent",
+    "region": "a regional map", "city": "a city plan",
+    "building": "a building plan", "dungeon": "a dungeon map",
+    "treasure": "a treasure map", "battle": "a battle plan",
+}
+
+
+def _list_in_words(items: Sequence[str]) -> str:
+    items = list(items)
+    if len(items) <= 1:
+        return "".join(items)
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def named_places(gm: GameMap, edition: str = "author") -> List[str]:
+    """
+    Every distinct name on the map, most important first, for the layers this
+    edition shows: capitals and cities, then the large free-standing names
+    (regions, seas), then the smaller places, then named areas.
+    """
+    visible = gm.visible_layers(edition)
+    ranked: List[Tuple[float, float, str]] = []
+    for pin in gm.pins:
+        if pin.layer in visible and pin.label.strip():
+            ranked.append((float(LABEL_PRIORITY.get(pin.kind, 50)),
+                           -float(pin.size), pin.label.strip()))
+    for label in gm.labels:
+        if label.layer in visible and label.text.strip():
+            ranked.append((3.5, -float(label.size), label.text.strip()))
+    for shape in gm.shapes:
+        if shape.layer in visible and shape.label.strip():
+            ranked.append((6.5, 0.0, shape.label.strip()))
+    seen: set = set()
+    out: List[str] = []
+    for _rank, _size, name in sorted(ranked, key=lambda r: (r[0], r[1], r[2].lower())):
+        if name.lower() not in seen:
+            seen.add(name.lower())
+            out.append(name)
+    return out
+
+
+def describe_map(gm: GameMap, edition: str = "author", limit: int = 420) -> str:
+    """
+    A plain-language description of the picture, for alt text.
+
+    Says what kind of map it is and how it is drawn, what it shows, how many
+    places are named and which are the notable ones, and the scale. Built only
+    from what `edition` shows, so the reader edition's description never names
+    something on an author-only layer - and never quotes a note. Kept under
+    `limit` characters, cut at a sentence.
+    """
+    visible = gm.visible_layers(edition)
+    phrase = _MAP_PHRASE.get(gm.kind)
+    if phrase is None:
+        label = MAP_KINDS.get(gm.kind, gm.kind or "").lower()
+        phrase = f"a {label} map" if label else "a map"
+    style = STYLES.get(gm.style, {}).get("label", gm.style)
+    first = phrase[0].upper() + phrase[1:]
+    title = f' titled "{gm.name.strip()}"' if gm.name.strip() else ""
+    sentences = [f"{first}{title}, drawn in the {style} style."]
+
+    kinds = {s.kind for s in gm.shapes if s.layer in visible and len(s.points) >= 2}
+    order = TERRAIN_ORDER + [k for k in TERRAIN if k not in TERRAIN_ORDER]
+    nouns = [_SHAPE_NOUNS.get(k) or TERRAIN.get(k, {}).get("label", k).lower()
+             for k in order if k in kinds]
+    if nouns:
+        sentences.append(f"It shows {_list_in_words(nouns)}.")
+
+    names = named_places(gm, edition)
+    if len(names) == 1:
+        sentences.append(f"One place is named: {names[0]}.")
+    elif names:
+        sentences.append(f"{len(names)} places are named, including "
+                         f"{_list_in_words(names[:6])}.")
+    else:
+        sentences.append("Nothing on it is named.")
+
+    caption = gm.scale_text.strip()
+    if caption:
+        sentences.append(f"The scale bar reads {caption}.")
+
+    text = ""
+    for sentence in sentences:
+        if len(text) + len(sentence) + 1 > limit and text:
+            break
+        text = f"{text} {sentence}".strip()
+    return text
+
+
+def render_docx(gm: GameMap, png_path: Optional[Path], out_path: Path,
+                location_lookup: Optional[Dict[str, str]] = None,
+                edition: str = "author") -> Path:
     """
     A Word document holding the map image plus a legend of every pin.
 
     Keeps maps inside the "everything is a Word document" promise, and gives
     you something printable to keep beside you while writing.
+
+    Only what the map actually shows is listed: a hidden layer's places do not
+    appear, and the reader edition also leaves out author-only layers, every
+    note and the private Location-sheet column. (It used to list every pin with
+    its notes and every named shape whatever the layer - a spoiler leak.) The
+    picture's plain-language description is stored as its alt text.
+
+    `png_path` is the picture to embed; give it drawn with the same `edition`,
+    or pass None and this draws the right one itself.
     """
+    import tempfile
+
     from docx.shared import Inches
 
     from .atomic import save_via_atomic
     from . import docxio
+
+    visible = gm.visible_layers(edition)
+    reader = edition == "reader"
+    alt = describe_map(gm, edition)
 
     doc = docxio.sheet_document(margin=0.7)
     docxio.add_title_block(
@@ -2168,60 +2346,72 @@ def render_docx(gm: GameMap, png_path: Path, out_path: Path,
         "MAP",
     )
 
-    if png_path.exists():
-        # 7.1in fits US Letter with 0.7in margins.
-        doc.add_picture(str(png_path), width=Inches(7.1))
+    with tempfile.TemporaryDirectory(prefix="nf_map_") as scratch:
+        if png_path is None:
+            png_path = render_png(gm, Path(scratch) / "map.png", edition=edition)
+        if Path(png_path).exists():
+            # 7.1in fits US Letter with 0.7in margins.
+            picture = doc.add_picture(str(png_path), width=Inches(7.1))
+            props = picture._inline.docPr
+            props.set("descr", alt)
+            props.set("title", gm.name or "Map")
 
-    if gm.scale_text.strip():
-        docxio.add_note(doc, f"Scale: {gm.scale_text}")
+        if gm.scale_text.strip():
+            docxio.add_note(doc, f"Scale: {gm.scale_text}")
 
-    if gm.pins:
-        doc.add_heading("Legend", level=2)
-        rows = []
-        for pin in sorted(gm.pins, key=lambda p: (p.kind, p.label.lower())):
-            linked = ""
-            if pin.entity_id and location_lookup:
-                linked = location_lookup.get(pin.entity_id, "")
-            rows.append([
-                pin.label or "(unnamed)",
-                PIN_KINDS.get(pin.kind, pin.kind),
-                linked,
-                pin.notes,
-            ])
-        docxio.add_data_table(
-            doc, ["Place", "Type", "Location sheet", "Notes"], rows,
-            widths=[1.7, 1.2, 1.5, 2.6],
-        )
+        pins = [p for p in gm.pins if p.layer in visible]
+        if pins:
+            doc.add_heading("Legend", level=2)
+            rows = []
+            for pin in sorted(pins, key=lambda p: (p.kind, p.label.lower())):
+                row = [pin.label or "(unnamed)",
+                       PIN_KINDS.get(pin.kind, pin.kind)]
+                if not reader:
+                    linked = ""
+                    if pin.entity_id and location_lookup:
+                        linked = location_lookup.get(pin.entity_id, "")
+                    row += [linked, pin.notes]
+                rows.append(row)
+            if reader:
+                docxio.add_data_table(doc, ["Place", "Type"], rows,
+                                      widths=[3.6, 3.5])
+            else:
+                docxio.add_data_table(
+                    doc, ["Place", "Type", "Location sheet", "Notes"], rows,
+                    widths=[1.7, 1.2, 1.5, 2.6],
+                )
 
-    regions = [s for s in gm.shapes if s.label.strip()]
-    if regions:
-        doc.add_heading("Named areas", level=2)
-        docxio.add_data_table(
-            doc, ["Name", "Kind"],
-            [[s.label, TERRAIN.get(s.kind, {}).get("label", s.kind)]
-             for s in regions],
-            widths=[3.0, 2.0],
-        )
+        shapes = [s for s in gm.shapes if s.layer in visible]
+        regions = [s for s in shapes if s.label.strip()]
+        if regions:
+            doc.add_heading("Named areas", level=2)
+            docxio.add_data_table(
+                doc, ["Name", "Kind"],
+                [[s.label, TERRAIN.get(s.kind, {}).get("label", s.kind)]
+                 for s in regions],
+                widths=[3.0, 2.0],
+            )
 
-    if gm.notes.strip():
-        doc.add_heading("Notes", level=2)
-        for para in gm.notes.split("\n\n"):
-            if para.strip():
-                doc.add_paragraph(para.strip())
+        if gm.notes.strip() and not reader:
+            doc.add_heading("Notes", level=2)
+            for para in gm.notes.split("\n\n"):
+                if para.strip():
+                    doc.add_paragraph(para.strip())
 
-    counts: Dict[str, int] = {}
-    for shape in gm.shapes:
-        counts[shape.kind] = counts.get(shape.kind, 0) + 1
-    if counts:
-        doc.add_heading("Contents", level=2)
-        summary = ", ".join(
-            f"{n} x {TERRAIN.get(k, {}).get('label', k).lower()}"
-            for k, n in sorted(counts.items())
-        )
-        doc.add_paragraph(f"{summary}. {len(gm.pins)} pins, "
-                          f"{len(gm.labels)} labels.")
+        counts: Dict[str, int] = {}
+        for shape in shapes:
+            counts[shape.kind] = counts.get(shape.kind, 0) + 1
+        if counts:
+            doc.add_heading("Contents", level=2)
+            summary = ", ".join(
+                f"{n} x {TERRAIN.get(k, {}).get('label', k).lower()}"
+                for k, n in sorted(counts.items())
+            )
+            labels = [l for l in gm.labels if l.layer in visible]
+            doc.add_paragraph(f"{summary}. {len(pins)} pins, "
+                              f"{len(labels)} labels.")
 
-    return save_via_atomic(out_path, doc.save)
+        return save_via_atomic(out_path, doc.save)
 
 
 # ==========================================================================
