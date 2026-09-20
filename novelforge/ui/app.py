@@ -57,7 +57,7 @@ from ..project import Project, ProjectError, list_projects
 from ..tags import TagsField
 from . import dialogs, styling
 from .connections import attach as _attach_connections
-from .goto import remember as _remember_visit
+from .goto import persist as _persist_visits, remember as _remember_visit
 from .writing import WritingIntelligence
 from .widgets import (
     AutoScrollbar,
@@ -939,6 +939,8 @@ class App(WritingIntelligence, tk.Tk):
 
     def load_project(self, root: Path) -> None:
         self.commit_all()
+        if self.project:
+            mentionindex.flush(self.project)
         try:
             project = Project.open(root)
         except (ProjectError, OSError) as exc:
@@ -1415,7 +1417,8 @@ class App(WritingIntelligence, tk.Tk):
         form.check("Include when compiling", scene, "include_in_compile")
         form.integer("Word target", scene, "target_words")
         form.entry("Tags", TagsField(scene), "tags")
-        form.hint("Separate with commas. A/b nests: searching for a finds a/b.")
+        form.hint("Separate with commas. Nest with a slash (clue/red-herring): "
+                  "searching for clue finds both.")
 
         characters = [(e.id, e.name) for e in data.entities_of("character")]
         locations = [(e.id, e.name) for e in data.entities_of("location")]
@@ -4032,6 +4035,7 @@ Python {".".join(str(v) for v in __import__("sys").version_info[:3])}
             except tk.TclError:
                 pass
             mentionindex.flush(self.project)
+            _persist_visits(self)
             try:
                 self.project.save(force=True)
             except Exception as exc:

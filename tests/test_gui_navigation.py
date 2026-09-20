@@ -106,9 +106,6 @@ class GoToWindow(unittest.TestCase):
 
     def test_ctrl_p_in_the_editor_opens_go_to_and_leaves_the_caret_alone(self):
         app, box = self.app, self.box
-        # The Text class binding must be ours (one that stops there): Tk's own is
-        # "cursor up a line" on some platforms, and both must not run.
-        self.assertIn("break", str(app.tk.call("bind", "Text", "<Control-p>")))
         app.goto("scene", self.scenes[0].id)
         box.pump(0.5)
         app.focus_force()
@@ -121,13 +118,36 @@ class GoToWindow(unittest.TestCase):
         text.mark_set("insert", f"{min(3, last)}.2")
         box.pump(0.1)
         caret, body = text.index("insert"), app.editor.get_value()
-        text.event_generate("<Control-p>")
-        box.pump(0.3)
+        # Ctrl+P is bound twice - on the Text class (replacing Tk's own "cursor up a
+        # line", which some platforms have) and on the whole app. The class binding
+        # must stop the event, or Go to opens and the app binding closes it again
+        # (and, where Tk has its own, the caret would move as well).
+        calls = []
+        original = app.cmd_goto
+        app.cmd_goto = lambda: calls.append(1) or original()
+        try:
+            text.event_generate("<Control-p>")
+            box.pump(0.3)
+        finally:
+            del app.cmd_goto
+        self.assertEqual(len(calls), 1, "Ctrl+P ran Go to more than once")
         window = getattr(app, "_goto", None)
         self.assertTrue(window is not None and window.winfo_exists(),
                         "Ctrl+P with the caret in the editor did not open Go to")
         self.assertEqual(text.index("insert"), caret, "the caret moved")
         self.assertEqual(app.editor.get_value(), body, "the text changed")
+
+    def test_goto_brings_the_view_up_to_date_before_it_returns(self):
+        # Selecting a tree row only queues the selection event; the jump must not
+        # wait for it (Go to closes and expects to be where it said).
+        app = self.app
+        target = self.scenes[1]
+        self.assertNotEqual(app.selection_id, target.id)
+        self.assertTrue(app.goto("scene", target.id))
+        self.assertEqual((app.selection_kind, app.selection_id), ("scene", target.id))
+        self.assertEqual(app.current_scene_id, target.id)
+        self.assertFalse(app.goto("scene", "no-such-scene"))
+        self.assertFalse(app.goto("entity", ""))
 
     def test_no_novel_open_asks_for_one_instead_of_opening(self):
         app = self.app
@@ -478,13 +498,25 @@ def find_panel(app):
 
 
 def inspector_overflow(app):
-    """Inspector widgets wider than the pane they sit in."""
+    """
+    Inspector widgets wider than the pane they sit in - and, in the Connections
+    panel, widgets that were pushed out of view altogether: a grid that has no room
+    for a widget does not let it hang over the edge, it quietly unmaps it.
+    """
     right = app.inspector.canvas.winfo_rootx() + app.inspector.canvas.winfo_width()
     bad = []
     for w in descendants(app.inspector.body):
         try:
             if w.winfo_ismapped() and w.winfo_rootx() + w.winfo_width() > right + 2:
                 bad.append(f"{w.winfo_class()} {str(w)[-30:]}")
+        except tk.TclError:
+            pass
+    panel = find_panel(app)
+    for w in (descendants(panel) if panel is not None else ()):
+        try:
+            if (w.winfo_manager() in ("grid", "pack", "place")
+                    and w.master.winfo_ismapped() and not w.winfo_ismapped()):
+                bad.append(f"hidden {w.winfo_class()} {str(w)[-30:]}")
         except tk.TclError:
             pass
     return bad
