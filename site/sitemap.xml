@@ -7,6 +7,46 @@
     <image:image><image:loc>https://sideeffects69.github.io/NovelForge/assets/maps/map-classic.jpg</image:loc></image:image>
   </url>
   <url>
+    <loc>https://sideeffects69.github.io/NovelForge/changelog/</loc>
+    <lastmod>2026-09-20</lastmod>
+  </url>
+  <url>
+    <loc>https://sideeffects69.github.io/NovelForge/compare/</loc>
+    <lastmod>2026-09-20</lastmod>
+  </url>
+  <url>
+    <loc>https://sideeffects69.github.io/NovelForge/docs/</loc>
+    <lastmod>2026-09-20</lastmod>
+  </url>
+  <url>
+    <loc>https://sideeffects69.github.io/NovelForge/docs/getting-started/install-and-first-launch/</loc>
+    <lastmod>2026-09-20</lastmod>
+  </url>
+  <url>
+    <loc>https://sideeffects69.github.io/NovelForge/docs/getting-started/tour-of-the-window/</loc>
+    <lastmod>2026-09-20</lastmod>
+  </url>
+  <url>
+    <loc>https://sideeffects69.github.io/NovelForge/docs/reference/keyboard-shortcuts/</loc>
+    <lastmod>2026-09-20</lastmod>
+  </url>
+  <url>
+    <loc>https://sideeffects69.github.io/NovelForge/docs/writing/the-binder/</loc>
+    <lastmod>2026-09-20</lastmod>
+  </url>
+  <url>
+    <loc>https://sideeffects69.github.io/NovelForge/docs/your-files/backups-and-snapshots/</loc>
+    <lastmod>2026-09-20</lastmod>
+  </url>
+  <url>
+    <loc>https://sideeffects69.github.io/NovelForge/download/</loc>
+    <lastmod>2026-09-20</lastmod>
+  </url>
+  <url>
+    <loc>https://sideeffects69.github.io/NovelForge/faq/</loc>
+    <lastmod>2026-09-20</lastmod>
+  </url>
+  <url>
     <loc>https://sideeffects69.github.io/NovelForge/features/</loc>
     <lastmod>2026-09-20</lastmod>
     <image:image><image:loc>https://sideeffects69.github.io/NovelForge/assets/screenshots/corkboard.png</image:loc></image:image>
@@ -20,22 +60,6 @@
     <image:image><image:loc>https://sideeffects69.github.io/NovelForge/assets/maps/map-classic.jpg</image:loc></image:image>
     <image:image><image:loc>https://sideeffects69.github.io/NovelForge/assets/maps/map-archipelago.jpg</image:loc></image:image>
     <image:image><image:loc>https://sideeffects69.github.io/NovelForge/assets/maps/map-inland-sea.jpg</image:loc></image:image>
-  </url>
-  <url>
-    <loc>https://sideeffects69.github.io/NovelForge/compare/</loc>
-    <lastmod>2026-09-20</lastmod>
-  </url>
-  <url>
-    <loc>https://sideeffects69.github.io/NovelForge/download/</loc>
-    <lastmod>2026-09-20</lastmod>
-  </url>
-  <url>
-    <loc>https://sideeffects69.github.io/NovelForge/faq/</loc>
-    <lastmod>2026-09-20</lastmod>
-  </url>
-  <url>
-    <loc>https://sideeffects69.github.io/NovelForge/changelog/</loc>
-    <lastmod>2026-09-20</lastmod>
   </url>
   <url>
     <loc>https://sideeffects69.github.io/NovelForge/support/</loc>

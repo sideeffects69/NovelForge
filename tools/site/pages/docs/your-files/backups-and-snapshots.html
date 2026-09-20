@@ -1,0 +1,82 @@
+<!--
+title: Backups and snapshots | NovelForge docs
+description: Learn how NovelForge protects your novel: verified zip backups, per-document versions, safe saving and the recovery journal, and how to restore an older copy.
+kind: docs
+group: Your files
+order: 10
+published: 2026-09-20
+updated: 2026-09-20
+since: 2.2.0
+level: Beginner
+-->
+<p class="lead">Learn how NovelForge keeps your novel safe and how to bring an older copy back. Two separate features do the work, because they fail in different ways: <strong>backups</strong> copy the whole project, and <strong>versions</strong> keep earlier copies of a single document.</p>
+
+<h2>The layers that protect your writing</h2>
+<ul>
+  <li><strong>Safe saving.</strong> Every document is written to a temporary file, checked to be a valid Word file, and only then swapped in for the real one, so a crash in the middle of a save leaves the previous version untouched. A sync program such as OneDrive therefore sees either the old file or the new one, never a half-written one.</li>
+  <li><strong>Autosave</strong> writes the scene you are typing in thirty seconds after you stop typing.</li>
+  <li><strong>The recovery journal</strong> records your typing a second and a half after you pause. If the power goes out, the next start offers the words back and puts the cursor where you left it. Nothing is restored without asking.</li>
+  <li><strong>Backups</strong> are zip files of the whole project, described below.</li>
+  <li><strong>Versions</strong> are earlier copies of one document, also described below.</li>
+  <li><strong>The trash and undo</strong> cover deletes: removed documents go to a <code>_Trash</code> folder, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> puts them back. See <a href="{{root}}docs/writing/the-binder/">The binder</a>.</li>
+</ul>
+
+<h2>Backups</h2>
+<p>A backup is a single <code>.zip</code> of your whole novel folder, kept in the <code>_Backups</code> folder inside it. NovelForge makes one:</p>
+<ul>
+  <li>when you choose <strong>File → Back Up Now</strong> (<kbd>Ctrl</kbd>+<kbd>B</kbd>);</li>
+  <li>a moment after you open a novel, and again when you close it, unless you turn those off in <strong>File → Preferences</strong> under <em>Safety</em> (<em>Backup when opening</em> and <em>Backup when closing</em>).</li>
+</ul>
+<p>The file name says when and why, for example <code>The Ashfall Crown 2026-09-20 14-32-05 (manual).zip</code>; the word in brackets is <em>manual</em>, <em>open</em> or <em>close</em>. NovelForge keeps the newest 25 backups and deletes older ones as new ones arrive. <em>Backups to keep</em> in Preferences changes that number.</p>
+
+<h3>What is inside</h3>
+<p>Everything in the novel's folder: your scenes and sheets, the maps, the compiled manuscripts, the trash, the drafts and <code>project.json</code>. Two things are left out on purpose: the <code>_Backups</code> folder itself (a backup of the backups would grow without limit) and <code>_Snapshots</code>. Word's temporary lock files (names starting with <code>~$</code>) are skipped too, and a file that another program has locked is skipped rather than stopping the backup; the message afterwards says how many were skipped.</p>
+
+<h3>Verified, not just written</h3>
+<p>After writing a backup, NovelForge opens it again, checks every file in it against its stored checksum, and confirms that <code>project.json</code> is inside. If any of that fails, the file is deleted and you are told the backup failed; a broken zip never sits in the list looking like a good one. When the check passes, the status bar reports how many files were backed up and how large the zip is.</p>
+
+<h3>Seeing and restoring backups</h3>
+<p><strong>File → Backups &amp; Restore</strong> lists your backups, newest first, with the date, size and file name. Its buttons are:</p>
+<ul>
+  <li><strong>Back up now</strong> makes a new one.</li>
+  <li><strong>Verify</strong> re-checks the selected backup.</li>
+  <li><strong>Restore to new folder</strong> asks you to choose an <em>empty</em> folder and unpacks the backup there.</li>
+  <li><strong>Show in Explorer</strong> opens the <code>_Backups</code> folder.</li>
+</ul>
+<p>Restoring never writes over the novel you are working on. You get a complete copy in the new folder, and you decide what to do with it: open it with <strong>File → Open Novel</strong>, or copy a single scene file out of it into your live project. NovelForge refuses to restore an archive that fails its check or contains unsafe paths.</p>
+<p>When you open a novel whose newest backup is a week or more old, or that has none, the status bar says so.</p>
+
+<div class="callout warn">
+  <p>The <code>_Backups</code> folder lives inside the novel's folder, so it protects you from mistakes and bad saves but not from losing the disk. Copy the folder, or just <code>_Backups</code>, to another drive or a synced folder now and then.</p>
+</div>
+
+<h2>Versions of one document</h2>
+<p>Versions are earlier copies of a single Word document, kept in <code>_Snapshots</code>, one sub-folder per document. Choose a scene in the binder and then <strong>File → Versions of this document</strong> (or right-click the scene and choose <strong>Versions</strong>). The window lists every saved copy with its date and time and offers three buttons: <strong>Close</strong>, <strong>Open selected in Word</strong> and <strong>Restore selected</strong>.</p>
+<p>Restoring is never destructive. The version now in place is first copied next to the document with <em>(replaced</em> and the time in its name, and only then is the older one put back. NovelForge keeps the newest 40 versions of each document; <em>Snapshots per document</em> in Preferences changes that.</p>
+
+<h3>When a version is made</h3>
+<p>A copy is taken automatically before NovelForge changes a document in bulk or swaps its content:</p>
+<ul>
+  <li>before <strong>Find and Replace</strong> edits a document, for each document it changes;</li>
+  <li>before you <strong>switch to another draft</strong> of a scene, so the text you are leaving is kept;</li>
+  <li>when you accept a <strong>crash recovery</strong> (the version replaced is also saved beside the scene as <em>(before recovery)</em>).</li>
+</ul>
+<div class="callout warn">
+  <p><strong>Typing and saving do not make versions.</strong> Autosave and <kbd>Ctrl</kbd>+<kbd>S</kbd> write over the scene file (safely) without keeping the old text, in this version of NovelForge. The Preferences window has a box called <em>Snapshot on every save</em>, but the writing area does not act on it. To get back to how a scene looked yesterday, restore a backup to a new folder and copy the scene out; and if you want to try a scene another way, use Drafts (<strong>Plan → Drafts of This Scene</strong>).</p>
+</div>
+
+<h2>If something goes wrong</h2>
+<ul>
+  <li><strong>You deleted a scene:</strong> press <kbd>Ctrl</kbd>+<kbd>Z</kbd>. If you have closed the program since, look in <code>_Trash</code> via <strong>Edit → Open the Trash Folder</strong>.</li>
+  <li><strong>A Find and Replace went too far:</strong> select the scene and open its versions; every changed document has one from just before the change.</li>
+  <li><strong>The program or the computer stopped in the middle of writing:</strong> start NovelForge again and accept the recovery offer.</li>
+  <li><strong>A scene is wrong and there is no version of it:</strong> restore the most recent backup to a new folder and copy the file across.</li>
+  <li><strong>The whole folder is gone:</strong> restore the newest backup you have to a new folder, and open it.</li>
+</ul>
+
+<h2>Related</h2>
+<ul>
+  <li><a href="{{root}}docs/writing/the-binder/">The binder</a></li>
+  <li><a href="{{root}}docs/reference/keyboard-shortcuts/">Keyboard shortcuts</a></li>
+  <li><a href="{{root}}faq/">Frequently asked questions</a></li>
+</ul>

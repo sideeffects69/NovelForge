@@ -1,0 +1,66 @@
+<!--
+title: Install and first launch | NovelForge docs
+description: Learn how to install NovelForge on Windows 10 or 11: get Python, download the release, double-click Write.bat, and create your first novel.
+kind: docs
+group: Getting started
+order: 10
+published: 2026-09-20
+updated: 2026-09-20
+since: 2.2.0
+level: Beginner
+dependencies: Python 3.13 or newer; the python-docx and Pillow libraries
+-->
+<p class="lead">Learn how to install NovelForge on Windows 10 or 11, start it for the first time and create your first novel. There is no installer: you install Python once, unzip a folder and double-click one file.</p>
+
+<h2>What you need</h2>
+<ul>
+  <li><strong>Windows 10 or 11.</strong> NovelForge has only been built and tested on Windows. macOS and Linux are not supported.</li>
+  <li><strong>Python 3.13 or newer.</strong> It is a free program from python.org that NovelForge runs on.</li>
+  <li><strong>Two small Python libraries,</strong> <code>python-docx</code> (it reads and writes the Word files) and <code>Pillow</code> (it draws the map images). <code>Write.bat</code> installs them for you the first time; that is the only time NovelForge needs the internet.</li>
+</ul>
+
+<h2>Install Python</h2>
+<p>Download Python from <a href="https://www.python.org/downloads/" rel="noopener">python.org</a>, choose version 3.13 or newer, and on the first screen of the installer tick <strong>Add python.exe to PATH</strong>. If you prefer a terminal, <code>winget install Python.Python.3.13</code> does the same job.</p>
+<div class="callout tip">
+  <p>If you forget to tick the box, run the Python installer again and choose <strong>Modify</strong>. <code>Write.bat</code> also looks for Python in its usual per-user folder, so it often works either way.</p>
+</div>
+
+<h2>Download NovelForge</h2>
+<p>Open the <a href="{{repo}}/releases/latest" rel="noopener">latest release on GitHub</a>, scroll to <strong>Assets</strong> and download <strong>Source code (zip)</strong>. Unzip it anywhere you like: the Desktop or Documents is fine. The folder is the whole program; there is nothing to install into Windows.</p>
+
+<h2>Start it with Write.bat</h2>
+<p>Double-click <code>Write.bat</code> in that folder. In order, it does the following:</p>
+<ol>
+  <li>Looks for Python (first in the usual per-user install folder, then on your PATH). If there is none, it explains how to get it and waits, instead of closing.</li>
+  <li>Checks for the two libraries. If they are missing it installs them with pip, which needs the internet once. If that fails it tells you to check your connection and try again.</li>
+  <li>Starts NovelForge through <code>pythonw.exe</code>, so there is no black console window behind the program.</li>
+</ol>
+<p>Windows may show a warning for a file downloaded from the internet. <code>Write.bat</code> is a short plain-text script, so you can open it in Notepad and read it before you run it. The <a href="{{root}}download/">download page</a> lists the common problems and their fixes.</p>
+
+<h2>The first screen</h2>
+<p>On a fresh install there is no novel yet, so NovelForge shows a welcome screen with two buttons, <strong>Start a new novel</strong> and <strong>Open an existing novel</strong>, and a short reminder that <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> opens the command palette, where you can find any command by typing its name. Once you have written something, NovelForge reopens your last novel when it starts, and the welcome screen only comes back if there is nothing to open.</p>
+
+<h2>Create your first novel</h2>
+<p>Choose <strong>File → New Novel</strong> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd>) or press <strong>Start a new novel</strong>. The form asks for:</p>
+<ul>
+  <li><strong>Title,</strong> plus an optional subtitle, your author name, an optional series name and a genre.</li>
+  <li><strong>Structure,</strong> one of the nine outline frameworks. Three-Act is the default, and you can switch later without losing anything you have written under another one.</li>
+  <li><strong>Target word count</strong> and <strong>daily word target,</strong> filled in from your preferences (90,000 and 1,000 words at first), and an optional <strong>deadline</strong> in the form <code>2027-03-01</code>.</li>
+  <li><strong>Extra template packs:</strong> Fantasy / Sci-Fi (ticked by default; the full world bible is always created), Mystery / Crime (adds a Clue Tracker) and Romance (adds a Relationship Arc Tracker).</li>
+  <li><strong>Location,</strong> which is the <code>Projects</code> folder next to <code>Write.bat</code> unless you choose another. NovelForge creates a folder there named after your title.</li>
+</ul>
+<p>Press OK and NovelForge builds the whole project: the numbered folders, a set of starter Word documents (a premise sheet, world-bible sheets, a query letter, a synopsis and more), an outline for the framework you chose, and a first chapter called <strong>Chapter One</strong> with a scene called <strong>Opening Scene</strong>. Choose that scene in the binder on the left and start typing. Your text saves itself after a pause.</p>
+
+<h2>Where things live</h2>
+<p>Your novels are in the <code>Projects</code> folder next to <code>Write.bat</code>, one sub-folder per book, and your preferences are in <code>novelforge-settings.json</code> beside it. <strong>File → Open Project Folder</strong> shows the current novel in Explorer. For a desktop shortcut with the NovelForge icon, double-click <code>Make Desktop Shortcut.bat</code> once.</p>
+
+<div class="callout warn">
+  <p>To upgrade, unzip the new release into a new folder and copy your <code>Projects</code> folder and <code>novelforge-settings.json</code> across before you start it. Deleting the old folder deletes the novels inside it, so copy them first.</p>
+</div>
+
+<h2>Related</h2>
+<ul>
+  <li><a href="{{root}}docs/getting-started/tour-of-the-window/">Tour of the window</a></li>
+  <li><a href="{{root}}docs/your-files/backups-and-snapshots/">Backups and snapshots</a></li>
+  <li><a href="{{root}}download/">Download page and troubleshooting</a></li>
+</ul>
