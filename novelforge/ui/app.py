@@ -889,6 +889,28 @@ class App(WritingIntelligence, tk.Tk):
         self.shortcuts = bindings
         for sequence, handler in bindings.items():
             self.bind_all(sequence, handler)
+        # Tk gives Text and Entry emacs-style keys of their own and runs them BEFORE the
+        # app-wide ones above. With the caret in the editor Ctrl+K used to delete the
+        # rest of the line, Ctrl+H a character, Ctrl+T swap two, Ctrl+O and Ctrl+I insert
+        # a newline and a tab - and only then did the shortcut do its job, and autosave
+        # wrote the damage to the .docx (tests/test_gui_keys.py presses every one).
+        # Wherever one of ours collides with a class binding, that binding is replaced
+        # by our action, then "break". Found by asking Tk, so a new shortcut is covered.
+        def then_stop(action):
+            def run(event):
+                action(event)
+                return "break"
+            return run
+
+        for widget_class in ("Text", "Entry", "TEntry", "TCombobox", "Spinbox", "TSpinbox"):
+            for sequence, handler in bindings.items():
+                if self.bind_class(widget_class, sequence):
+                    self.bind_class(widget_class, sequence, then_stop(handler))
+        # Tk also treats Ctrl+Alt+Z / Ctrl+Alt+Y as its own text Undo / Redo (extra
+        # modifiers do not stop a Ctrl+Z pattern matching), so the project-wide undo
+        # bound to them above ran on top of an undo of the typing. Bind them first.
+        for sequence in ("<Control-Alt-z>", "<Control-Alt-y>"):
+            self.bind_class("Text", sequence, then_stop(bindings[sequence]))
         # Tk's own Text binding for Ctrl+P is "move the caret up a line" (emacs
         # style; not present on every platform). Go to must win in the editor, and
         # the caret must not also move, so the class binding is replaced by one that
