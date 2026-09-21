@@ -616,6 +616,7 @@ Undo has two jobs, and which one you get depends on where the cursor is. With th
 | Command | Keys |
 | Undo | Ctrl+Z |
 | Redo | Ctrl+Y |
+| Go to... | Ctrl+P |
 | Find in Project... | Ctrl+F |
 | Find and Replace... | Ctrl+H |
 

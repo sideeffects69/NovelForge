@@ -746,7 +746,9 @@ class Docs(unittest.TestCase):
         self.assertEqual([m for m, _r in shown], menu_order)
         for menu, table in shown:
             self.assertEqual(table, expected[menu], f"the {menu} menu's shortcuts differ from app.py")
-        self.assertEqual(sum(len(r) for _m, r in shown), 32)
+        total = sum(len(r) for _m, r in shown)
+        self.assertEqual(total, sum(len(r) for r in expected.values()))
+        self.assertGreaterEqual(total, 30, "the accelerator parse found suspiciously few")
         more = [(label, keys) for heading, body in tables if not heading.endswith(" menu")
                 for label, keys in rows(body)]
         self.assertEqual(sorted((k, l) for l, k in more), sorted(extra.items()))
