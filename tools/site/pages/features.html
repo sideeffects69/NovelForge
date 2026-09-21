@@ -1,11 +1,22 @@
+<!--
+title: Features: outlining, corkboard, story graph, maps | NovelForge
+description: Everything in NovelForge: a binder and corkboard, nine outline frameworks, a timeline, a story graph, a map maker, compile and diagnostics. All offline.
+kind: marketing
+nav: Features
+navorder: 10
+published: 2026-09-20
+updated: 2026-09-20
+since: 2.2.0
+image: assets/screenshots/main-editor.png
+-->
 <div class="page-hero">
   <div class="wrap">
-    <div class="crumbs"><a href="{{root}}">Home</a><span>/</span>Features</div>
+    <nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="{{root}}">Home</a></li><li aria-current="page">Features</li></ol></nav>
     <span class="kicker">Features</span>
     <h1>Everything a novelist needs, in one free, offline studio</h1>
     <p class="lead">A binder and corkboard, nine outline frameworks, a story graph that checks continuity, a fantasy map maker, offline prose diagnostics and a compiler that produces a standard manuscript. All of it reads and writes ordinary Word files on your own disk.</p>
     <div class="btn-row">
-      <a class="btn btn-primary" href="{{root}}download/"><span class="btn-icon">⬇</span> Download for Windows</a>
+      <a class="btn btn-primary" href="{{root}}download/">{{icon:download}} Download for Windows</a>
       <a class="btn" href="{{root}}compare/">Compare with Scrivener and others</a>
     </div>
   </div>
@@ -28,7 +39,7 @@
 
     <div class="prose">
       <h2 id="writing">Writing: stay inside the story</h2>
-      <p>The editor is deliberately quiet. Every scene is its own real <strong>.docx</strong> file, which you can open and edit in Microsoft Word or in NovelForge, in either direction, and the two always stay in sync.</p>
+      <p>The editor is deliberately quiet. Every scene is its own real <strong>.docx</strong> file, which you can open and edit in Microsoft Word or in NovelForge. What you write in NovelForge is saved into that same file; after editing in Word, press <kbd>F2</kbd> (File → Reload from Word) and NovelForge picks up the change.</p>
       <ul>
         <li><strong>Focus mode, distraction-free mode and typewriter scrolling</strong> take the interface out of your way.</li>
         <li><strong>Ghost mode</strong> hides your text as you type, for the perfectionist who cannot stop editing a sentence they have not finished.</li>
@@ -38,7 +49,7 @@
       </ul>
     </div>
 
-    <figure class="shot" data-reveal style="margin: 30px 0 0;">
+    <figure class="shot">
       <div class="window-chrome"><div class="chrome-bar"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span><span class="chrome-title">The Ashfall Crown — NovelForge</span></div>
       <img src="{{root}}assets/screenshots/main-editor.png" width="1340" height="680" loading="lazy" alt="The main window: chapter and scene binder, the manuscript editor with a centred page, and the scene inspector."></div>
     </figure>
@@ -56,12 +67,12 @@
       </ul>
     </div>
 
-    <div class="split" data-reveal>
+    <div class="split">
       <div class="split-media"><div class="window-chrome"><div class="chrome-bar"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span><span class="chrome-title">Story structure — The Ashfall Crown</span></div>
         <img src="{{root}}assets/screenshots/outline.png" width="1200" height="700" loading="lazy" alt="The outline window showing a story framework's beats with the writer's answers filled in."></div></div>
       <div><h3>Structure that bends to you.</h3><p>A framework is a set of questions, not a straitjacket. Fill in what serves the story, leave the rest, and swap frameworks whenever the book tells you it wants a different shape.</p></div>
     </div>
-    <div class="split flip" data-reveal>
+    <div class="split flip">
       <div class="split-media"><div class="window-chrome"><div class="chrome-bar"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span><span class="chrome-title">Corkboard — The Ashfall Crown</span></div>
         <img src="{{root}}assets/screenshots/corkboard.png" width="1280" height="700" loading="lazy" alt="The corkboard with scene index cards grouped under chapter headings."></div></div>
       <div><h3>See the whole book at once.</h3><p>Every scene is a card with its synopsis and status. Drag one onto another to reorder; the Word files and the outline follow.</p></div>
@@ -82,7 +93,7 @@
       </ul>
     </div>
 
-    <figure class="shot" data-reveal style="margin: 30px 0 0;">
+    <figure class="shot">
       <div class="window-chrome"><div class="chrome-bar"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span><span class="chrome-title">Story Graph — The Ashfall Crown</span></div>
       <img src="{{root}}assets/screenshots/story-graph.png" width="1200" height="700" loading="lazy" alt="The story graph window with characters, places, items and threads ranked by how many scenes mention them."></div>
     </figure>
@@ -92,7 +103,7 @@
       <p>Press <strong>Surprise Me</strong> and a whole fantasy world appears: coastlines, mountain ranges, forests and deserts, rivers that run from the highlands to the sea, roads that follow the land, and dozens of named settlements, all reproducible from a seed. Everything is editable afterwards, and pins link straight to your Location sheets. Export as PNG, SVG or a Word document with a legend.</p>
       <p><a href="{{root}}map-maker/">Read more about the map maker →</a></p>
     </div>
-    <figure class="shot" data-reveal style="margin: 24px 0 0;">
+    <figure class="shot">
       <div class="window-chrome"><div class="chrome-bar"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span><span class="chrome-title">Map Maker — Highfield</span></div>
       <img src="{{root}}assets/screenshots/map-maker.png" width="1340" height="680" loading="lazy" alt="The map maker with a generated world open and the tool rail, palettes and properties panel around it."></div>
     </figure>
@@ -116,7 +127,7 @@
       <p>The dashboard (<kbd>F9</kbd>) shows progress against your target, your streak, your pace and a projected finish date, plus a 30-day sparkline, a per-chapter breakdown, point-of-view balance, and plot-thread coverage. It keeps two numbers, <strong>added</strong> and <strong>net</strong>, so a revision day where you cut 800 words and wrote 600 counts as real work instead of “−200”.</p>
     </div>
 
-    <figure class="shot" data-reveal style="margin: 24px 0 0;">
+    <figure class="shot">
       <div class="window-chrome"><div class="chrome-bar"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span><span class="chrome-title">Dashboard — The Ashfall Crown</span></div>
       <img src="{{root}}assets/screenshots/dashboard.png" width="1000" height="700" loading="lazy" alt="The statistics dashboard: progress against the word target, streak, pace and projected finish date."></div>
     </figure>
@@ -125,7 +136,7 @@
       <h2 id="safety">Never losing your work</h2>
       <ul>
         <li><strong>Atomic writes:</strong> each file is written under a temporary name and swapped in, so a crash mid-save cannot leave a half-written document. This also works safely inside OneDrive folders.</li>
-        <li><strong>Version snapshots:</strong> every scene is copied before each save; restore any of them without losing the current version.</li>
+        <li><strong>Version snapshots:</strong> a document is copied before Find and Replace edits it, before you switch to another draft of a scene, and when you accept a crash recovery; restore any copy without losing the current version.</li>
         <li><strong>Verified backups:</strong> <kbd>Ctrl</kbd>+<kbd>B</kbd> zips the whole project, then reopens the zip and checks its checksums before reporting success.</li>
         <li><strong>Crash recovery:</strong> a journal that asks before it restores anything.</li>
         <li><strong>Undo and redo for structural edits:</strong> delete a chapter, get it back, files included.</li>
@@ -135,7 +146,7 @@
       <h2 id="speed">Fast, and driven by the keyboard</h2>
       <p>NovelForge opens in about a second, never asks you to sign in, and never does work on a timer behind your back. Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> to open the command palette, type what you want (“story graph”, “backup”, “theme”) and press Enter. It searches every command in every menu, so it can never fall out of date. There are four themes, including a dark navy “Premium” one, and the interface adapts to scaled high-DPI displays (tested at 125%).</p>
     </div>
-    <figure class="shot" data-reveal style="margin: 24px 0 0;">
+    <figure class="shot">
       <div class="window-chrome"><div class="chrome-bar"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span><span class="chrome-title">Command palette</span></div>
       <img src="{{root}}assets/screenshots/command-palette.png" width="1340" height="680" loading="lazy" alt="The command palette open over the main window, filtering every menu command as you type."></div>
     </figure>
@@ -143,11 +154,11 @@
 </section>
 
 <section class="big-cta">
-  <div class="wrap" data-reveal>
+  <div class="wrap">
     <h2>Try it. It costs nothing.</h2>
     <p>Free for Windows 10 and 11. Your novel stays in Word files you own.</p>
     <div class="btn-row btn-row-center">
-      <a class="btn btn-primary" href="{{root}}download/"><span class="btn-icon">⬇</span> Download NovelForge</a>
+      <a class="btn btn-primary" href="{{root}}download/">{{icon:download}} Download NovelForge</a>
       <a class="btn" href="{{root}}faq/">Read the FAQ</a>
     </div>
   </div>

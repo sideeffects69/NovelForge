@@ -16,17 +16,27 @@
 ## Pages
 
 - [NovelForge: Free Novel Writing Software for Windows](https://sideeffects69.github.io/NovelForge/): Free, open-source novel writing software for Windows. Real Word .docx scenes, nine outline frameworks, a story graph and a fantasy map maker. No account, no cloud.
-- [Features: outlining, corkboard, story graph, maps | NovelForge](https://sideeffects69.github.io/NovelForge/features/): Everything in NovelForge: a binder and corkboard, nine outline frameworks, a timeline, a story graph, a map maker, compile and diagnostics. All offline.
-- [Free Fantasy Map Maker for Authors | NovelForge](https://sideeffects69.github.io/NovelForge/map-maker/): Build a whole fantasy world in one click: coastlines, mountain ranges, rivers, forests, roads and named towns. Edit it by hand, export PNG, SVG or Word.
+- [Changelog: what is new in NovelForge](https://sideeffects69.github.io/NovelForge/changelog/): Every NovelForge release, newest first: the modern interface, the rebuilt map maker, and the fixes found by testing every button.
 - [NovelForge vs Scrivener, Atticus, Obsidian and Word](https://sideeffects69.github.io/NovelForge/compare/): An honest comparison of NovelForge with Scrivener, Atticus, Obsidian and Microsoft Word: price, file format, planning tools, and when you should pick something else.
 - [Download NovelForge: free for Windows 10 and 11](https://sideeffects69.github.io/NovelForge/download/): Download NovelForge free: install Python, unzip the release and double-click Write.bat, which adds its two small libraries itself. Windows 10 or 11.
 - [FAQ: is NovelForge free, offline, and private?](https://sideeffects69.github.io/NovelForge/faq/): Answers about NovelForge: price, offline use, where your files live, AI, Mac and Linux, importing from Word or Scrivener, backups, and maps.
-- [Changelog: what is new in NovelForge](https://sideeffects69.github.io/NovelForge/changelog/): Every NovelForge release, newest first: the modern interface, the rebuilt map maker, and the fixes found by testing every button.
+- [Features: outlining, corkboard, story graph, maps | NovelForge](https://sideeffects69.github.io/NovelForge/features/): Everything in NovelForge: a binder and corkboard, nine outline frameworks, a timeline, a story graph, a map maker, compile and diagnostics. All offline.
+- [Free Fantasy Map Maker for Authors | NovelForge](https://sideeffects69.github.io/NovelForge/map-maker/): Build a whole fantasy world in one click: coastlines, mountain ranges, rivers, forests, roads and named towns. Edit it by hand, export PNG, SVG or Word.
 - [Support NovelForge: donate or contribute](https://sideeffects69.github.io/NovelForge/support/): NovelForge is free and always will be. If it helps your writing, you can donate by PayPal or UPI, report a bug, or contribute code.
+
+## Documentation
+
+- [NovelForge documentation: how every feature works](https://sideeffects69.github.io/NovelForge/docs/): Documentation for NovelForge, free novel writing software for Windows: install it, tour the window, learn the binder, protect your files and find every shortcut.
+- [Install and first launch | NovelForge docs](https://sideeffects69.github.io/NovelForge/docs/getting-started/install-and-first-launch/): Learn how to install NovelForge on Windows 10 or 11: get Python, download the release, double-click Write.bat, and create your first novel.
+- [Tour of the window | NovelForge docs](https://sideeffects69.github.io/NovelForge/docs/getting-started/tour-of-the-window/): Learn how to read NovelForge's main window: the menus, the toolbar, the binder, the editor, the inspector, the status bar and the tools that open in their own windows.
+- [Keyboard shortcuts | NovelForge docs](https://sideeffects69.github.io/NovelForge/docs/reference/keyboard-shortcuts/): Every keyboard shortcut in NovelForge's main window, listed by menu, generated from the program's own source so it always matches what the menus show.
+- [The binder | NovelForge docs](https://sideeffects69.github.io/NovelForge/docs/writing/the-binder/): Learn how to use the binder, NovelForge's tree of chapters, scenes, sheets and notes: adding, renaming, reordering, deleting safely, and what each row and dot means.
+- [Backups and snapshots | NovelForge docs](https://sideeffects69.github.io/NovelForge/docs/your-files/backups-and-snapshots/): Learn how NovelForge protects your novel: verified zip backups, per-document versions, safe saving and the recovery journal, and how to restore an older copy.
 
 ## Optional
 
 - [Full site text for language models](https://sideeffects69.github.io/NovelForge/llms-full.txt)
+- [Search index for the site](https://sideeffects69.github.io/NovelForge/search-index.json)
 - [Source code and issues](https://github.com/sideeffects69/NovelForge)
 - [Latest release](https://github.com/sideeffects69/NovelForge/releases/latest)
 - [README](https://github.com/sideeffects69/NovelForge#readme)

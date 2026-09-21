@@ -3,13 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script>document.documentElement.classList.add("js");</script>
 <title>Free Fantasy Map Maker for Authors | NovelForge</title>
 <meta name="description" content="Build a whole fantasy world in one click: coastlines, mountain ranges, rivers, forests, roads and named towns. Edit it by hand, export PNG, SVG or Word.">
 <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
 <link rel="canonical" href="https://sideeffects69.github.io/NovelForge/map-maker/">
 <meta name="author" content="Om Abhyankar">
-<meta name="theme-color" content="#070d17">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f7f4ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#070d17" media="(prefers-color-scheme: dark)">
 <meta property="og:site_name" content="NovelForge">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Free Fantasy Map Maker for Authors | NovelForge">
@@ -29,9 +30,8 @@
 <link rel="manifest" href="../site.webmanifest">
 <link rel="alternate" type="text/plain" href="../llms.txt" title="Plain-text summary for language models">
 <link rel="sitemap" type="application/xml" href="../sitemap.xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,500;7..72,600;7..72,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preload" href="../assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/literata-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="../style.css">
 <script type="application/ld+json">
 {
@@ -74,47 +74,47 @@
   {
    "@type": "WebPage",
    "@id": "https://sideeffects69.github.io/NovelForge/map-maker/#webpage",
-   "url": "https://sideeffects69.github.io/NovelForge/map-maker/",
    "name": "Free Fantasy Map Maker for Authors | NovelForge",
+   "url": "https://sideeffects69.github.io/NovelForge/map-maker/",
    "description": "Build a whole fantasy world in one click: coastlines, mountain ranges, rivers, forests, roads and named towns. Edit it by hand, export PNG, SVG or Word.",
    "inLanguage": "en",
+   "datePublished": "2026-09-20",
+   "dateModified": "2026-09-20",
    "isPartOf": {
     "@id": "https://sideeffects69.github.io/NovelForge/#website"
    },
    "about": {
     "@id": "https://sideeffects69.github.io/NovelForge/#software"
-   },
-   "dateModified": "2026-09-20"
+   }
   }
  ]
 }
 </script>
 </head>
 <body>
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></symbol><symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></symbol><symbol id="i-book" viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/></symbol><symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5"/></symbol><symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol><symbol id="i-file" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h6"/></symbol><symbol id="i-map" viewBox="0 0 24 24"><path d="M9 5 3 7v12l6-2 6 2 6-2V5l-6 2z"/><path d="M9 5v12M15 7v12"/></symbol><symbol id="i-board" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></symbol><symbol id="i-graph" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="9" cy="18" r="2.5"/><path d="m8 7 8 1M7 8.5l1.5 7M16.5 10l-6 6.5"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></symbol><symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6z"/><path d="m9 12 2 2 4-4"/></symbol><symbol id="i-command" viewBox="0 0 24 24"><path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/></symbol><symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="m14 7 3 3"/></symbol><symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></symbol><symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></symbol><symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7"/></symbol><symbol id="i-github" viewBox="0 0 16 16"><path fill="currentColor" stroke="none" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></symbol></svg>
 <a class="skip" href="#main">Skip to content</a>
-<header class="nav">
-  <div class="wrap">
-    <a class="nav-brand" href="../" aria-label="NovelForge home">
-      <img src="../assets/brand/icon-96.png" width="32" height="32" alt="" class="nav-logo">
+<header class="site-header">
+  <div class="bar wrap">
+    <a class="brand" href="../" aria-label="NovelForge home">
+      <img src="../assets/brand/icon-96.png" width="32" height="32" alt="" class="brand-logo">
       <span>Novel<em>Forge</em></span>
     </a>
-    <nav class="nav-links" aria-label="Main">
-      <a href="../features/">Features</a><a href="../map-maker/" aria-current="page">Map Maker</a><a href="../compare/">Compare</a><a href="../download/">Download</a><a href="../faq/">FAQ</a>
-      <a class="nav-gh" href="https://github.com/sideeffects69/NovelForge" rel="noopener">
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-        GitHub</a>
+    <nav class="main-nav" aria-label="Main">
+      <a href="../features/">Features</a><a href="../docs/">Docs</a><a href="../map-maker/" aria-current="page">Map Maker</a><a href="../compare/">Compare</a><a href="../download/">Download</a><a class="gh" href="https://github.com/sideeffects69/NovelForge" rel="noopener"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-github"/></svg>GitHub</a>
     </nav>
+    <div class="search" role="search"><a class="search-fallback" href="../docs/" title="Search the docs, or press /"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"/></svg><span>Search</span><kbd>/</kbd></a></div>
   </div>
 </header>
 <main id="main">
 <div class="page-hero">
   <div class="wrap">
-    <div class="crumbs"><a href="../">Home</a><span>/</span>Map maker</div>
+    <nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="../">Home</a></li><li aria-current="page">Map maker</li></ol></nav>
     <span class="kicker">Fantasy map maker</span>
     <h1>A free fantasy map maker for authors, built into your writing studio</h1>
     <p class="lead">Press one button and a whole world appears: ragged coastlines, mountain ranges, rivers that run from the highlands to the sea, forests and deserts, roads that follow the land, and dozens of named towns. Edit every part by hand, link places to your character and location sheets, and export a picture for your readers.</p>
     <div class="btn-row">
-      <a class="btn btn-primary" href="../download/"><span class="btn-icon">⬇</span> Download NovelForge</a>
+      <a class="btn btn-primary" href="../download/"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-download"/></svg> Download NovelForge</a>
       <a class="btn" href="../features/">All features</a>
     </div>
   </div>
@@ -122,10 +122,10 @@
 
 <section>
   <div class="wrap">
-    <div class="gallery" data-reveal>
-      <figure><img width="1200" height="800" src="../assets/maps/map-classic.jpg" alt="A generated fantasy map called Highfield: two large landmasses with mountain ranges, forests, rivers, roads and named towns on aged parchment." loading="lazy"><figcaption><strong>Classic fantasy world</strong>Two large landmasses, lakes, rivers and roads. Seed 7.</figcaption></figure>
-      <figure><img width="1200" height="800" src="../assets/maps/map-archipelago.jpg" alt="A generated island archipelago map with several irregular islands, shallows around each coast, and named settlements." loading="lazy"><figcaption><strong>Island archipelago</strong>Chains of islands with pale shallows and ripples. Seed 3.</figcaption></figure>
-      <figure><img width="1200" height="800" src="../assets/maps/map-inland-sea.jpg" alt="A generated fantasy map of land wrapped around a large inland sea, with forests, mountains, rivers and cities." loading="lazy"><figcaption><strong>Inland sea</strong>Kingdoms around a central sea, with rivers draining into it. Seed 5.</figcaption></figure>
+    <div class="gallery">
+      <figure><a href="../assets/maps/map-classic.jpg"><img width="1200" height="800" src="../assets/maps/map-classic.jpg" alt="A generated fantasy map called Highfield: two large landmasses with mountain ranges, forests, rivers, roads and named towns on aged parchment." loading="lazy"></a><figcaption><strong>Classic fantasy world</strong>Two large landmasses, lakes, rivers and roads. Seed 7.</figcaption></figure>
+      <figure><a href="../assets/maps/map-archipelago.jpg"><img width="1200" height="800" src="../assets/maps/map-archipelago.jpg" alt="A generated island archipelago map with several irregular islands, shallows around each coast, and named settlements." loading="lazy"></a><figcaption><strong>Island archipelago</strong>Chains of islands with pale shallows and ripples. Seed 3.</figcaption></figure>
+      <figure><a href="../assets/maps/map-inland-sea.jpg"><img width="1200" height="800" src="../assets/maps/map-inland-sea.jpg" alt="A generated fantasy map of land wrapped around a large inland sea, with forests, mountains, rivers and cities." loading="lazy"></a><figcaption><strong>Inland sea</strong>Kingdoms around a central sea, with rivers draining into it. Seed 5.</figcaption></figure>
     </div>
     <p class="compat-note">Every map above was made by NovelForge with a single click and nothing edited by hand. The place names are generated too, and can be replaced with your own.</p>
   </div>
@@ -153,22 +153,22 @@
 
 <section>
   <div class="wrap">
-    <div class="section-head" data-reveal>
+    <div class="section-head">
       <span class="kicker">The editor</span>
       <h2>Then make it yours</h2>
       <p>Nothing is locked. Generated maps are made of the same shapes the drawing tools make, so every tool works on both.</p>
     </div>
-    <figure class="shot" data-reveal>
+    <figure class="shot">
       <div class="window-chrome"><div class="chrome-bar"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span><span class="chrome-title">Map Maker — Highfield</span></div>
       <img width="1340" height="680" src="../assets/screenshots/map-maker.png" loading="lazy" alt="The map maker window: tool rail, terrain and layer palettes, the map on a desk, and a properties panel."></div>
     </figure>
-    <div class="cards" style="margin-top: 34px;">
-      <div class="card" data-reveal><h3>Draw by hand</h3><p>Freehand coastlines, click-to-place shapes, an eraser and a pan tool. Thirteen terrain types: land, sea and lake, forest, mountain range, hills, desert, marsh, ice, region border, river, road, wall and route.</p></div>
-      <div class="card" data-reveal data-reveal-delay="1"><h3>Twenty kinds of pin</h3><p>Capitals, cities, towns, villages, castles, temples, ports, ruins, caves, dungeons, mines, camps, bridges, inns, battle sites, dangers, treasure, portals and more, each with its own icon and an automatic label placer that hides a name rather than print it on top of another.</p></div>
-      <div class="card" data-reveal data-reveal-delay="2"><h3>Linked to your story</h3><p>Pins link straight to your Location sheets: double-click a pin to open its sheet in Word. Layers show and hide independently, so you can keep a secret map of the villain's plans.</p></div>
-      <div class="card" data-reveal><h3>Four art styles</h3><p>Aged parchment, ink on white, dark atlas and treasure map. Same map, different mood; switch at any time.</p></div>
-      <div class="card" data-reveal data-reveal-delay="1"><h3>Names in your own voice</h3><p>Settlements, realms, regions, seas and rivers can each sound different. Edit the name lists in a plain JSON file, and the next world uses them.</p></div>
-      <div class="card" data-reveal data-reveal-delay="2"><h3>What you see is what you export</h3><p>One drawing list feeds the editor, the PNG and the SVG, so an export is never a different picture from the one you were looking at.</p></div>
+    <div class="cards">
+      <div class="card"><h3>Draw by hand</h3><p>Freehand coastlines, click-to-place shapes, an eraser and a pan tool. Thirteen terrain types: land, sea and lake, forest, mountain range, hills, desert, marsh, ice, region border, river, road, wall and route.</p></div>
+      <div class="card"><h3>Twenty kinds of pin</h3><p>Capitals, cities, towns, villages, castles, temples, ports, ruins, caves, dungeons, mines, camps, bridges, inns, battle sites, dangers, treasure, portals and more, each with its own icon and an automatic label placer that hides a name rather than print it on top of another.</p></div>
+      <div class="card"><h3>Linked to your story</h3><p>Pins link straight to your Location sheets: double-click a pin to open its sheet in Word. Layers show and hide independently, so you can keep a secret map of the villain's plans.</p></div>
+      <div class="card"><h3>Five art styles</h3><p>Aged parchment, ink on white, dark atlas, treasure map, and a black-and-white Print style for book interiors. Same map, different mood; switch at any time.</p></div>
+      <div class="card"><h3>Names in your own voice</h3><p>Settlements, realms, regions, seas and rivers can each sound different. Edit the name lists in a plain JSON file, and the next world uses them.</p></div>
+      <div class="card"><h3>What you see is what you export</h3><p>One drawing list feeds the editor, the PNG and the SVG, so an export is never a different picture from the one you were looking at.</p></div>
     </div>
   </div>
 </section>
@@ -192,29 +192,29 @@
 </section>
 
 <section class="big-cta">
-  <div class="wrap" data-reveal>
+  <div class="wrap">
     <h2>Build your world in one click.</h2>
     <p>The map maker is part of NovelForge, which is free for Windows 10 and 11.</p>
     <div class="btn-row btn-row-center">
-      <a class="btn btn-primary" href="../download/"><span class="btn-icon">⬇</span> Download NovelForge</a>
+      <a class="btn btn-primary" href="../download/"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-download"/></svg> Download NovelForge</a>
       <a class="btn" href="../faq/">Read the FAQ</a>
     </div>
   </div>
 </section>
 
 </main>
-<footer>
+<footer class="site-footer">
   <div class="wrap">
     <div class="foot-grid">
       <div class="foot-about">
-        <a class="nav-brand" href="../"><img src="../assets/brand/icon-96.png" width="28" height="28" alt="" class="nav-logo"><span>Novel<em>Forge</em></span></a>
+        <a class="brand" href="../"><img src="../assets/brand/icon-96.png" width="28" height="28" alt="" class="brand-logo"><span>Novel<em>Forge</em></span></a>
         <p>Free, open-source novel writing software for Windows. Your book stays in real Word files on your own disk.</p>
       </div>
-      <div><h4>Product</h4><a href="../features/">Features</a><a href="../map-maker/">Fantasy map maker</a><a href="../download/">Download</a><a href="../changelog/">Changelog</a></div>
-      <div><h4>Learn</h4><a href="../compare/">Compare with Scrivener and others</a><a href="../faq/">Questions and answers</a><a href="../llms.txt">llms.txt</a></div>
-      <div><h4>Project</h4><a href="https://github.com/sideeffects69/NovelForge" rel="noopener">Source on GitHub</a><a href="https://github.com/sideeffects69/NovelForge/issues" rel="noopener">Report an issue</a><a href="https://github.com/sideeffects69/NovelForge/blob/main/CONTRIBUTING.md" rel="noopener">Contribute</a><a href="https://github.com/sideeffects69/NovelForge/blob/main/LICENSE" rel="noopener">MIT licence</a><a href="../support/">Support the project</a></div>
+      <div><h2>Product</h2><a href="../features/">Features</a><a href="../map-maker/">Fantasy map maker</a><a href="../download/">Download</a><a href="../changelog/">Changelog</a></div>
+      <div><h2>Learn</h2><a href="../docs/">Documentation</a><a href="../compare/">Compare with Scrivener and others</a><a href="../faq/">Questions and answers</a><a href="../llms.txt">llms.txt</a></div>
+      <div><h2>Project</h2><a href="https://github.com/sideeffects69/NovelForge" rel="noopener">Source on GitHub</a><a href="https://github.com/sideeffects69/NovelForge/issues" rel="noopener">Report an issue</a><a href="https://github.com/sideeffects69/NovelForge/blob/main/CONTRIBUTING.md" rel="noopener">Contribute</a><a href="https://github.com/sideeffects69/NovelForge/blob/main/LICENSE" rel="noopener">MIT licence</a><a href="../support/">Support the project</a></div>
     </div>
-    <p class="foot-fine">NovelForge 2.2.0 &middot; free and open source &middot; built by Om Abhyankar &middot; no cookies, no tracking.</p>
+    <p class="foot-fine">NovelForge 2.2.0 &middot; free and open source &middot; built by Om Abhyankar &middot; no cookies, no tracking, no third-party requests.</p>
   </div>
 </footer>
 <script src="../app.js" defer></script>

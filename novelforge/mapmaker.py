@@ -18,8 +18,9 @@ import json
 import math
 import os
 import random
+import re
 import zlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -111,7 +112,45 @@ STYLES: Dict[str, Dict[str, Any]] = {
             "desert": "#e2cd97", "swamp": "#a5a274", "ice": "#dcdcc9",
         },
     },
+    # For the printed book. Black ink on white paper, and nothing but greys, so
+    # a black-and-white interior loses nothing when it is converted: every
+    # terrain that can touch another sits at least a step (about 9% of the way
+    # from black to white) away from it in brightness, which the tests check
+    # by converting the fills to luminance. Land is the white of the page and
+    # the sea a light grey tint; text and coast lines are pure black (100% K),
+    # which is what printers ask for at small sizes.
+    "print": {
+        "label": "Print (black and white)",
+        "paper": "#d3d3d3",
+        "paper_dark": "#c6c6c6",
+        "ink": "#000000",
+        "ink_light": "#404040",
+        "water": "#d3d3d3",
+        "water_deep": "#7f7f7f",
+        "halo": ["#e6e6e6", "#eaeaea", "#f0f0f0"],
+        "grid": "#9a9a9a",
+        "texture": False,
+        "vignette": False,
+        "terrain": {
+            "land": "#ffffff", "water": "#d3d3d3", "forest": "#919191",
+            "desert": "#bdbdbd", "swamp": "#a7a7a7", "ice": "#e9e9e9",
+            # generator kinds: the same rule (a step apart wherever two can
+            # touch: district/land, building/district, floor/room/stairs...)
+            "ward": "#e9e9e9", "building": "#bdbdbd", "plaza": "#ffffff",
+            "floor": "#e9e9e9", "room": "#ffffff", "stairs": "#bdbdbd",
+            "cave": "#ffffff", "street": "#666666", "lane": "#808080",
+            "partition": "#000000", "door": "#000000", "window": "#4d4d4d",
+            "orbit": "#404040",
+        },
+    },
 }
+
+# The colour a mark of emphasis takes in each style (a treasure X, a route to
+# follow). It is the ink where the style has no second colour to spare.
+_ACCENTS = {"parchment": "#8a2f22", "treasure": "#8a2f22", "ink": None,
+            "dark": None, "print": None}
+for _name, _accent in _ACCENTS.items():
+    STYLES[_name].setdefault("accent", _accent or STYLES[_name]["ink"])
 
 TERRAIN: Dict[str, Dict[str, Any]] = {
     "land":      {"label": "Land / coast", "fill": "#f2e8cb", "closed": True,
@@ -140,6 +179,41 @@ TERRAIN: Dict[str, Dict[str, Any]] = {
                   "halo": False, "decor": "wall"},
     "route":     {"label": "Route / journey", "fill": None, "closed": False,
                   "halo": False, "decor": "route"},
+    # -- kinds only the generators make (towns, floor plans, dungeons, star
+    # maps). They are not in TERRAIN_ORDER, so the editor never offers them to a
+    # writer, but a map may hold them and every backend draws them. None has a
+    # `decor`, so each is a plain filled polygon with an outline (or a stroked
+    # line when it is not closed); the colour comes from the style's `terrain`
+    # palette, `fill` here being only the fallback. `smooth: False` keeps sharp
+    # corners (a wall, a room, a building must not be rounded off); `edge`
+    # "light" draws the outline in the softer ink; `dash` dashes it.
+    "building":  {"label": "Building", "fill": "#e0cfa6", "closed": True,
+                  "halo": False, "decor": None, "smooth": False},
+    "ward":      {"label": "District", "fill": "#ecdfbc", "closed": True,
+                  "halo": False, "decor": None, "smooth": False, "edge": "light"},
+    "plaza":     {"label": "Plaza", "fill": "#f6efd8", "closed": True,
+                  "halo": False, "decor": None, "smooth": False, "edge": "light"},
+    "street":    {"label": "Street", "fill": None, "closed": False,
+                  "halo": False, "decor": None, "smooth": False},
+    "lane":      {"label": "Lane", "fill": None, "closed": False,
+                  "halo": False, "decor": None, "smooth": False},
+    "room":      {"label": "Room", "fill": "#f4ecd6", "closed": True,
+                  "halo": False, "decor": None, "smooth": False},
+    "floor":     {"label": "Floor", "fill": "#ebe0c2", "closed": True,
+                  "halo": False, "decor": None, "smooth": False},
+    "partition": {"label": "Interior wall", "fill": None, "closed": False,
+                  "halo": False, "decor": None, "smooth": False},
+    "door":      {"label": "Door", "fill": None, "closed": False,
+                  "halo": False, "decor": None, "smooth": False},
+    "window":    {"label": "Window", "fill": None, "closed": False,
+                  "halo": False, "decor": None, "smooth": False},
+    "stairs":    {"label": "Stairs", "fill": "#d8c9a5", "closed": True,
+                  "halo": False, "decor": None, "smooth": False},
+    "cave":      {"label": "Cave", "fill": "#e2d5b4", "closed": True,
+                  "halo": False, "decor": None},
+    "orbit":     {"label": "Orbit", "fill": None, "closed": True,
+                  "halo": False, "decor": None, "smooth": False, "edge": "light",
+                  "dash": True},
 }
 
 TERRAIN_ORDER = [
@@ -147,14 +221,29 @@ TERRAIN_ORDER = [
     "ice", "region", "river", "road", "wall", "route",
 ]
 
+#: The kinds above that only generators make; not in TERRAIN_ORDER.
+GENERATOR_KINDS = (
+    "building", "ward", "plaza", "street", "lane", "room", "floor", "partition",
+    "door", "window", "stairs", "cave", "orbit",
+)
+
 # Draw order, low to high; shapes of equal rank keep the order they were made
 # in. Water and land share a rank on purpose: a sea drawn first lies under the
 # land drawn after it, and a lake drawn on the land lies on top of it. With
 # water always underneath, every lake a writer drew simply vanished.
+#
+# The generator kinds slot in between (ranks need not be whole numbers): floors
+# and caves just above the ground, districts and plazas above them, rooms and
+# stairs with the terrain, orbits with the borders, streets and lanes with the
+# rivers and roads, then buildings over the streets, and last the thin things
+# that sit on a wall: interior walls, doors, windows.
 PAINT_ORDER = {
     "water": 1, "land": 1, "ice": 2, "desert": 3, "swamp": 4, "forest": 5,
     "hills": 6, "mountains": 7, "region": 8, "river": 9, "road": 10,
     "wall": 11, "route": 12,
+    "floor": 1.5, "cave": 1.6, "ward": 2.5, "plaza": 2.6, "room": 5.5,
+    "stairs": 5.6, "orbit": 8.5, "street": 9.5, "lane": 9.6, "building": 10.2,
+    "partition": 10.5, "door": 10.6, "window": 10.7,
 }
 
 PIN_KINDS: Dict[str, str] = {
@@ -180,6 +269,60 @@ PIN_KINDS: Dict[str, str] = {
     "portal": "Portal",
 }
 
+#: Pin kinds only the generators place (star maps, gates). The editor's own list
+#: is `PIN_KINDS`, which stays the twenty a writer places by hand; a map of any
+#: kind can still hold and draw these. `pin_kinds_for` says which suit a map.
+EXTRA_PIN_KINDS: Dict[str, str] = {
+    "star": "Star",
+    "planet": "Planet",
+    "station": "Station",
+    "gate": "Gate",
+}
+
+
+#: Every pin kind there is - the writer's twenty and the generators' extras.
+ALL_PIN_KINDS: Dict[str, str] = {**PIN_KINDS, **EXTRA_PIN_KINDS}
+
+
+def pin_kind_label(kind: str) -> str:
+    """What a pin kind is called, whether the writer places it or a generator does."""
+    return PIN_KINDS.get(kind) or EXTRA_PIN_KINDS.get(kind) or kind
+
+
+# Which pins make sense on which kind of map, most useful first. A town on a
+# floor plan or a star on a battle plan would only be noise in the picker.
+_PIN_KINDS_FOR: Dict[str, Tuple[str, ...]] = {
+    "city": ("castle", "tower", "temple", "inn", "port", "bridge", "gate",
+             "landmark", "ruin", "camp", "danger", "treasure", "portal"),
+    "castle": ("tower", "gate", "temple", "inn", "landmark", "treasure",
+               "danger", "camp", "bridge", "portal"),
+    "building": ("landmark", "treasure", "danger", "portal", "temple", "tower"),
+    "dungeon": ("treasure", "danger", "portal", "landmark", "cave", "dungeon",
+                "mine", "ruin", "battle", "camp", "gate"),
+    "treasure": ("treasure", "danger", "landmark", "camp", "cave", "ruin", "port",
+                 "tower", "bridge", "battle"),
+    "battle": ("battle", "camp", "danger", "tower", "castle", "bridge",
+               "landmark", "ruin", "gate"),
+    "sector": ("star", "planet", "station", "gate", "danger", "landmark",
+               "portal", "battle", "treasure"),
+    "system": ("star", "planet", "station", "gate", "landmark", "danger",
+               "treasure", "portal"),
+    "journey": ("capital", "city", "town", "village", "port", "camp", "inn",
+                "bridge", "battle", "danger", "landmark", "ruin", "castle",
+                "temple", "gate", "cave", "treasure"),
+}
+
+
+def pin_kinds_for(map_kind: str) -> List[str]:
+    """
+    The pin kinds worth offering on a map of this kind, as keys of
+    `ALL_PIN_KINDS`. Worlds, continents, regions and any kind not listed get the
+    writer's twenty; a city, a dungeon or a star map gets the ones that belong
+    there (and a star map, alone, gets stars and planets).
+    """
+    return list(_PIN_KINDS_FOR.get(map_kind, tuple(PIN_KINDS)))
+
+
 MAP_KINDS = {
     "world": "World",
     "continent": "Continent",
@@ -193,6 +336,12 @@ MAP_KINDS = {
 
 GRID_KINDS = {"none": "None", "square": "Square", "hex": "Hex"}
 
+#: Who a picture is for. "author" is the working copy (every visible layer,
+#: notes and all); "reader" is what leaves the building - a book, an ebook, a
+#: Word file for a proofreader - and drops every author-only layer and every
+#: note.
+EDITIONS = ("author", "reader")
+
 
 # ==========================================================================
 # Model
@@ -204,6 +353,10 @@ class Layer:
     name: str = "Base"
     visible: bool = True
     locked: bool = False
+    # Secrets: a layer the author keeps for themselves (unfinished places, plot
+    # spoilers, GM notes). Everything drawn for the *reader edition* leaves it
+    # out - the picture, the SVG, the Word listing, the alt text.
+    author_only: bool = False
 
 
 @dataclass
@@ -250,6 +403,9 @@ class Pin:
     notes: str = ""
     size: float = 7.0
     layer: str = "Base"
+    # The map that shows this place from the inside (a village under a world
+    # pin, a floor plan under a town pin). Empty when there is none.
+    child_map_id: str = ""
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -300,6 +456,16 @@ class GameMap:
     labels: List[MapLabel] = field(default_factory=list)
     created: str = field(default_factory=now_iso)
     modified: str = field(default_factory=now_iso)
+    # How long the scale bar is drawn, in map pixels. 0 means "the default for
+    # this map's width" (see `scale_bar`); `apply_scale` sets it so the bar can
+    # be a round number of units. The picture, the label placer and every
+    # distance NovelForge reports all read it through the one `scale_bar`.
+    scale_px: float = 0.0
+    # An on-map key: a swatch and a name for every kind of thing drawn.
+    legend: bool = False
+    # For a map that is a pin's inside (a city under a world pin, a floor plan
+    # under a city pin): {"map_id": ..., "pin_id": ...}. Empty for a top map.
+    parent: Dict[str, str] = field(default_factory=dict)
 
     # Not part of the map: a memo of the last label-placement pass, so panning
     # and zooming (which change nothing about where pins and labels sit) do
@@ -332,6 +498,8 @@ class GameMap:
             "hide_colliding_labels": self.hide_colliding_labels,
             "auto_place_labels": self.auto_place_labels,
             "notes": self.notes, "seed": self.seed,
+            "scale_px": self.scale_px, "legend": self.legend,
+            "parent": dict(self.parent or {}),
             "layers": [to_dict(l) for l in self.layers],
             "shapes": [
                 {**to_dict(s), "points": [[p[0], p[1]] for p in s.points]}
@@ -354,6 +522,15 @@ class GameMap:
         obj.shapes = [from_dict(Shape, d) for d in (data.get("shapes") or [])]
         obj.pins = [from_dict(Pin, d) for d in (data.get("pins") or [])]
         obj.labels = [from_dict(MapLabel, d) for d in (data.get("labels") or [])]
+        # Files from before these fields existed simply lack them; a hand-edited
+        # one might hold nonsense. Either way the map should still open.
+        if not isinstance(obj.parent, dict):
+            obj.parent = {}
+        try:
+            obj.scale_px = max(0.0, float(obj.scale_px or 0.0))
+        except (TypeError, ValueError):
+            obj.scale_px = 0.0
+        obj.legend = bool(obj.legend)
         return obj
 
     # -- helpers --------------------------------------------------------
@@ -363,8 +540,20 @@ class GameMap:
     def layer_names(self) -> List[str]:
         return [l.name for l in self.layers]
 
-    def visible_layers(self) -> set:
-        return {l.name for l in self.layers if l.visible}
+    def visible_layers(self, edition: str = "author") -> set:
+        """
+        Names of the layers that are drawn.
+
+        `edition="reader"` is the copy that leaves the building - a printed
+        book, an ebook, a Word file for a proofreader - so it also drops every
+        layer marked author-only. The author's own view keeps them.
+        """
+        if edition not in EDITIONS:
+            # A typo must not quietly fall back to the author's copy.
+            raise ValueError(f"edition must be one of {EDITIONS}, not {edition!r}")
+        reader = edition == "reader"
+        return {l.name for l in self.layers
+                if l.visible and not (reader and l.author_only)}
 
     def layer(self, name: str) -> Optional[Layer]:
         return next((l for l in self.layers if l.name == name), None)
@@ -417,6 +606,40 @@ def _mix(a: str, b: str, t: float) -> str:
     return "#%02x%02x%02x" % (
         int(ra + (rb - ra) * t), int(ga + (gb - ga) * t), int(ba + (bb - ba) * t)
     )
+
+
+def _fill_in_generator_colours() -> None:
+    """
+    Give every style a colour for each generator-only kind it lacks, worked out
+    from that style's own land, sea and ink so all of them stay in tune (a
+    building is a little further from the land toward the ink, a district a
+    little toward the sea, and so on - which reads in both a light palette and
+    a dark one). The Print style states its own greys and is left as written.
+    """
+    for style in STYLES.values():
+        terrain = style.setdefault("terrain", {})
+        ink, paper = style["ink"], style["paper"]
+        land = terrain.get("land") or paper
+        derived = {
+            "ward": _mix(land, paper, 0.22),
+            "building": _mix(land, ink, 0.20),
+            "plaza": _mix(land, ink, 0.06),
+            "floor": _mix(land, ink, 0.10),
+            "room": _mix(land, ink, 0.03),
+            "stairs": _mix(land, ink, 0.24),
+            "cave": _mix(land, ink, 0.12),
+            "street": _mix(land, ink, 0.45),
+            "lane": _mix(land, ink, 0.30),
+            "partition": ink,
+            "door": style.get("accent") or ink,
+            "window": style["water_deep"],
+            "orbit": style["ink_light"],
+        }
+        for kind, colour in derived.items():
+            terrain.setdefault(kind, colour)
+
+
+_fill_in_generator_colours()
 
 
 def _smooth(points: Sequence[Point], iterations: int = 2) -> List[Point]:
@@ -720,6 +943,39 @@ def pin_primitives(pin: Pin, ink: str, paper: str,
         ring(s * 1.1, "", 1.8)
         ring(s * 0.62, "", 1.3)
         ring(s * 0.2, ink, 1.0)
+    elif kind == "star":
+        # a four-pointed sparkle: long points north, east, south and west
+        spikes = []
+        for i in range(8):
+            a = -math.pi / 2 + i * math.pi / 4
+            r = s * (1.3 if i % 2 == 0 else 0.42)
+            spikes.append((x + math.cos(a) * r, y + math.sin(a) * r))
+        out.append(("polygon", spikes, ink, ink, 1.0, False))
+    elif kind == "planet":
+        # a ball with a ring round it: the ring's back, the ball, the ring's front
+        out.append(("ellipse", x - s * 1.55, y - s * 0.4, x + s * 1.55, y + s * 0.4,
+                    "", ink, 1.2))
+        ring(s * 0.78, paper, 1.6)
+        front = [(x + s * 1.55 * math.cos(math.pi * k / 10.0),
+                  y + s * 0.4 * math.sin(math.pi * k / 10.0)) for k in range(11)]
+        out.append(("line", front, ink, 1.4, False))
+    elif kind == "station":
+        # a hub with a solar panel either side
+        for side in (-1.0, 1.0):
+            near, far = x + side * s * 0.55, x + side * s * 1.55
+            out.append(("polygon",
+                        [(near, y - s * 0.5), (far, y - s * 0.5),
+                         (far, y + s * 0.5), (near, y + s * 0.5)],
+                        ink, ink, 1.0, False))
+        ring(s * 0.55, paper, 1.6)
+    elif kind == "gate":
+        # an arch: two posts and a lintel with the way through them
+        out.append(("polygon",
+                    [(x - s, y + s * 0.85), (x - s, y - s * 0.7),
+                     (x + s, y - s * 0.7), (x + s, y + s * 0.85),
+                     (x + s * 0.55, y + s * 0.85), (x + s * 0.55, y - s * 0.2),
+                     (x - s * 0.55, y - s * 0.2), (x - s * 0.55, y + s * 0.85)],
+                    paper, ink, 1.5, False))
     else:  # landmark
         out.append(("polygon",
                     [(x, y - s), (x + s * 0.32, y - s * 0.32),
@@ -768,6 +1024,8 @@ LABEL_PRIORITY = {
     "town": 5, "dungeon": 6, "ruin": 7, "portal": 8, "landmark": 9,
     "mine": 10, "battle": 11, "treasure": 12, "bridge": 13, "cave": 14,
     "tower": 15, "inn": 16, "camp": 17, "danger": 18, "village": 19,
+    # generator-only kinds: a star before its planets, a station before a gate
+    "star": 1, "planet": 2, "station": 5, "gate": 6,
 }
 
 # Order in which alternative positions are tried around a point.
@@ -807,7 +1065,221 @@ def boxes_overlap(a: Box, b: Box, pad: float = 1.5) -> bool:
                 or a[3] + pad < b[1] or b[3] + pad < a[1])
 
 
-def _label_fingerprint(gm: GameMap, visible: set) -> tuple:
+# --------------------------------------------------------------------------
+# Scale
+#
+# One place decides how long the scale bar is and what it stands for. The
+# renderer draws it, the label placer keeps names off it, and mapstory reads
+# every distance from it - so a distance NovelForge reports is always the
+# distance the picture shows. They used to disagree: the bar was drawn at 16%
+# of the map's width (capped at 230 px) while mapstory assumed 20%, so every
+# distance came out at 64-72% of what the caption said.
+# --------------------------------------------------------------------------
+
+_MILE = 1.0
+_FOOT = _MILE / 5280.0
+
+#: (singular, plural, other spellings, miles in one). Lower case; matching is
+#: case-blind. Abbreviations stay as the writer typed them (`10 ft`, `3 AU`);
+#: spelled-out words agree with the number (`1 mile`, `5 miles`).
+UNIT_TABLE: Tuple[Tuple[str, str, Tuple[str, ...], float], ...] = (
+    ("foot", "feet", ("ft", "foots"), _FOOT),
+    ("yard", "yards", ("yd", "yds"), 3 * _FOOT),
+    ("pace", "paces", (), 2.5 * _FOOT),
+    ("metre", "metres", ("meter", "meters", "m"), 0.000621371),
+    ("kilometre", "kilometres", ("kilometer", "kilometers", "km", "kms"),
+     0.621371),
+    ("mile", "miles", ("mi",), _MILE),
+    ("league", "leagues", (), 3.0),
+    ("day", "days", (), 20.0),                       # a day's march
+    ("march", "marches", (), 20.0),
+    ("parsec", "parsecs", ("pc",), 1.9174e13),
+    ("astronomical unit", "astronomical units", ("au",), 92955807.0),
+    ("light-year", "light-years",
+     ("light year", "light years", "lightyear", "lightyears", "ly"), 5.8786e12),
+)
+
+#: Units too big for "about N miles" to help, or for a horse-speed check.
+ASTRONOMICAL_UNITS = frozenset(
+    {"parsec", "parsecs", "pc", "astronomical unit", "astronomical units", "au",
+     "light-year", "light-years", "light year", "light years", "lightyear",
+     "lightyears", "ly"})
+
+_UNIT_BY_WORD: Dict[str, Tuple[str, str, Tuple[str, ...], float]] = {}
+for _row in UNIT_TABLE:
+    for _word in (_row[0], _row[1]) + _row[2]:
+        _UNIT_BY_WORD[_word] = _row
+
+
+def unit_info(word: str) -> Optional[Tuple[str, str, Tuple[str, ...], float]]:
+    """The row of `UNIT_TABLE` a caption's unit word means, or None."""
+    return _UNIT_BY_WORD.get(re.sub(r"\s+", " ", (word or "").strip().lower()))
+
+
+_CAPTION_RE = re.compile(
+    r"(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)"      # 1,500 or 12.5
+    r"\s*([A-Za-z][A-Za-z\-]*)?(?:\s+([A-Za-z][A-Za-z\-]*))?")
+
+
+def parse_scale_caption(text: str) -> Optional[Tuple[float, str]]:
+    """
+    (amount, unit word) from a caption such as "100 leagues" or "3 light years".
+
+    The unit is "units" when the caption has a number but no word. None when it
+    has no usable number at all ("a long walk"), which means the scale is
+    unknown - never a guess.
+    """
+    match = _CAPTION_RE.search(text or "")
+    if not match:
+        return None
+    amount = float(match.group(1).replace(",", ""))
+    if amount <= 0:
+        return None
+    first, second = match.group(2), match.group(3)
+    if first and second and unit_info(f"{first} {second}"):
+        return amount, f"{first} {second}".lower()
+    return amount, (first or "units").lower()
+
+
+def nice_number(value: float, mode: str = "floor") -> float:
+    """
+    A round number: 1, 2 or 5 times a power of ten.
+
+    "floor" is the largest one not above `value`, "ceil" the smallest not
+    below it, and "round" the nearest on a logarithmic scale. A scale bar is
+    always one of these - nobody wants a bar labelled 137 miles.
+    """
+    if not value or value <= 0 or math.isinf(value) or math.isnan(value):
+        return 0.0
+    exponent = math.floor(math.log10(value))
+    base = value / 10.0 ** exponent
+    if base >= 10.0:                       # log10 is not exact at the edges
+        exponent, base = exponent + 1, base / 10.0
+    elif base < 1.0:
+        exponent, base = exponent - 1, base * 10.0
+    steps = (1.0, 2.0, 5.0, 10.0)
+    if mode == "ceil":
+        pick = next((s for s in steps if s >= base * (1 - 1e-9)), 10.0)
+    elif mode == "round":
+        pick = min(steps, key=lambda s: abs(math.log(base / s)))
+    else:
+        pick = max((s for s in steps if s <= base * (1 + 1e-9)), default=1.0)
+    return float(f"{pick:g}e{exponent}")
+
+
+def default_bar_px(width: float) -> float:
+    """
+    How long the scale bar is drawn on a map that has not been given its own
+    length: 16% of the width, but never more than 230 px. Every map made before
+    `scale_px` existed was drawn this way, so it stays true to them.
+    """
+    return min(float(width) * 0.16, 230.0)
+
+
+@dataclass(frozen=True)
+class ScaleBar:
+    """The scale bar as drawn: where, how long, and what its length means."""
+
+    px: float = 0.0            # drawn length, in map pixels
+    value: float = 0.0         # what that length stands for, in `unit`
+    unit: str = ""             # the word after the number, lower case
+    label: str = ""            # the caption printed above the bar
+    x: float = 0.0             # left end
+    y: float = 0.0             # top edge
+    thickness: float = 0.0     # how tall the bar is
+    area: Box = (0.0, 0.0, 0.0, 0.0)   # what it keeps clear of names
+
+    @property
+    def known(self) -> bool:
+        """True when the caption holds a number, so distances can be worked out."""
+        return self.value > 0 and self.px > 0
+
+    @property
+    def units_per_pixel(self) -> float:
+        return self.value / self.px if self.known else 0.0
+
+
+def scale_bar(gm: Any) -> ScaleBar:
+    """
+    The one description of a map's scale bar.
+
+    The bar is `gm.scale_px` long when the map has set that (`apply_scale`
+    does), otherwise `default_bar_px(width)`; the caption says what that length
+    is worth. A map with no caption has no bar (an empty label). Anything that
+    draws the bar, keeps names off it or turns pixels into miles goes through
+    here, so they cannot disagree. Works on anything with the map's attributes.
+    """
+    width = float(getattr(gm, "width", 1600) or 1600)
+    height = float(getattr(gm, "height", 1100) or 1100)
+    caption = str(getattr(gm, "scale_text", "") or "").strip()
+    custom = float(getattr(gm, "scale_px", 0.0) or 0.0)
+    px = custom if custom > 0 else default_bar_px(width)
+    px = max(4.0, min(px, width * 0.9))
+    parsed = parse_scale_caption(caption)
+    x, y = width * 0.045, height - height * 0.052
+    thickness = max(7.0, height * 0.011)
+    area = (x - 6, y - height * 0.03, x + px + 6, y + height * 0.02)
+    if caption:
+        words = text_box(x + px / 2.0, y - thickness * 1.5, caption,
+                         max(9, int(height * 0.016)), "center")
+        area = (min(area[0], words[0]), min(area[1], words[1]),
+                max(area[2], words[2]), max(area[3], words[3]))
+    return ScaleBar(px=px, value=parsed[0] if parsed else 0.0,
+                    unit=parsed[1] if parsed else "", label=caption,
+                    x=x, y=y, thickness=thickness, area=area)
+
+
+def _plain_number(value: float) -> str:
+    if value >= 1000 and abs(value - round(value)) < 1e-9:
+        return f"{int(round(value)):,}"
+    return f"{value:.6f}".rstrip("0").rstrip(".")
+
+
+def scale_caption(value: float, unit: str) -> str:
+    """"10 ft", "1 mile", "5 miles": a number and a unit that agree."""
+    typed = (unit or "").strip()
+    row = unit_info(typed)
+    word = typed
+    if row is not None and typed.lower() in (row[0], row[1]):
+        word = row[0] if abs(value - 1.0) < 1e-9 else row[1]
+    return f"{_plain_number(value)} {word}".strip()
+
+
+def apply_scale(gm: Any, unit: str, per_cell: float,
+                cell_px: Optional[float] = None) -> ScaleBar:
+    """
+    Give a map a scale: `per_cell` `unit`s to one grid square.
+
+    Sets the caption, the bar's drawn length and the grid square together, so
+    the caption, the bar and the grid cannot disagree: with `cell_px` the grid
+    square is that many map pixels (rounded to a whole pixel), otherwise the
+    map's `grid_size` is kept. The bar is the largest round number (1, 2 or 5
+    times a power of ten) of `unit` that fits the space a bar normally gets, so
+    "5 ft per square" on a 60 px grid gives a bar reading "10 ft", 120 px long.
+    Returns the resulting `ScaleBar`.
+    """
+    per_cell = float(per_cell)
+    if per_cell <= 0 or math.isnan(per_cell) or math.isinf(per_cell):
+        raise ValueError("per_cell must be a positive number")
+    if cell_px is not None:
+        gm.grid_size = max(4, int(round(float(cell_px))))
+    cell = max(1.0, float(gm.grid_size))
+    units_per_px = per_cell / cell
+    room = default_bar_px(float(gm.width))
+    value = nice_number(room * units_per_px, "floor")
+    gm.scale_text = scale_caption(value, unit)
+    gm.scale_px = value / units_per_px
+    return scale_bar(gm)
+
+
+def cell_units(gm: Any) -> float:
+    """How many of the scale's units one grid square is worth (0 if unknown)."""
+    bar = scale_bar(gm)
+    return bar.units_per_pixel * float(getattr(gm, "grid_size", 0) or 0)
+
+
+def _label_fingerprint(gm: GameMap, visible: set,
+                       reserved: Sequence[Box] = ()) -> tuple:
     """
     Everything `layout_pin_labels` actually reads, rounded to a tenth of a
     map unit. Panning and zooming touch none of this, so a redraw triggered
@@ -817,7 +1289,8 @@ def _label_fingerprint(gm: GameMap, visible: set) -> tuple:
     """
     return (
         gm.title_on_map, gm.name, gm.compass, gm.width, gm.height,
-        gm.scale_text, gm.hide_colliding_labels, frozenset(visible),
+        gm.scale_text, gm.scale_px, gm.hide_colliding_labels, frozenset(visible),
+        tuple(tuple(round(v, 1) for v in box) for box in reserved),
         tuple(
             (l.layer, round(l.x, 1), round(l.y, 1), l.text, l.size, l.tracking)
             for l in gm.labels
@@ -834,45 +1307,57 @@ def _label_fingerprint(gm: GameMap, visible: set) -> tuple:
     )
 
 
-def _cached_label_placement(gm: GameMap, visible: set
+def _cached_label_placement(gm: GameMap, visible: set,
+                            reserved: Sequence[Box] = ()
                             ) -> Dict[str, Tuple[str, bool]]:
-    fingerprint = _label_fingerprint(gm, visible)
+    fingerprint = _label_fingerprint(gm, visible, reserved)
     cached = gm._label_cache
     if cached is not None and cached[0] == fingerprint:
         return cached[1]
-    placement = layout_pin_labels(gm, visible)
+    placement = layout_pin_labels(gm, visible, list(reserved))
     gm._label_cache = (fingerprint, placement)
     return placement
 
 
-def layout_pin_labels(gm: GameMap, visible: Optional[set] = None
+def furniture_boxes(gm: GameMap) -> List[Box]:
+    """
+    The space the map's own furniture takes - title, compass, scale bar - which
+    names, and the legend, must keep clear of.
+    """
+    boxes: List[Box] = []
+    if gm.title_on_map and gm.name.strip():
+        size = max(18, int(gm.height * 0.038))
+        boxes.append(text_box(gm.width / 2.0, gm.height * 0.062,
+                              gm.name.upper(), size, "center", size * 0.14))
+    if gm.compass:
+        r = min(gm.width, gm.height) * 0.055
+        cx, cy = gm.width - r * 2.1, gm.height - r * 2.1
+        boxes.append((cx - r * 1.5, cy - r * 1.8, cx + r * 1.5, cy + r * 1.5))
+    bar = scale_bar(gm)
+    if bar.label:
+        boxes.append(bar.area)
+    return boxes
+
+
+def layout_pin_labels(gm: GameMap, visible: Optional[set] = None,
+                      reserved: Optional[Sequence[Box]] = None
                       ) -> Dict[str, Tuple[str, bool]]:
     """
     Choose a side for every pin label and decide which ones must be dropped.
 
     Returns {pin_id: (side, show)}. Reserved first, in order: the map title,
-    compass and scale bar; then free-standing text labels; then every pin's own
-    glyph, so a name never sits on top of a marker.
+    compass and scale bar, and the legend; then free-standing text labels; then
+    every pin's own glyph, so a name never sits on top of a marker. `reserved`
+    adds boxes to keep clear of; left as None, the legend's own box is used when
+    the map shows one.
     """
     if visible is None:
         visible = gm.visible_layers()
-    placed: List[Box] = []
-
-    # Furniture.
-    if gm.title_on_map and gm.name.strip():
-        size = max(18, int(gm.height * 0.038))
-        placed.append(text_box(gm.width / 2.0, gm.height * 0.062,
-                               gm.name.upper(), size, "center", size * 0.14))
-    if gm.compass:
-        r = min(gm.width, gm.height) * 0.055
-        cx, cy = gm.width - r * 2.1, gm.height - r * 2.1
-        placed.append((cx - r * 1.5, cy - r * 1.8, cx + r * 1.5, cy + r * 1.5))
-    if gm.scale_text.strip():
-        bar = min(gm.width * 0.16, 230.0)
-        x0 = gm.width * 0.045
-        y0 = gm.height - gm.height * 0.052
-        placed.append((x0 - 6, y0 - gm.height * 0.03, x0 + bar + 6,
-                       y0 + gm.height * 0.02))
+    placed: List[Box] = furniture_boxes(gm)
+    if reserved is None:
+        key = legend_layout(gm, visible) if gm.legend else None
+        reserved = [key.box] if key else []
+    placed.extend(reserved)
 
     # Free-standing labels (region and ocean names) always win.
     for label in gm.labels:
@@ -1257,14 +1742,12 @@ def _compass_primitives(gm: GameMap) -> List[tuple]:
 
 
 def _scale_primitives(gm: GameMap) -> List[tuple]:
-    if not gm.scale_text.strip():
+    scale = scale_bar(gm)
+    if not scale.label:
         return []
     palette = gm.palette()
     ink, paper = palette["ink"], palette["paper"]
-    bar = min(gm.width * 0.16, 230.0)
-    x0 = gm.width * 0.045
-    y0 = gm.height - gm.height * 0.052
-    height = max(7.0, gm.height * 0.011)
+    bar, x0, y0, height = scale.px, scale.x, scale.y, scale.thickness
     out: List[tuple] = []
     segments = 4
     for i in range(segments):
@@ -1273,7 +1756,7 @@ def _scale_primitives(gm: GameMap) -> List[tuple]:
                     [(sx, y0), (sx + bar / segments, y0),
                      (sx + bar / segments, y0 + height), (sx, y0 + height)],
                     ink if i % 2 == 0 else paper, ink, 1.1, False))
-    out.append(("text", x0 + bar / 2, y0 - height * 1.5, gm.scale_text,
+    out.append(("text", x0 + bar / 2, y0 - height * 1.5, scale.label,
                 max(9, int(gm.height * 0.016)), ink, "center", True, False, 0.0))
     return out
 
@@ -1305,6 +1788,281 @@ def _title_primitives(gm: GameMap) -> List[tuple]:
     ]
 
 
+# -- the legend ------------------------------------------------------------
+#
+# A key to the map: a small picture and a name for every kind of thing that is
+# actually drawn. It is made of the same polygons, lines and text as the rest of
+# the map, so the editor, the PNG and the SVG all draw it identically.
+
+#: What each kind of shape is called in a legend.
+LEGEND_NAMES = {
+    "land": "Land", "water": "Water", "forest": "Forest",
+    "mountains": "Mountains", "hills": "Hills", "desert": "Desert",
+    "swamp": "Marsh", "ice": "Ice and tundra", "region": "Border",
+    "river": "River", "road": "Road", "wall": "Wall", "route": "Route",
+    "building": "Building", "ward": "District", "plaza": "Plaza",
+    "street": "Street", "lane": "Lane", "room": "Room", "floor": "Floor",
+    "partition": "Interior wall", "door": "Door", "window": "Window",
+    "stairs": "Stairs", "cave": "Cave", "orbit": "Orbit",
+}
+
+#: The order a legend lists them in: ground first, then relief, then lines.
+LEGEND_ORDER = (
+    "land", "water", "forest", "desert", "swamp", "ice", "hills", "mountains",
+    "region", "river", "road", "wall", "route", "ward", "building", "plaza",
+    "street", "lane", "floor", "room", "cave", "stairs", "partition", "door",
+    "window", "orbit",
+)
+
+#: A legend lists at most this many kinds (the rarest markers are left out),
+#: and starts another column after this many rows.
+MAX_LEGEND_ENTRIES = 16
+LEGEND_ROWS = 8
+
+
+def legend_entries(gm: GameMap, visible: Optional[set] = None
+                   ) -> List[Tuple[str, str, str]]:
+    """
+    (group, kind, name) for everything the legend should list: the kinds of
+    shape and the kinds of pin actually on the layers that are shown.
+    """
+    if visible is None:
+        visible = gm.visible_layers()
+    shapes = {s.kind for s in gm.shapes if s.layer in visible and len(s.points) >= 2}
+    entries: List[Tuple[str, str, str]] = []
+    for kind in list(LEGEND_ORDER) + sorted(shapes - set(LEGEND_ORDER)):
+        if kind in shapes:
+            entries.append(("terrain", kind, LEGEND_NAMES.get(kind)
+                            or TERRAIN.get(kind, {}).get("label", kind)))
+    pins = {p.kind for p in gm.pins if p.layer in visible}
+    for kind in sorted(pins, key=lambda k: (LABEL_PRIORITY.get(k, 50), k)):
+        entries.append(("pin", kind, pin_kind_label(kind)))
+    return entries[:MAX_LEGEND_ENTRIES]
+
+
+@dataclass(frozen=True)
+class LegendLayout:
+    """Where a legend goes on the map and how it is laid out inside."""
+
+    box: Box
+    entries: Tuple[Tuple[str, str, str], ...]
+    columns: int
+    rows: int
+    size: float                  # lettering
+    row_h: float
+    pad: float
+    title_h: float
+    swatch_w: float
+    gap: float
+    column_x: Tuple[float, ...]  # where each column starts, from the box's inner left
+    corner: str                  # "tl", "tr", "bl" or "br"
+
+
+def _land_coverage(gm: GameMap, visible: set, boxes: Sequence[Box]) -> List[float]:
+    """
+    For each box, the fraction (0..1) of it that lies over drawn ground.
+
+    One small bitmap of every filled shape is painted and each box is averaged
+    from it, which costs a few milliseconds however many shapes there are -
+    testing points against polygons one by one did not.
+    """
+    try:
+        from PIL import Image, ImageDraw
+
+        step = max(2.0, min(gm.width, gm.height) / 200.0)
+        mask = Image.new("L", (int(gm.width / step) + 2, int(gm.height / step) + 2), 0)
+        draw = ImageDraw.Draw(mask)
+        for shape in gm.shapes:
+            spec = TERRAIN.get(shape.kind)
+            if (shape.layer not in visible or len(shape.points) < 3 or spec is None
+                    or not (spec["closed"] and shape.closed and spec.get("fill"))
+                    or shape.kind == "water"):
+                continue
+            draw.polygon([(x / step, y / step) for x, y in shape.points], fill=255)
+        out: List[float] = []
+        for x0, y0, x1, y1 in boxes:
+            area = mask.crop((int(x0 / step), int(y0 / step),
+                              max(int(x0 / step) + 1, int(x1 / step)),
+                              max(int(y0 / step) + 1, int(y1 / step))))
+            out.append(area.resize((1, 1), Image.BOX).getpixel((0, 0)) / 255.0)
+        return out
+    except Exception:
+        return [0.0 for _ in boxes]
+
+
+def _crowding(gm: GameMap, visible: set, box: Box, blocked: Sequence[Box],
+              coverage: float) -> float:
+    """How bad a place this is for the legend: furniture, then names, then ground."""
+    score = 100.0 * coverage
+    for other in blocked:
+        if boxes_overlap(box, other, 0.0):
+            score += 1000.0
+    for pin in gm.pins:
+        if pin.layer in visible:
+            reach = max(3.0, float(pin.size)) * 1.7
+            if boxes_overlap(box, (pin.x - reach, pin.y - reach,
+                                   pin.x + reach, pin.y + reach), 0.0):
+                score += 25.0
+    for label in gm.labels:
+        if label.layer in visible and label.text.strip() and boxes_overlap(
+                box, text_box(label.x, label.y, label.text, label.size, "center",
+                              label.tracking), 0.0):
+            score += 25.0
+    return score
+
+
+def legend_layout(gm: GameMap, visible: Optional[set] = None
+                  ) -> Optional[LegendLayout]:
+    """
+    Size the legend and choose its corner; None when it is off or has nothing to
+    list.
+
+    Of the four corners, it takes the one where it covers the least ground and
+    fewest names, and never one that would sit on the title, the compass or the
+    scale bar (unless every corner does). Ties go to the top left.
+    """
+    if not getattr(gm, "legend", False):
+        return None
+    if visible is None:
+        visible = gm.visible_layers()
+    entries = legend_entries(gm, visible)
+    if not entries:
+        return None
+    size = float(max(9, int(gm.height * 0.014)))
+    row_h, pad = size * 1.6, size * 0.8
+    swatch_w, gap = size * 2.0, size * 0.6
+    title_h = row_h * 1.15
+    columns = int(math.ceil(len(entries) / float(LEGEND_ROWS)))
+    rows = int(math.ceil(len(entries) / float(columns)))
+    column_x: List[float] = []
+    cursor = 0.0
+    for c in range(columns):
+        names = [e[2] for e in entries[c * rows:(c + 1) * rows]]
+        column_x.append(cursor)
+        cursor += swatch_w + gap + max(
+            text_box(0, 0, n, size, "w")[2] for n in names) + gap * 2.5
+    title_w = text_box(0, 0, "LEGEND", size, "w", size * 0.15)[2]
+    box_w = max(cursor - gap * 2.5, title_w) + pad * 2
+    box_h = pad * 2 + title_h + rows * row_h
+    edge = max(10.0, min(gm.width, gm.height) * 0.018) * 1.75 + size * 0.6
+    right, bottom = gm.width - edge - box_w, gm.height - edge - box_h
+    corners = (("tl", edge, edge), ("tr", right, edge),
+               ("bl", edge, bottom), ("br", right, bottom))
+    boxes = [(max(0.0, x), max(0.0, y), max(0.0, x) + box_w, max(0.0, y) + box_h)
+             for _n, x, y in corners]
+    blocked = furniture_boxes(gm)
+    covered = _land_coverage(gm, visible, boxes)
+    best = min(range(4), key=lambda i: (
+        _crowding(gm, visible, boxes[i], blocked, covered[i]), i))
+    return LegendLayout(box=boxes[best], entries=tuple(entries), columns=columns,
+                        rows=rows, size=size, row_h=row_h, pad=pad,
+                        title_h=title_h, swatch_w=swatch_w, gap=gap,
+                        column_x=tuple(column_x), corner=corners[best][0])
+
+
+def _legend_swatch(group: str, kind: str, x: float, y: float, w: float,
+                   size: float, palette: Dict[str, Any]) -> List[tuple]:
+    """A small picture of one kind of thing, in a space `w` wide centred on `y`."""
+    ink, light, paper = palette["ink"], palette["ink_light"], palette["paper"]
+    terrain: Dict[str, str] = palette.get("terrain", {}) or {}
+    land_tone = terrain.get("land") or paper
+    if group == "pin":
+        return pin_primitives(Pin(id="legend", x=x + w / 2.0, y=y, kind=kind,
+                                  size=size * 0.36), ink, paper,
+                              palette.get("accent") or ink)
+    h = size
+    right = x + w
+    spec = TERRAIN.get(kind, TERRAIN["land"])
+    out: List[tuple] = []
+    if kind == "mountains":
+        lit, shade, snow = _relief_tones(land_tone, ink)
+        for frac, height in ((0.3, h * 0.62), (0.68, h * 0.46)):
+            out.extend(_peak(x + w * frac, y + h * 0.3, height, ink, lit, shade, snow))
+    elif kind == "hills":
+        lit, shade, _snow = _relief_tones(land_tone, ink)
+        for frac in (0.3, 0.68):
+            cx, r = x + w * frac, h * 0.46
+            dome = [(cx + r * math.cos(math.pi * k / 8.0),
+                     y + h * 0.3 - r * 0.72 * math.sin(math.pi * k / 8.0))
+                    for k in range(9)]
+            out.append(("polygon", dome, lit, "", 0.0, False))
+            out.append(("line", dome, ink, 1.1, False))
+    elif kind == "region":
+        out.append(("line", [(x, y), (right, y)], light, 1.4, True))
+    elif kind == "river":
+        wave = [(x, y + 2), (x + w * 0.35, y - 2), (x + w * 0.7, y + 2), (right, y - 1)]
+        core = palette["water_deep"]
+        out.append(("line", wave, _mix(core, ink, 0.30), 4.4, False))
+        out.append(("line", wave, core, 3.0, False))
+    elif kind == "road":
+        out.append(("line", [(x, y), (right, y)], light, 1.6, True))
+    elif kind == "wall":
+        out.append(("line", [(x, y), (right, y)], ink, 3.4, False))
+        for k in range(1, 5):
+            tx = x + w * k / 5.0
+            out.append(("line", [(tx, y - 3.4), (tx, y + 3.4)], ink, 1.2, False))
+    elif kind == "route":
+        out.append(("line", [(x, y), (right, y)], ink, 1.8, True))
+        out.extend(_arrow_head([(x, y), (right, y)], ink, 1.8))
+    elif kind == "orbit":
+        out.append(("ellipse", x + w * 0.1, y - h * 0.4, right - w * 0.1, y + h * 0.4,
+                    "", terrain.get(kind) or light, 1.2))
+    elif not spec["closed"]:
+        # any other line: a stroke in the colour that kind is drawn with
+        out.append(("line", [(x, y), (right, y)], terrain.get(kind) or ink, 2.2, False))
+    else:
+        fill = terrain.get(kind) or spec.get("fill") or ""
+        if kind == "water":
+            edge = _mix(ink, fill or paper, 0.5)
+        elif kind in BIOMES:
+            edge = _mix(fill or land_tone, ink, 0.22)
+        else:
+            edge = ink
+        rect = [(x, y - h / 2.0), (right, y - h / 2.0), (right, y + h / 2.0),
+                (x, y + h / 2.0)]
+        out.append(("polygon", rect, fill, edge if fill else ink, 1.0, False))
+        cx = x + w / 2.0
+        if kind == "forest":
+            r = h * 0.28
+            out.append(("polygon", [(cx - r, y + r * 0.9), (cx, y - r * 1.6),
+                                    (cx + r, y + r * 0.9)],
+                        _mix(fill or land_tone, ink, 0.34), ink, 0.9, False))
+        elif kind == "desert":
+            for dx, dy in ((-0.25, 0.12), (0.0, -0.18), (0.24, 0.1)):
+                px, py = x + w * (0.5 + dx), y + h * dy
+                out.append(("ellipse", px - 1.0, py - 1.0, px + 1.0, py + 1.0,
+                            light, light, 1.0))
+        elif kind == "swamp":
+            out.append(("line", [(cx - 6, y + 1), (cx - 2, y - 1.5), (cx + 2, y + 1),
+                                 (cx + 6, y - 1.5)], light, 1.2, False))
+    return out
+
+
+def _legend_primitives(gm: GameMap, layout: LegendLayout) -> List[tuple]:
+    """The legend as drawing primitives: a panel, a title, and a row per kind."""
+    palette = gm.palette()
+    ink, light, paper = palette["ink"], palette["ink_light"], palette["paper"]
+    terrain: Dict[str, str] = palette.get("terrain", {}) or {}
+    land_tone = terrain.get("land") or paper
+    x0, y0, x1, y1 = layout.box
+    out: List[tuple] = [
+        ("polygon", [(x0, y0), (x1, y0), (x1, y1), (x0, y1)],
+         _mix(land_tone, paper, 0.25), light, 1.0, False),
+        ("text", x0 + layout.pad, y0 + layout.pad + layout.title_h / 2.0, "LEGEND",
+         layout.size, ink, "w", False, True, layout.size * 0.15),
+    ]
+    top = y0 + layout.pad + layout.title_h
+    for i, (group, kind, name) in enumerate(layout.entries):
+        column, row = divmod(i, layout.rows)
+        left = x0 + layout.pad + layout.column_x[column]
+        y = top + row * layout.row_h + layout.row_h / 2.0
+        out.extend(_legend_swatch(group, kind, left, y, layout.swatch_w,
+                                  layout.size, palette))
+        out.append(("text", left + layout.swatch_w + layout.gap, y, name,
+                    layout.size, ink, "w", False, False, 0.0))
+    return out
+
+
 # -- the main builder ------------------------------------------------------
 
 
@@ -1315,13 +2073,17 @@ def _points_key(points: Sequence[Point]) -> int:
     return hash(tuple(map(tuple, points)))
 
 
-def _primitive_key(gm: GameMap, furniture: bool) -> tuple:
-    """Everything the display list depends on. Views (zoom, pan, selection) are not in it."""
+def _primitive_key(gm: GameMap, furniture: bool, visible: set) -> tuple:
+    """
+    Everything the display list depends on. Views (zoom, pan, selection) are
+    not in it. The edition is not either, on purpose: it matters only through
+    which layers it leaves visible, and that set is in here.
+    """
     return (
         gm.style, gm.width, gm.height, gm.grid, gm.grid_size, gm.scale_text,
-        gm.compass, gm.border, gm.title_on_map, gm.name, gm.seed,
-        gm.hide_colliding_labels, gm.auto_place_labels, furniture,
-        frozenset(gm.visible_layers()),
+        gm.scale_px, gm.compass, gm.border, gm.title_on_map, gm.name, gm.seed,
+        gm.hide_colliding_labels, gm.auto_place_labels, furniture, gm.legend,
+        frozenset(visible),
         tuple((s.id, s.kind, s.layer, s.fill, s.outline, s.width, s.label,
                s.closed, _points_key(s.points)) for s in gm.shapes),
         tuple((p.id, p.layer, p.x, p.y, p.kind, p.label, p.label_side, p.size)
@@ -1331,8 +2093,8 @@ def _primitive_key(gm: GameMap, furniture: bool) -> tuple:
     )
 
 
-def build_primitives(gm: GameMap, include_furniture: bool = True
-                     ) -> List[tuple]:
+def build_primitives(gm: GameMap, include_furniture: bool = True,
+                     edition: str = "author") -> List[tuple]:
     """
     Turn a map into an ordered display list. This is the single source of truth.
 
@@ -1340,12 +2102,14 @@ def build_primitives(gm: GameMap, include_furniture: bool = True
     share of it is remembered until that shape does: zooming, panning and
     selecting rebuild nothing, and dragging one vertex re-scatters the trees of
     one forest, not all of them.
+
+    `edition="reader"` leaves out every author-only layer (see `EDITIONS`).
     """
-    key = _primitive_key(gm, include_furniture)
+    key = _primitive_key(gm, include_furniture, gm.visible_layers(edition))
     cached = gm._prim_cache
     if cached is not None and cached[0] == key:
         return list(cached[1])
-    prims = _build_primitives(gm, include_furniture)
+    prims = _build_primitives(gm, include_furniture, edition)
     gm._prim_cache = (key, prims)
     return list(prims)
 
@@ -1365,14 +2129,28 @@ def _shape_body(gm: GameMap, shape: Shape, palette: Dict[str, Any]) -> List[tupl
     land_tone = terrain.get("land") or paper
     spec = TERRAIN.get(shape.kind, TERRAIN["land"])
     closed = shape.closed and spec["closed"] and len(shape.points) >= 3
-    pts = _smooth(shape.points, 2 if len(shape.points) < 240 else 1)
+    if spec.get("smooth", True):
+        pts = _smooth(shape.points, 2 if len(shape.points) < 240 else 1)
+    else:
+        pts = list(shape.points)          # a wall, a room, a building keeps its corners
     if closed and pts[0] != pts[-1]:
         pts = pts + [pts[0]]
 
-    fill = shape.fill or terrain.get(shape.kind) or (spec["fill"] or "")
-    outline = shape.outline or ink
+    # A style's colour for a kind is a fill only when the kind has something to
+    # fill; for a line (a street, a door) or a bare ring (an orbit) it is the
+    # colour of the stroke.
+    fill = shape.fill or (terrain.get(shape.kind) if spec.get("fill") else "") \
+        or (spec["fill"] or "")
+    edge_tone = light if spec.get("edge") == "light" else ink
+    outline = shape.outline or edge_tone
     if shape.kind == "water" and not shape.outline:
         outline = _mix(ink, fill or paper, 0.5)         # a lake's edge is quieter than a coast
+    # What a line is drawn in when the shape names no colour. A generator kind
+    # takes the style's colour for that kind; an ordinary shape (a land or forest
+    # left open) keeps its inked outline exactly as before.
+    line_colour = outline
+    if shape.kind in GENERATOR_KINDS and not shape.outline:
+        line_colour = terrain.get(shape.kind) or outline
     width = float(shape.width or 2.0)
     decor = spec.get("decor")
     out: List[tuple] = []
@@ -1391,6 +2169,10 @@ def _shape_body(gm: GameMap, shape: Shape, palette: Dict[str, Any]) -> List[tupl
             elif shape.kind == "region":
                 out.append(("line", pts, shape.outline or light,
                             max(1.2, width), True))
+            elif not fill:
+                # Nothing to fill (an orbit): just its edge.
+                out.append(("line", pts, line_colour, width,
+                            bool(spec.get("dash"))))
     else:
         if decor == "river":
             # Rivers need to read at a glance against a busy land fill, so
@@ -1415,7 +2197,8 @@ def _shape_body(gm: GameMap, shape: Shape, palette: Dict[str, Any]) -> List[tupl
                 out.append(("line", [(px - nx, py - ny), (px + nx, py + ny)],
                             outline, 1.2, False))
         elif decor not in ("peaks", "hills"):
-            out.append(("line", pts, outline, width, False))
+            # No decoration: a plain stroked line.
+            out.append(("line", pts, line_colour, width, bool(spec.get("dash"))))
 
     seed = gm.seed ^ _stable_seed(shape)
     if decor == "peaks":
@@ -1437,14 +2220,15 @@ def _shape_body(gm: GameMap, shape: Shape, palette: Dict[str, Any]) -> List[tupl
     return out
 
 
-def _build_primitives(gm: GameMap, include_furniture: bool) -> List[tuple]:
+def _build_primitives(gm: GameMap, include_furniture: bool,
+                      edition: str = "author") -> List[tuple]:
     palette = gm.palette()
     ink = palette["ink"]
     paper = palette["paper"]
     terrain: Dict[str, str] = palette.get("terrain", {}) or {}
     land_tone = terrain.get("land") or paper
     halo = _mix(land_tone, paper, 0.25)
-    visible = gm.visible_layers()
+    visible = gm.visible_layers(edition)
     out: List[tuple] = []
 
     if gm.grid != "none":
@@ -1492,8 +2276,11 @@ def _build_primitives(gm: GameMap, include_furniture: bool) -> List[tuple]:
     for slot in [k for k in cache if k not in live]:
         del cache[slot]
 
-    accent = "#8a2f22" if gm.style in ("parchment", "treasure") else ink
-    placement = _cached_label_placement(gm, visible) if gm.auto_place_labels else {}
+    accent = palette.get("accent") or ink
+    legend = legend_layout(gm, visible)
+    reserved = [legend.box] if legend else []
+    placement = (_cached_label_placement(gm, visible, reserved)
+                 if gm.auto_place_labels else {})
     label_size = max(9, int(gm.height * 0.0155))
     for pin in gm.pins:
         if pin.layer not in visible:
@@ -1524,6 +2311,8 @@ def _build_primitives(gm: GameMap, include_furniture: bool) -> List[tuple]:
             out.extend(_compass_primitives(gm))
         out.extend(_scale_primitives(gm))
         out.extend(_title_primitives(gm))
+        if legend:
+            out.extend(_legend_primitives(gm, legend))
 
     return out
 
@@ -1658,27 +2447,20 @@ def _parchment_background(gm: GameMap, scale: float):
     return base
 
 
-def render_png(gm: GameMap, path: Path | str, scale: float = 1.0,
-               supersample: int = 2) -> Path:
+def _paint(draw, prims: Sequence[tuple], effective: float,
+           min_stroke: int = 1) -> None:
     """
-    Rasterise a map to PNG.
+    Draw a display list with Pillow.
 
-    Drawn at `supersample` times the requested size and downscaled, which is
-    how the lines come out smooth - Pillow has no anti-aliased line drawing.
+    `effective` is pixels per map unit. `min_stroke` is the thinnest line, in
+    drawn pixels, that any outline may be - print export raises it so no line is
+    finer than a printer can hold.
     """
-    from PIL import Image, ImageDraw
-
-    scale = max(0.2, min(4.0, float(scale)))
-    ss = max(1, min(3, int(supersample)))
-    effective = scale * ss
-
-    image = _parchment_background(gm, effective)
-    draw = ImageDraw.Draw(image, "RGBA")
 
     def sc(points: Iterable[Point]) -> List[Tuple[float, float]]:
         return [(p[0] * effective, p[1] * effective) for p in points]
 
-    for prim in build_primitives(gm):
+    for prim in prims:
         head = prim[0]
         try:
             if head == "polygon":
@@ -1690,14 +2472,14 @@ def render_png(gm: GameMap, path: Path | str, scale: float = 1.0,
                     draw.polygon(pts, fill=fill)
                 if outline and width:
                     draw.line(pts + [pts[0]], fill=outline,
-                              width=max(1, int(round(width * effective))),
+                              width=max(min_stroke, int(round(width * effective))),
                               joint="curve")
             elif head == "line":
                 _kind, points, colour, width, dash = prim
                 pts = sc(points)
                 if len(pts) < 2 or not colour:
                     continue
-                stroke = max(1, int(round(width * effective)))
+                stroke = max(min_stroke, int(round(width * effective)))
                 if dash:
                     for seg in _dash_segments(pts, 9.0 * effective,
                                               6.0 * effective):
@@ -1717,9 +2499,10 @@ def render_png(gm: GameMap, path: Path | str, scale: float = 1.0,
                 if box[2] - box[0] < 1 or box[3] - box[1] < 1:
                     continue
                 draw.ellipse(box, fill=fill or None, outline=outline or None,
-                             width=max(1, int(round(width * effective))))
+                             width=max(min_stroke, int(round(width * effective))))
             elif head == "text":
-                x, y, text, size, colour, anchor, italic, bold, tracking, halo =                     text_parts(prim)
+                (x, y, text, size, colour, anchor, italic, bold, tracking,
+                 halo) = text_parts(prim)
                 font = _font(int(size * effective), italic, bold)
                 anchor_map = {"center": "mm", "w": "lm", "e": "rm",
                               "n": "ma", "s": "md"}
@@ -1737,13 +2520,58 @@ def render_png(gm: GameMap, path: Path | str, scale: float = 1.0,
             # One malformed primitive must not abandon the whole export.
             continue
 
-    if ss > 1:
-        target = (max(1, int(gm.width * scale)), max(1, int(gm.height * scale)))
-        image = image.resize(target, Image.LANCZOS)
 
+def _render_image(gm: GameMap, scale: float, supersample: int = 2,
+                  edition: str = "author", min_stroke: int = 1,
+                  size: Optional[Tuple[int, int]] = None):
+    """
+    The map as a Pillow RGB image, `scale` pixels per map unit.
+
+    Drawn at `supersample` times the size and shrunk, which is how the lines
+    come out smooth. `size` fixes the final pixel size (otherwise the map's size
+    times `scale`, truncated); `min_stroke` is in final pixels.
+    """
+    from PIL import Image, ImageDraw
+
+    ss = max(1, min(3, int(supersample)))
+    effective = float(scale) * ss
+    image = _parchment_background(gm, effective)
+    draw = ImageDraw.Draw(image, "RGBA")
+    _paint(draw, build_primitives(gm, edition=edition), effective,
+           max(1, int(math.ceil(min_stroke * ss))) if min_stroke > 1 else 1)
+    target = size or (max(1, int(gm.width * scale)), max(1, int(gm.height * scale)))
+    if image.size != target:
+        image = image.resize(target, Image.LANCZOS)
+    return image
+
+
+def _png_info(alt_text: str):
+    """PNG text chunks: the picture's description, for readers and for ebooks."""
+    from PIL.PngImagePlugin import PngInfo
+
+    info = PngInfo()
+    if alt_text:
+        info.add_text("Description", alt_text)
+    return info
+
+
+def render_png(gm: GameMap, path: Path | str, scale: float = 1.0,
+               supersample: int = 2, edition: str = "author") -> Path:
+    """
+    Rasterise a map to PNG.
+
+    Drawn at `supersample` times the requested size and downscaled, which is
+    how the lines come out smooth - Pillow has no anti-aliased line drawing.
+    `edition="reader"` leaves out author-only layers. The picture's plain-
+    language description (`describe_map`) is stored in the file as its
+    "Description" text chunk.
+    """
+    scale = max(0.2, min(4.0, float(scale)))
+    image = _render_image(gm, scale, supersample, edition)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    image.save(str(path), "PNG", optimize=True)
+    image.save(str(path), "PNG", optimize=True,
+               pnginfo=_png_info(describe_map(gm, edition)))
     return path
 
 
@@ -1828,11 +2656,18 @@ def _svg_escape(text: str) -> str:
             .replace(">", "&gt;").replace('"', "&quot;"))
 
 
-def render_svg(gm: GameMap, path: Path | str) -> Path:
+def render_svg(gm: GameMap, path: Path | str, edition: str = "author") -> Path:
+    """
+    Write the map as SVG. `edition="reader"` leaves out author-only layers.
+    The file carries the picture's plain-language description as its <title>
+    and <desc>, which screen readers and ebook tools use as alt text.
+    """
     palette = gm.palette()
     parts: List[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{gm.width}" '
-        f'height="{gm.height}" viewBox="0 0 {gm.width} {gm.height}">',
+        f'height="{gm.height}" viewBox="0 0 {gm.width} {gm.height}" role="img">',
+        f'<title>{_svg_escape(gm.name or "Map")}</title>',
+        f'<desc>{_svg_escape(describe_map(gm, edition))}</desc>',
         f'<rect width="{gm.width}" height="{gm.height}" '
         f'fill="{palette["paper"]}"/>',
     ]
@@ -1840,7 +2675,7 @@ def render_svg(gm: GameMap, path: Path | str) -> Path:
     def pts_attr(points: Sequence[Point]) -> str:
         return " ".join(f"{p[0]:.2f},{p[1]:.2f}" for p in points)
 
-    for prim in build_primitives(gm):
+    for prim in build_primitives(gm, edition=edition):
         head = prim[0]
         if head == "polygon":
             _k, points, fill, outline, width, dash = prim
@@ -1874,7 +2709,8 @@ def render_svg(gm: GameMap, path: Path | str) -> Path:
                 f'stroke="{outline or "none"}" stroke-width="{width:.2f}"/>'
             )
         elif head == "text":
-            x, y, text, size, colour, anchor, italic, bold, tracking, halo =                 text_parts(prim)
+            (x, y, text, size, colour, anchor, italic, bold, tracking,
+             halo) = text_parts(prim)
             anchor_svg = {"center": "middle", "w": "start", "e": "end",
                           "n": "middle", "s": "middle"}.get(anchor, "middle")
             baseline = {"n": "hanging", "s": "auto"}.get(anchor, "central")
@@ -1902,18 +2738,139 @@ def render_svg(gm: GameMap, path: Path | str) -> Path:
 # ==========================================================================
 
 
-def render_docx(gm: GameMap, png_path: Path, out_path: Path,
-                location_lookup: Optional[Dict[str, str]] = None) -> Path:
+# What each kind of shape is called when a sentence lists what a map shows.
+_SHAPE_NOUNS = {
+    "land": "land", "water": "water", "forest": "forests",
+    "mountains": "mountain ranges", "hills": "hills", "desert": "deserts",
+    "swamp": "marshes", "ice": "ice and tundra", "region": "borders",
+    "river": "rivers", "road": "roads", "wall": "walls", "route": "routes",
+    "building": "buildings", "ward": "districts", "plaza": "plazas",
+    "street": "streets", "lane": "lanes", "room": "rooms", "floor": "floors",
+    "partition": "interior walls", "door": "doors", "window": "windows",
+    "stairs": "stairs", "cave": "caves", "orbit": "orbits",
+}
+
+# How each kind of map is introduced in a description.
+_MAP_PHRASE = {
+    "world": "a world map", "continent": "a map of a continent",
+    "region": "a regional map", "city": "a city plan",
+    "building": "a building plan", "dungeon": "a dungeon map",
+    "treasure": "a treasure map", "battle": "a battle plan",
+    "castle": "a castle plan", "sector": "a star sector map",
+    "system": "a star system diagram", "journey": "a map of a journey",
+}
+
+
+def _list_in_words(items: Sequence[str]) -> str:
+    items = list(items)
+    if len(items) <= 1:
+        return "".join(items)
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def named_places(gm: GameMap, edition: str = "author") -> List[str]:
+    """
+    Every distinct name on the map, most important first, for the layers this
+    edition shows: capitals and cities, then the large free-standing names
+    (regions, seas), then the smaller places, then named areas.
+    """
+    visible = gm.visible_layers(edition)
+    ranked: List[Tuple[float, float, str]] = []
+    for pin in gm.pins:
+        if pin.layer in visible and pin.label.strip():
+            ranked.append((float(LABEL_PRIORITY.get(pin.kind, 50)),
+                           -float(pin.size), pin.label.strip()))
+    for label in gm.labels:
+        if label.layer in visible and label.text.strip():
+            ranked.append((3.5, -float(label.size), label.text.strip()))
+    for shape in gm.shapes:
+        if shape.layer in visible and shape.label.strip():
+            ranked.append((6.5, 0.0, shape.label.strip()))
+    seen: set = set()
+    out: List[str] = []
+    for _rank, _size, name in sorted(ranked, key=lambda r: (r[0], r[1], r[2].lower())):
+        if name.lower() not in seen:
+            seen.add(name.lower())
+            out.append(name)
+    return out
+
+
+def describe_map(gm: GameMap, edition: str = "author", limit: int = 420) -> str:
+    """
+    A plain-language description of the picture, for alt text.
+
+    Says what kind of map it is and how it is drawn, what it shows, how many
+    places are named and which are the notable ones, and the scale. Built only
+    from what `edition` shows, so the reader edition's description never names
+    something on an author-only layer - and never quotes a note. Kept under
+    `limit` characters, cut at a sentence.
+    """
+    visible = gm.visible_layers(edition)
+    phrase = _MAP_PHRASE.get(gm.kind)
+    if phrase is None:
+        label = MAP_KINDS.get(gm.kind, gm.kind or "").lower()
+        phrase = f"a {label} map" if label else "a map"
+    style = STYLES.get(gm.style, {}).get("label", gm.style)
+    first = phrase[0].upper() + phrase[1:]
+    title = f' titled "{gm.name.strip()}"' if gm.name.strip() else ""
+    sentences = [f"{first}{title}, drawn in the {style} style."]
+
+    kinds = {s.kind for s in gm.shapes if s.layer in visible and len(s.points) >= 2}
+    order = TERRAIN_ORDER + [k for k in TERRAIN if k not in TERRAIN_ORDER]
+    nouns = [_SHAPE_NOUNS.get(k) or TERRAIN.get(k, {}).get("label", k).lower()
+             for k in order if k in kinds]
+    if nouns:
+        sentences.append(f"It shows {_list_in_words(nouns)}.")
+
+    names = named_places(gm, edition)
+    if len(names) == 1:
+        sentences.append(f"One place is named: {names[0]}.")
+    elif names:
+        sentences.append(f"{len(names)} places are named, including "
+                         f"{_list_in_words(names[:6])}.")
+    else:
+        sentences.append("Nothing on it is named.")
+
+    caption = gm.scale_text.strip()
+    if caption:
+        sentences.append(f"The scale bar reads {caption}.")
+
+    text = ""
+    for sentence in sentences:
+        if len(text) + len(sentence) + 1 > limit and text:
+            break
+        text = f"{text} {sentence}".strip()
+    return text
+
+
+def render_docx(gm: GameMap, png_path: Optional[Path], out_path: Path,
+                location_lookup: Optional[Dict[str, str]] = None,
+                edition: str = "author") -> Path:
     """
     A Word document holding the map image plus a legend of every pin.
 
     Keeps maps inside the "everything is a Word document" promise, and gives
     you something printable to keep beside you while writing.
+
+    Only what the map actually shows is listed: a hidden layer's places do not
+    appear, and the reader edition also leaves out author-only layers, every
+    note and the private Location-sheet column. (It used to list every pin with
+    its notes and every named shape whatever the layer - a spoiler leak.) The
+    picture's plain-language description is stored as its alt text.
+
+    `png_path` is the picture to embed; give it drawn with the same `edition`,
+    or pass None and this draws the right one itself.
     """
+    import tempfile
+
     from docx.shared import Inches
 
     from .atomic import save_via_atomic
     from . import docxio
+
+    visible = gm.visible_layers(edition)
+    reader = edition == "reader"
+    alt = describe_map(gm, edition)
 
     doc = docxio.sheet_document(margin=0.7)
     docxio.add_title_block(
@@ -1922,60 +2879,433 @@ def render_docx(gm: GameMap, png_path: Path, out_path: Path,
         "MAP",
     )
 
-    if png_path.exists():
-        # 7.1in fits US Letter with 0.7in margins.
-        doc.add_picture(str(png_path), width=Inches(7.1))
+    with tempfile.TemporaryDirectory(prefix="nf_map_") as scratch:
+        if png_path is None:
+            png_path = render_png(gm, Path(scratch) / "map.png", edition=edition)
+        if Path(png_path).exists():
+            # 7.1in fits US Letter with 0.7in margins.
+            picture = doc.add_picture(str(png_path), width=Inches(7.1))
+            props = picture._inline.docPr
+            props.set("descr", alt)
+            props.set("title", gm.name or "Map")
 
-    if gm.scale_text.strip():
-        docxio.add_note(doc, f"Scale: {gm.scale_text}")
+        if gm.scale_text.strip():
+            docxio.add_note(doc, f"Scale: {gm.scale_text}")
 
-    if gm.pins:
-        doc.add_heading("Legend", level=2)
-        rows = []
-        for pin in sorted(gm.pins, key=lambda p: (p.kind, p.label.lower())):
-            linked = ""
-            if pin.entity_id and location_lookup:
-                linked = location_lookup.get(pin.entity_id, "")
-            rows.append([
-                pin.label or "(unnamed)",
-                PIN_KINDS.get(pin.kind, pin.kind),
-                linked,
-                pin.notes,
-            ])
-        docxio.add_data_table(
-            doc, ["Place", "Type", "Location sheet", "Notes"], rows,
-            widths=[1.7, 1.2, 1.5, 2.6],
-        )
+        pins = [p for p in gm.pins if p.layer in visible]
+        if pins:
+            doc.add_heading("Legend", level=2)
+            rows = []
+            for pin in sorted(pins, key=lambda p: (p.kind, p.label.lower())):
+                row = [pin.label or "(unnamed)", pin_kind_label(pin.kind)]
+                if not reader:
+                    linked = ""
+                    if pin.entity_id and location_lookup:
+                        linked = location_lookup.get(pin.entity_id, "")
+                    row += [linked, pin.notes]
+                rows.append(row)
+            if reader:
+                docxio.add_data_table(doc, ["Place", "Type"], rows,
+                                      widths=[3.6, 3.5])
+            else:
+                docxio.add_data_table(
+                    doc, ["Place", "Type", "Location sheet", "Notes"], rows,
+                    widths=[1.7, 1.2, 1.5, 2.6],
+                )
 
-    regions = [s for s in gm.shapes if s.label.strip()]
-    if regions:
-        doc.add_heading("Named areas", level=2)
-        docxio.add_data_table(
-            doc, ["Name", "Kind"],
-            [[s.label, TERRAIN.get(s.kind, {}).get("label", s.kind)]
-             for s in regions],
-            widths=[3.0, 2.0],
-        )
+        shapes = [s for s in gm.shapes if s.layer in visible]
+        regions = [s for s in shapes if s.label.strip()]
+        if regions:
+            doc.add_heading("Named areas", level=2)
+            docxio.add_data_table(
+                doc, ["Name", "Kind"],
+                [[s.label, TERRAIN.get(s.kind, {}).get("label", s.kind)]
+                 for s in regions],
+                widths=[3.0, 2.0],
+            )
 
-    if gm.notes.strip():
-        doc.add_heading("Notes", level=2)
-        for para in gm.notes.split("\n\n"):
-            if para.strip():
-                doc.add_paragraph(para.strip())
+        if gm.notes.strip() and not reader:
+            doc.add_heading("Notes", level=2)
+            for para in gm.notes.split("\n\n"):
+                if para.strip():
+                    doc.add_paragraph(para.strip())
 
-    counts: Dict[str, int] = {}
+        counts: Dict[str, int] = {}
+        for shape in shapes:
+            counts[shape.kind] = counts.get(shape.kind, 0) + 1
+        if counts:
+            doc.add_heading("Contents", level=2)
+            summary = ", ".join(
+                f"{n} x {TERRAIN.get(k, {}).get('label', k).lower()}"
+                for k, n in sorted(counts.items())
+            )
+            labels = [l for l in gm.labels if l.layer in visible]
+            doc.add_paragraph(f"{summary}. {len(pins)} pins, "
+                              f"{len(labels)} labels.")
+
+        return save_via_atomic(out_path, doc.save)
+
+
+# ==========================================================================
+# Print and ebook export
+#
+# A map is drawn on a screen and printed on paper, and the two want different
+# things: paper wants a size in inches, 300 dots to each, a margin the trimming
+# knife will not touch, and lines a press can hold. The figures below are the
+# ones publishers ask for (IngramSpark, KDP); where one is only this tool's own
+# rule of thumb it says so.
+# ==========================================================================
+
+_MM = 1.0 / 25.4
+
+
+@dataclass(frozen=True)
+class PrintPreset:
+    """A page size: the trimmed page in inches (both pages, for a spread)."""
+
+    key: str
+    label: str
+    width_in: float
+    height_in: float
+    spread: bool = False
+
+
+def _make_print_presets() -> Dict[str, PrintPreset]:
+    sizes = (("5x8", "5 x 8 in", 5.0, 8.0),
+             ("5.25x8", "5.25 x 8 in", 5.25, 8.0),
+             ("5.5x8.5", "5.5 x 8.5 in", 5.5, 8.5),
+             ("6x9", "6 x 9 in", 6.0, 9.0),
+             ("a5", "A5 (148 x 210 mm)", 148 * _MM, 210 * _MM),
+             ("a4", "A4 (210 x 297 mm)", 210 * _MM, 297 * _MM),
+             ("letter", "US Letter (8.5 x 11 in)", 8.5, 11.0))
+    out: Dict[str, PrintPreset] = {}
+    for key, label, width, height in sizes:
+        out[key] = PrintPreset(key, label, width, height)
+    for key, label, width, height in sizes:      # the same pages, side by side
+        out[f"{key}-spread"] = PrintPreset(
+            f"{key}-spread", f"{label}, double-page spread", width * 2, height,
+            True)
+    return out
+
+
+PRINT_PRESETS: Dict[str, PrintPreset] = _make_print_presets()
+
+#: Text and non-bleeding art stay this far inside the trim (IngramSpark asks for
+#: 0.5 in; KDP's own minimum is smaller but grows with the page count).
+SAFE_MARGIN_IN = 0.5
+#: How far past the trim a picture that touches the edge must run.
+BLEED_IN = 0.125
+#: The thinnest line, in points, a press holds reliably (a common minimum).
+MIN_LINE_PT = 0.25
+#: The smallest text, in points, this tool calls legible - its own rule of
+#: thumb, not a publisher's figure.
+MIN_LEGIBLE_PT = 6.0
+#: The sheet the book is printed on. Not a map colour: whatever the style, the
+#: page around the map is paper.
+PAGE_PAPER = "#ffffff"
+#: The marks on a proof copy (`guides=True`): production marks, not map colours.
+GUIDE_COLOURS = {"bleed": "#e03131", "trim": "#1c7ed6", "safe": "#2f9e44",
+                 "fold": "#f08c00"}
+
+
+def print_preset(preset: Any) -> PrintPreset:
+    """A `PrintPreset` from its key ("6x9", "a5-spread") or from itself."""
+    if isinstance(preset, PrintPreset):
+        return preset
+    try:
+        return PRINT_PRESETS[str(preset).strip().lower()]
+    except KeyError:
+        raise ValueError(
+            f"unknown print size {preset!r}; choose from {', '.join(PRINT_PRESETS)}"
+        ) from None
+
+
+@dataclass(frozen=True)
+class PrintLayout:
+    """Where everything sits on a print sheet, in pixels at `dpi`."""
+
+    dpi: int
+    size: Tuple[int, int]                     # the whole sheet, bleed included
+    bleed_px: int
+    trim: Tuple[int, int, int, int]           # the page as it will be cut
+    safe: Tuple[int, int, int, int]           # where the map may go
+    fold_x: Optional[int] = None              # the spine, on a spread
+
+
+def print_layout(preset: Any, dpi: int = 300, bleed_in: float = BLEED_IN,
+                 gutter_in: float = 0.0, safe_in: float = SAFE_MARGIN_IN,
+                 inside: str = "left") -> PrintLayout:
+    """
+    The sheet for a print size: trim, bleed all round, and the safe area.
+
+    The safe area is the trim less `safe_in` on every side; on a single page
+    `gutter_in` more is taken from the `inside` edge (the binding side: "left"
+    on a right-hand page), so nothing sinks into the spine. On a spread the
+    spine is down the middle (`fold_x`) and the picture spans it.
+    """
+    spec = print_preset(preset)
+    dpi = int(dpi)
+    if not 72 <= dpi <= 1200:
+        raise ValueError("dpi must be between 72 and 1200")
+    if inside not in ("left", "right"):
+        raise ValueError("inside must be 'left' or 'right'")
+    trim_w = int(round(spec.width_in * dpi))
+    trim_h = int(round(spec.height_in * dpi))
+    # A bleed or a margin is a minimum, so a fraction of a pixel rounds up.
+    bleed = max(0, int(math.ceil(float(bleed_in) * dpi - 1e-9)))
+    margin = max(0, int(math.ceil(float(safe_in) * dpi - 1e-9)))
+    gutter = max(0, int(math.ceil(float(gutter_in) * dpi - 1e-9)))
+    trim = (bleed, bleed, bleed + trim_w, bleed + trim_h)
+    left, top = trim[0] + margin, trim[1] + margin
+    right, bottom = trim[2] - margin, trim[3] - margin
+    if not spec.spread and gutter:
+        if inside == "left":
+            left += gutter
+        else:
+            right -= gutter
+    if right - left < 40 or bottom - top < 40:
+        raise ValueError("the margins leave no room for a map on this page")
+    fold = bleed + trim_w // 2 if spec.spread else None
+    return PrintLayout(dpi=dpi, size=(trim_w + 2 * bleed, trim_h + 2 * bleed),
+                       bleed_px=bleed, trim=trim, safe=(left, top, right, bottom),
+                       fold_x=fold)
+
+
+@dataclass(frozen=True)
+class MapExport:
+    """What an export made: the file, the picture's description, and warnings."""
+
+    path: Path
+    alt_text: str
+    width_px: int
+    height_px: int
+    dpi: int = 0
+    #: Smallest text in the picture, in points as printed (0 when it has none).
+    min_text_pt: float = 0.0
+    #: Things worth telling the writer, in plain words.
+    notes: Tuple[str, ...] = ()
+
+
+def _smallest_text(gm: GameMap, edition: str) -> float:
+    sizes = [text_parts(p)[3] for p in build_primitives(gm, edition=edition)
+             if p[0] == "text"]
+    return float(min(sizes)) if sizes else 0.0
+
+
+def _names_on_the_fold(gm: GameMap, edition: str, x0: float, x1: float
+                       ) -> List[str]:
+    """Names whose lettering crosses the map-space band x0..x1 (a spread's spine)."""
+    visible = gm.visible_layers(edition)
+    placement = layout_pin_labels(gm, visible)
+    size = max(9, int(gm.height * 0.0155))
+    boxes: List[Tuple[str, Box]] = []
+    for pin in gm.pins:
+        if pin.layer not in visible or not pin.label.strip():
+            continue
+        side, show = placement.get(pin.id, (pin.label_side or "e", True))
+        if show:
+            lx, ly, anchor = pin_label_anchor(pin, side)
+            boxes.append((pin.label, text_box(lx, ly, pin.label, size, anchor)))
+        reach = max(3.0, float(pin.size)) * 1.2          # the marker itself
+        boxes.append((pin.label, (pin.x - reach, pin.y - reach,
+                                  pin.x + reach, pin.y + reach)))
+    for label in gm.labels:
+        if label.layer in visible and label.text.strip():
+            boxes.append((label.text, text_box(label.x, label.y, label.text,
+                                               label.size, "center",
+                                               label.tracking)))
     for shape in gm.shapes:
-        counts[shape.kind] = counts.get(shape.kind, 0) + 1
-    if counts:
-        doc.add_heading("Contents", level=2)
-        summary = ", ".join(
-            f"{n} x {TERRAIN.get(k, {}).get('label', k).lower()}"
-            for k, n in sorted(counts.items())
-        )
-        doc.add_paragraph(f"{summary}. {len(gm.pins)} pins, "
-                          f"{len(gm.labels)} labels.")
+        if shape.layer in visible and shape.label.strip():
+            cx, cy = shape.centroid()
+            boxes.append((shape.label, text_box(
+                cx, cy, shape.label, max(11, int(gm.height * 0.019)), "center",
+                2.0)))
+    out: List[str] = []
+    for name, box in boxes:
+        if box[0] < x1 and box[2] > x0 and name not in out:
+            out.append(name)
+    return out
 
-    return save_via_atomic(out_path, doc.save)
+
+def _draw_guides(page, layout: PrintLayout, thickness: int) -> None:
+    """Bleed, trim, safe-area and spine lines, for a proof copy."""
+    from PIL import ImageDraw
+
+    draw = ImageDraw.Draw(page)
+    width, height = page.size
+    draw.rectangle([0, 0, width - 1, height - 1],
+                   outline=GUIDE_COLOURS["bleed"], width=thickness)
+    x0, y0, x1, y1 = layout.trim
+    draw.rectangle([x0, y0, x1 - 1, y1 - 1], outline=GUIDE_COLOURS["trim"],
+                   width=thickness)
+    sx0, sy0, sx1, sy1 = layout.safe
+    ring = [(sx0, sy0), (sx1, sy0), (sx1, sy1), (sx0, sy1), (sx0, sy0)]
+    for seg in _dash_segments(ring, 14.0 * thickness, 9.0 * thickness):
+        if len(seg) >= 2:
+            draw.line(seg, fill=GUIDE_COLOURS["safe"], width=thickness)
+    if layout.fold_x is not None:
+        draw.line([(layout.fold_x, y0), (layout.fold_x, y1)],
+                  fill=GUIDE_COLOURS["fold"], width=thickness)
+
+
+def export_print(gm: GameMap, path: Path | str, preset: Any = "6x9",
+                 dpi: int = 300, greyscale: bool = True,
+                 bleed_in: float = BLEED_IN, guides: bool = False,
+                 gutter_in: float = 0.0, edition: str = "reader", *,
+                 style: Optional[str] = None,
+                 safe_in: float = SAFE_MARGIN_IN, inside: str = "left",
+                 min_line_pt: float = MIN_LINE_PT) -> MapExport:
+    """
+    A PNG the size of a printed page, ready to place in a book's interior.
+
+    The sheet is the trimmed page (`preset`, see `PRINT_PRESETS`; a "-spread"
+    preset is two pages side by side) plus `bleed_in` all round, at `dpi` dots
+    to the inch, white where there is no map. The map is drawn to fit inside
+    the safe area, centred, at the shape it was drawn in, with no line thinner
+    than `min_line_pt`. `greyscale` gives a single-channel image (black ink for
+    the interior); `edition` defaults to "reader", so author-only layers never
+    reach the printer; `style` draws it in another style for this export only
+    ("print" is made for it). `guides=True` marks the bleed, trim, safe area
+    and spine in colour - a proof for checking margins, not for the printer.
+    The dpi is written into the file.
+
+    Returns a `MapExport`, whose `notes` say what deserves a look: text that
+    prints too small, names sitting on a spread's spine, a colour style
+    flattened to grey, a proof copy.
+    """
+    from PIL import Image
+
+    layout = print_layout(preset, dpi, bleed_in, gutter_in, safe_in, inside)
+    spec = print_preset(preset)
+    if style and style != gm.style:
+        gm = replace(gm, style=style)
+    left, top, right, bottom = layout.safe
+    room_w, room_h = right - left, bottom - top
+    scale = min(room_w / gm.width, room_h / gm.height)
+    map_w = min(room_w, max(1, int(round(gm.width * scale))))
+    map_h = min(room_h, max(1, int(round(gm.height * scale))))
+    # Supersampling smooths lines, but a big sheet must not need a gigabyte.
+    ss = 2
+    while ss > 1 and (map_w * ss) * (map_h * ss) > 24_000_000:
+        ss -= 1
+    min_px = max(1, int(math.ceil(float(min_line_pt) / 72.0 * layout.dpi - 1e-9)))
+    picture = _render_image(gm, scale, ss, edition, min_px, (map_w, map_h))
+
+    page = Image.new("RGB", layout.size, PAGE_PAPER)
+    page.paste(picture, (left + (room_w - map_w) // 2, top + (room_h - map_h) // 2))
+    if guides:
+        _draw_guides(page, layout, max(2, layout.dpi // 150))
+    elif greyscale:
+        page = page.convert("L")
+
+    alt = describe_map(gm, edition)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    page.save(str(path), "PNG", optimize=True, dpi=(layout.dpi, layout.dpi),
+              pnginfo=_png_info(alt))
+
+    notes: List[str] = []
+    smallest = _smallest_text(gm, edition)
+    points = smallest * scale / layout.dpi * 72.0
+    if smallest and points < MIN_LEGIBLE_PT:
+        notes.append(
+            f"The smallest names print at about {points:.1f} pt, which is hard "
+            f"to read on paper. A larger page or a double-page spread gives them "
+            f"room.")
+    if spec.spread and layout.fold_x is not None:
+        half = max(float(gutter_in), 0.125) * layout.dpi / scale   # map units
+        middle = gm.width / 2.0
+        crossing = _names_on_the_fold(gm, edition, middle - half, middle + half)
+        if crossing:
+            notes.append(
+                f"{len(crossing)} name(s) sit on the spine and may be lost in the "
+                f"binding: {', '.join(crossing[:6])}"
+                + (" and more." if len(crossing) > 6 else "."))
+    if greyscale and not guides and gm.style != "print":
+        notes.append(
+            f"The {STYLES.get(gm.style, {}).get('label', gm.style)} style was "
+            f"turned to grey; the Print style keeps land, sea and terrain apart "
+            f"better in black and white.")
+    if guides:
+        notes.append("This copy has guide lines and colour; it is a proof for "
+                     "checking margins, not a file for the printer.")
+    return MapExport(path=path, alt_text=alt, width_px=layout.size[0],
+                     height_px=layout.size[1], dpi=layout.dpi,
+                     min_text_pt=round(points, 2) if smallest else 0.0,
+                     notes=tuple(notes))
+
+
+def export_ebook(gm: GameMap, path: Path | str, width_px: int = 1800,
+                 edition: str = "reader", *, style: Optional[str] = None,
+                 quality: int = 90) -> MapExport:
+    """
+    A colour picture for an ebook: `width_px` wide, opaque RGB, no transparency.
+
+    Ebook stores want maps at least 80% of the screen's width, in PNG or JPEG
+    (chosen by the file's extension: .jpg/.jpeg or anything else for PNG), with
+    alt text on every image. The description (`describe_map`) is stored in the
+    file (PNG "Description", JPEG comment) and returned in the result for the
+    ebook's own markup. `edition` defaults to "reader". RGB with no profile is
+    read as sRGB, which is what ebook readers assume.
+    """
+    width_px = max(300, min(6000, int(width_px)))
+    if style and style != gm.style:
+        gm = replace(gm, style=style)
+    scale = width_px / float(gm.width)
+    height_px = max(1, int(round(gm.height * scale)))
+    ss = 2 if (width_px * height_px * 4) <= 24_000_000 else 1
+    image = _render_image(gm, scale, ss, edition, 1, (width_px, height_px))
+    alt = describe_map(gm, edition)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.suffix.lower() in (".jpg", ".jpeg"):
+        image.save(str(path), "JPEG", quality=max(40, min(100, int(quality))),
+                   optimize=True, comment=alt.encode("utf-8"))
+    else:
+        image.save(str(path), "PNG", optimize=True, pnginfo=_png_info(alt))
+    return MapExport(path=path, alt_text=alt, width_px=width_px,
+                     height_px=height_px)
+
+
+# ==========================================================================
+# Maps inside maps
+#
+# A pin on a world map can open the map of the place itself (a village), and a
+# pin on that can open a floor plan. Only the links are stored here - no window,
+# no generator: `Pin.child_map_id` says which map is inside a pin, and
+# `GameMap.parent` says which pin of which map a map is inside. `mapstory` reads
+# them to draw the breadcrumb ("World > Harrowgate > The Gilded Stag").
+# ==========================================================================
+
+
+def child_seed(parent_seed: int, pin_id: str) -> int:
+    """
+    The seed for the map inside a pin: the same for the same place, always.
+
+    A CRC of the parent's seed and the pin's id, never `hash()` (Python salts
+    that differently in every process, so the village would look different each
+    time the book was opened). Moving the pin changes nothing; a different pin
+    gives a different village.
+    """
+    return zlib.crc32(f"{parent_seed}:{pin_id}".encode("utf-8")) & 0xFFFFFFFF
+
+
+def link_child(parent: GameMap, pin: Pin, child: GameMap) -> None:
+    """Make `child` the inside of `pin` on `parent`, recorded on both sides."""
+    if parent.pin(pin.id) is None:
+        raise ValueError("that pin is not on the parent map")
+    if child.id == parent.id:
+        raise ValueError("a map cannot be inside itself")
+    pin.child_map_id = child.id
+    child.parent = {"map_id": parent.id, "pin_id": pin.id}
+
+
+def unlink_child(parent: GameMap, pin: Pin, child: Optional[GameMap] = None) -> None:
+    """Undo `link_child`. The child keeps existing; it simply has no parent now."""
+    if child is not None and child.parent.get("pin_id") == pin.id \
+            and child.parent.get("map_id") == parent.id:
+        child.parent = {}
+    pin.child_map_id = ""
 
 
 # ==========================================================================

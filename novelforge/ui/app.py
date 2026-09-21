@@ -29,6 +29,7 @@ from .. import (
     compiler,
     diagnostics,
     docxio,
+    mentionindex,
     recovery,
     stats,
     structures,
@@ -53,7 +54,10 @@ from ..model import (
     now_iso,
 )
 from ..project import Project, ProjectError, list_projects
+from ..tags import TagsField
 from . import dialogs, styling
+from .connections import attach as _attach_connections
+from .goto import persist as _persist_visits, remember as _remember_visit
 from .writing import WritingIntelligence
 from .widgets import (
     AutoScrollbar,
@@ -331,6 +335,8 @@ class App(WritingIntelligence, tk.Tk):
         self.edit_menu.add_command(label="Redo", accelerator="Ctrl+Y",
                                    command=self.cmd_redo)
         self.edit_menu.add_separator()
+        self.edit_menu.add_command(label="Go to...", accelerator="Ctrl+P",
+                                   command=self.cmd_goto)
         # Find and Replace used to live in Tools, which is where every other
         # app on the writer's machine puts everything BUT find/replace - Word,
         # a browser, an IDE all put it in Edit. Moving it here is one less
@@ -411,6 +417,8 @@ class App(WritingIntelligence, tk.Tk):
                                command=self.cmd_continuity)
         tools_menu.add_command(label="What Depends on This Scene?",
                                command=self.cmd_dependencies)
+        tools_menu.add_command(label="Scan for Mentions (Connections)",
+                               command=self.cmd_scan_mentions)
         tools_menu.add_separator()
         tools_menu.add_command(label="Rebuild This Sheet from Template",
                                command=self.cmd_rebuild_sheet)
@@ -857,6 +865,7 @@ class App(WritingIntelligence, tk.Tk):
             "<Control-Alt-z>": lambda _e: self.cmd_undo(),
             "<Control-Alt-y>": lambda _e: self.cmd_redo(),
             "<Control-Shift-P>": lambda _e: self.cmd_palette(),
+            "<Control-p>": lambda _e: self.cmd_goto(),
             "<Control-k>": lambda _e: self.cmd_corkboard(),
             "<Control-g>": lambda _e: self.cmd_story_graph(),
             "<Control-i>": lambda _e: self.cmd_idea_inbox(),
@@ -880,6 +889,33 @@ class App(WritingIntelligence, tk.Tk):
         self.shortcuts = bindings
         for sequence, handler in bindings.items():
             self.bind_all(sequence, handler)
+        # Tk gives Text and Entry emacs-style keys of their own and runs them BEFORE the
+        # app-wide ones above. With the caret in the editor Ctrl+K used to delete the
+        # rest of the line, Ctrl+H a character, Ctrl+T swap two, Ctrl+O and Ctrl+I insert
+        # a newline and a tab - and only then did the shortcut do its job, and autosave
+        # wrote the damage to the .docx (tests/test_gui_keys.py presses every one).
+        # Wherever one of ours collides with a class binding, that binding is replaced
+        # by our action, then "break". Found by asking Tk, so a new shortcut is covered.
+        def then_stop(action):
+            def run(event):
+                action(event)
+                return "break"
+            return run
+
+        for widget_class in ("Text", "Entry", "TEntry", "TCombobox", "Spinbox", "TSpinbox"):
+            for sequence, handler in bindings.items():
+                if self.bind_class(widget_class, sequence):
+                    self.bind_class(widget_class, sequence, then_stop(handler))
+        # Tk also treats Ctrl+Alt+Z / Ctrl+Alt+Y as its own text Undo / Redo (extra
+        # modifiers do not stop a Ctrl+Z pattern matching), so the project-wide undo
+        # bound to them above ran on top of an undo of the typing. Bind them first.
+        for sequence in ("<Control-Alt-z>", "<Control-Alt-y>"):
+            self.bind_class("Text", sequence, then_stop(bindings[sequence]))
+        # Tk's own Text binding for Ctrl+P is "move the caret up a line" (emacs
+        # style; not present on every platform). Go to must win in the editor, and
+        # the caret must not also move, so the class binding is replaced by one that
+        # opens Go to and stops there.
+        self.bind_class("Text", "<Control-p>", lambda _e: self.cmd_goto() or "break")
 
     # ==================================================================
     # Startup
@@ -925,6 +961,8 @@ class App(WritingIntelligence, tk.Tk):
 
     def load_project(self, root: Path) -> None:
         self.commit_all()
+        if self.project:
+            mentionindex.flush(self.project)
         try:
             project = Project.open(root)
         except (ProjectError, OSError) as exc:
@@ -1192,7 +1230,24 @@ class App(WritingIntelligence, tk.Tk):
             return
         self.commit_all()
         self.selection_kind, self.selection_id = kind, ident
+        if kind and ident:
+            _remember_visit(self, f"{kind}:{ident}")
         self.render_selection()
+
+    def goto(self, kind: str, ident: str) -> bool:
+        """
+        Show a binder item: what a Go to row or a Connections row does.
+
+        Selecting a row through the tree only *queues* the selection event, so the
+        view is brought up to date here rather than a moment later.
+        """
+        iid = f"{kind}:{ident}"
+        if not (self.project and self.tree.exists(iid)):
+            return False
+        self.tree.selection_set(iid)
+        self.tree.see(iid)
+        self.on_tree_select()
+        return True
 
     def on_tree_double(self, _event=None) -> None:
         kind, ident = self._selected_key()
@@ -1383,6 +1438,9 @@ class App(WritingIntelligence, tk.Tk):
         form.combo("Type", scene, "scene_type", SCENE_TYPES)
         form.check("Include when compiling", scene, "include_in_compile")
         form.integer("Word target", scene, "target_words")
+        form.entry("Tags", TagsField(scene), "tags")
+        form.hint("Separate with commas. Nest with a slash (clue/red-herring): "
+                  "searching for clue finds both.")
 
         characters = [(e.id, e.name) for e in data.entities_of("character")]
         locations = [(e.id, e.name) for e in data.entities_of("location")]
@@ -1430,16 +1488,11 @@ class App(WritingIntelligence, tk.Tk):
         form.multiline("Scene notes", scene, "notes", height=4)
 
         drafts = self.project.list_drafts(scene.id)
-        research = self.project.notes_for(scene.id)
-        if len(drafts) > 1 or research:
+        if len(drafts) > 1:
             form.separator()
-            if len(drafts) > 1:
-                form.readonly("Draft",
-                              f"{scene.active_draft or 'Main'} "
-                              f"(of {len(drafts)})")
-            if research:
-                form.readonly("Research",
-                              ", ".join(n.title for n in research))
+            form.readonly("Draft",
+                          f"{scene.active_draft or 'Main'} "
+                          f"(of {len(drafts)})")
 
         form.button_row([
             ("Apply", self.cmd_apply_inspector),
@@ -1447,6 +1500,7 @@ class App(WritingIntelligence, tk.Tk):
             ("Drafts...", self.cmd_drafts),
             ("Open in Word", self.cmd_open_in_word),
         ])
+        _attach_connections(self, form, "scene", scene.id)
 
     # -- chapter --------------------------------------------------------
     def _render_chapter(self, chapter) -> None:
@@ -1514,7 +1568,6 @@ class App(WritingIntelligence, tk.Tk):
 
         self._show_detail(entity.name, "\n".join(lines), [
             ("Open in Word", self.cmd_open_in_word),
-            ("Where mentioned?", self.cmd_mentions),
             ("Rebuild sheet", self.cmd_rebuild_sheet),
         ])
         self.centre_meta.configure(text=f"{filled}/{len(fields)} fields")
@@ -1531,14 +1584,7 @@ class App(WritingIntelligence, tk.Tk):
             form.entry("Type", entity, "role")
         form.multiline("One-line summary", entity, "summary", height=3)
 
-        scenes_with = [
-            s for s in self.project.data.ordered_scenes()
-            if entity.id in (s.character_ids + s.location_ids + s.item_ids
-                             + s.faction_ids + s.thread_ids)
-            or s.pov_id == entity.id
-        ]
         form.separator()
-        form.readonly("Linked scenes", str(len(scenes_with)))
         if entity.type == "character":
             pov_scenes = [s for s in self.project.data.scenes
                           if s.pov_id == entity.id]
@@ -1547,13 +1593,11 @@ class App(WritingIntelligence, tk.Tk):
                           f"{sum(s.word_count for s in pov_scenes):,}")
         if entity.aliases:
             form.readonly("Aliases", ", ".join(entity.aliases))
-        research = self.project.notes_for(entity.id)
-        if research:
-            form.readonly("Research", ", ".join(n.title for n in research))
         form.button_row([
             ("Apply", self.cmd_apply_inspector),
             ("Open in Word", self.cmd_open_in_word),
         ])
+        _attach_connections(self, form, "entity", entity.id)
 
     # -- note -----------------------------------------------------------
     def _render_note(self, note) -> None:
@@ -1573,20 +1617,11 @@ class App(WritingIntelligence, tk.Tk):
         form.heading("Note")
         form.entry("Title", note, "title")
         form.combo("Kind", note, "kind", ["note", "research", "scratchpad"])
-        form.separator()
-        linked = [
-            (self.project.data.entity(t) or self.project.data.scene(t)
-             or self.project.data.chapter(t))
-            for t in (note.links or [])
-        ]
-        form.readonly(
-            "Linked to",
-            ", ".join(item.display for item in linked if item) or "nothing yet",
-        )
         form.button_row([
             ("Apply", self.cmd_apply_inspector),
             ("Link to...", self.cmd_note_links),
         ])
+        _attach_connections(self, form, "note", note.id)
 
     # -- plain document -------------------------------------------------
     def _render_document(self, relative: str) -> None:
@@ -1776,6 +1811,7 @@ class App(WritingIntelligence, tk.Tk):
             ("Apply", self.cmd_apply_inspector),
             ("Timeline window", self.cmd_timeline_window),
         ])
+        _attach_connections(self, form, "event", event.id)
 
     # -- view swapping --------------------------------------------------
     def _show_editor(self) -> None:
@@ -2062,6 +2098,7 @@ class App(WritingIntelligence, tk.Tk):
             return False
         self._editor_dirty = False
         self.status.set_state("saved")
+        mentionindex.update_scene(self.project, scene.id, body)
         if self.tracker:
             self.tracker.update(self.project.data.word_count, scene.id)
         item = f"scene:{scene.id}"
@@ -2706,6 +2743,30 @@ class App(WritingIntelligence, tk.Tk):
         self.project.save()
         self.render_selection()
         self.status.say(f"Rebuilt {path.name if path else 'sheet'}.", 6)
+
+    def cmd_scan_mentions(self) -> None:
+        """
+        Look through the manuscript for the names of everything in the story, so
+        Connections can show what is mentioned but not linked.
+
+        Only scenes edited since the last scan are opened, so this is quick after
+        the first time.
+        """
+        if not self.require_project():
+            return
+        self.commit_all()
+        from .connections import rebuild_inspector
+
+        def progress(done: int, total: int) -> None:
+            self.status.say(f"Looking for names in the manuscript ({done}/{total})...", 0)
+            self.update_idletasks()
+
+        with self._busy("Looking for names in the manuscript..."):
+            read, total = mentionindex.refresh(self.project, progress)
+        self.status.say(
+            f"Scanned {total} scene{'s' if total != 1 else ''}"
+            f" ({read} read; the rest had not changed).", 8)
+        rebuild_inspector(self)
 
     def cmd_mentions(self) -> None:
         if not self.require_project() or self.selection_kind != "entity":
@@ -3770,12 +3831,34 @@ class App(WritingIntelligence, tk.Tk):
                 pass
         self._palette = CommandPalette(self)
 
+    def cmd_goto(self) -> None:
+        """Ctrl+P: jump to any scene, character, note, place or idea by typing."""
+        if not self.require_project():
+            return
+        from .goto import GoTo
+
+        existing = getattr(self, "_goto", None)
+        if existing is not None:
+            try:
+                if existing.winfo_exists():
+                    existing.close()
+                    self._goto = None
+                    return
+            except tk.TclError:
+                pass
+        self._goto = GoTo(self)
+
     def cmd_shortcuts(self) -> None:
         body = """KEYBOARD SHORTCUTS
 ==================
 
 FIND ANY COMMAND
   Ctrl+Shift+P      Command palette - type what you want, press Enter
+
+GO ANYWHERE
+  Ctrl+P            Go to - type part of a scene, chapter, character
+                    (or alias), note, event, map or idea; Enter goes
+                    there. Empty box: the places you were last.
 
 FILE
   Ctrl+S            Save
@@ -3973,6 +4056,8 @@ Python {".".join(str(v) for v in __import__("sys").version_info[:3])}
                 settings["window_geometry"] = self.geometry()
             except tk.TclError:
                 pass
+            mentionindex.flush(self.project)
+            _persist_visits(self)
             try:
                 self.project.save(force=True)
             except Exception as exc:

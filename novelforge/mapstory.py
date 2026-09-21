@@ -30,21 +30,31 @@ import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 from . import mapmaker as mm
 
 #: Words that mean "a unit of distance" in the scale caption, and how many
-#: miles one of them is. Only used to phrase warnings in something familiar;
-#: the checks themselves work in whatever unit the writer chose.
-_UNITS = {
-    "league": 3.0, "leagues": 3.0,
-    "mile": 1.0, "miles": 1.0,
-    "km": 0.621, "kilometre": 0.621, "kilometres": 0.621,
-    "kilometer": 0.621, "kilometers": 0.621,
-    "day": 20.0, "days": 20.0,          # a day's march
-    "march": 20.0, "marches": 20.0,
+#: miles one of them is: feet, yards, paces, metres, kilometres, miles, leagues
+#: (three miles), days' march, parsecs, AU and light-years, spelled out,
+#: plural or abbreviated (ft, yd, m, km, mi, pc, AU, ly). Only used to phrase
+#: warnings in something familiar; the checks themselves work in whatever unit
+#: the writer chose. The table itself lives in `mapmaker.UNIT_TABLE`, next to
+#: the code that formats a caption, so the two cannot drift apart.
+_UNITS: Dict[str, float] = {
+    word: row[3]
+    for word, row in mm._UNIT_BY_WORD.items()
 }
+
+#: Units for which "about N miles" is no help and a horse-speed check is
+#: meaningless.
+_ASTRONOMICAL = mm.ASTRONOMICAL_UNITS
+
+# One scale, one implementation: the map maker owns how a scale bar is drawn
+# and what it is worth; these are the names the rest of the app already reads.
+apply_scale = mm.apply_scale
+scale_bar = mm.scale_bar
+nice_number = mm.nice_number
 
 
 # --------------------------------------------------------------------------
@@ -111,6 +121,65 @@ def pin_index(project, maps: Optional[Sequence[Any]] = None
 
 
 # --------------------------------------------------------------------------
+# Maps inside maps
+# --------------------------------------------------------------------------
+
+child_seed = mm.child_seed
+link_child = mm.link_child
+unlink_child = mm.unlink_child
+
+
+class Crumb(NamedTuple):
+    """One step of a breadcrumb: a map, and the pin (on the map before it) that opens it."""
+
+    map_id: str
+    name: str
+    #: The pin on the previous crumb's map that this map is inside; "" for the top.
+    pin_id: str = ""
+    pin_label: str = ""
+
+
+def breadcrumb(maps: Sequence[Any], game_map) -> List[Crumb]:
+    """
+    Where a map sits in the nest of maps, top first, ending with `game_map`:
+    World, then Harrowgate (a pin on it), then The Gilded Stag.
+
+    Follows each map's `parent` link up through `maps` (what `load_maps`
+    returns). A link to a map that no longer exists ends the chain there, and a
+    loop (which should never be saved) is cut rather than followed forever, so
+    this always returns something, at worst just `game_map` itself.
+    """
+    by_id = {getattr(m, "id", ""): m for m in maps}
+    chain = [game_map]
+    seen = {getattr(game_map, "id", "")}
+    current = game_map
+    while len(chain) < 32:
+        link = getattr(current, "parent", None) or {}
+        parent = by_id.get(link.get("map_id", ""))
+        if parent is None or getattr(parent, "id", "") in seen:
+            break
+        chain.append(parent)
+        seen.add(parent.id)
+        current = parent
+    chain.reverse()
+    crumbs: List[Crumb] = []
+    for i, item in enumerate(chain):
+        pin_id, pin_label = "", ""
+        if i:
+            pin_id = (getattr(item, "parent", None) or {}).get("pin_id", "")
+            pin = chain[i - 1].pin(pin_id) if pin_id else None
+            pin_label = getattr(pin, "label", "") or ""
+        crumbs.append(Crumb(getattr(item, "id", ""), getattr(item, "name", "") or "",
+                            pin_id, pin_label))
+    return crumbs
+
+
+def breadcrumb_text(maps: Sequence[Any], game_map, sep: str = " > ") -> str:
+    """The breadcrumb as one line: "World > Harrowgate > The Gilded Stag"."""
+    return sep.join(c.name or "(unnamed map)" for c in breadcrumb(maps, game_map))
+
+
+# --------------------------------------------------------------------------
 # Joining the story graph
 # --------------------------------------------------------------------------
 
@@ -161,6 +230,11 @@ class Scale:
     def known(self) -> bool:
         return self.units_per_pixel > 0
 
+    @property
+    def astronomical(self) -> bool:
+        """Parsecs, AU, light-years: distances a "miles" phrasing cannot help."""
+        return self.unit.lower() in _ASTRONOMICAL
+
     def to_miles(self, amount: float) -> Optional[float]:
         factor = _UNITS.get(self.unit.lower())
         return amount * factor if factor else None
@@ -170,24 +244,18 @@ def read_scale(game_map) -> Scale:
     """
     Work out the map's scale from its caption, e.g. "100 leagues".
 
-    The scale bar is drawn at a fixed fraction of the map width, which is what
-    makes the caption mean anything at all. If the caption has no number, the
-    scale is unknown and every distance check quietly stands down rather than
-    inventing a number.
+    The caption says what the *drawn scale bar* is worth, so the length in
+    pixels comes from the very function that draws it (`mapmaker.scale_bar`).
+    It used to be assumed here as a fifth of the map's width while the picture
+    drew 16% (at most 230 px), which made every distance 64-72% of the truth.
+    If the caption has no number, the scale is unknown and every distance check
+    quietly stands down rather than inventing a number.
     """
-    caption = (getattr(game_map, "scale_text", "") or "").strip()
-    if not caption:
+    bar = mm.scale_bar(game_map)
+    if not bar.known:
         return Scale()
-    match = re.search(r"(\d+(?:\.\d+)?)\s*([A-Za-z]+)?", caption)
-    if not match:
-        return Scale()
-    amount = float(match.group(1))
-    unit = (match.group(2) or "units").lower()
-    if amount <= 0:
-        return Scale()
-    # Matches the bar drawn by the renderer: a fifth of the map width.
-    bar = max(1.0, float(getattr(game_map, "width", 1600)) * 0.2)
-    return Scale(units_per_pixel=amount / bar, unit=unit, bar_pixels=bar)
+    return Scale(units_per_pixel=bar.units_per_pixel, unit=bar.unit or "units",
+                 bar_pixels=bar.px)
 
 
 def distance(game_map, a, b) -> Optional[float]:
@@ -205,9 +273,16 @@ def describe_distance(game_map, a, b) -> str:
         return ""
     scale = read_scale(game_map)
     miles = scale.to_miles(value)
-    text = f"{value:,.0f} {scale.unit}"
-    if miles and scale.unit not in ("mile", "miles"):
-        text += f" (about {miles:,.0f} miles)"
+    # Small distances (a room in feet) need their decimals; a whole kingdom
+    # does not.
+    shown = (f"{value:,.0f}" if value >= 10 or value == 0
+             else f"{value:,.1f}".rstrip("0").rstrip("."))
+    text = f"{shown} {scale.unit}"
+    if miles and not scale.astronomical \
+            and mm.unit_info(scale.unit) is not None \
+            and mm.unit_info(scale.unit)[0] != "mile":
+        text += f" (about {miles:,.0f} miles)" if miles >= 10 \
+            else f" (about {miles:,.2f} miles)"
     return text
 
 
@@ -405,6 +480,8 @@ def check_maps(project, graph) -> List:
             if gap is None:
                 continue
             scale = read_scale(game_map)
+            if scale.astronomical:
+                continue          # 300 miles means nothing between the stars
             miles = scale.to_miles(gap)
             if miles is None or miles < 300:
                 continue

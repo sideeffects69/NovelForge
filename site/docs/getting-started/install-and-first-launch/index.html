@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Install and first launch | NovelForge docs</title>
+<meta name="description" content="Learn how to install NovelForge on Windows 10 or 11: get Python, download the release, double-click Write.bat, and create your first novel.">
+<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
+<link rel="canonical" href="https://sideeffects69.github.io/NovelForge/docs/getting-started/install-and-first-launch/">
+<meta name="author" content="Om Abhyankar">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f7f4ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#070d17" media="(prefers-color-scheme: dark)">
+<meta property="og:site_name" content="NovelForge">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Install and first launch | NovelForge docs">
+<meta property="og:description" content="Learn how to install NovelForge on Windows 10 or 11: get Python, download the release, double-click Write.bat, and create your first novel.">
+<meta property="og:url" content="https://sideeffects69.github.io/NovelForge/docs/getting-started/install-and-first-launch/">
+<meta property="og:image" content="https://sideeffects69.github.io/NovelForge/assets/brand/og-image.jpg">
+<meta property="og:image:alt" content="NovelForge, free novel writing software for Windows">
+<meta property="og:locale" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Install and first launch | NovelForge docs">
+<meta name="twitter:description" content="Learn how to install NovelForge on Windows 10 or 11: get Python, download the release, double-click Write.bat, and create your first novel.">
+<meta name="twitter:image" content="https://sideeffects69.github.io/NovelForge/assets/brand/og-image.jpg">
+<link rel="icon" href="../../../favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../../../assets/brand/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../../../assets/brand/favicon-16.png">
+<link rel="apple-touch-icon" href="../../../assets/brand/apple-touch-icon.png">
+<link rel="manifest" href="../../../site.webmanifest">
+<link rel="alternate" type="text/plain" href="../../../llms.txt" title="Plain-text summary for language models">
+<link rel="sitemap" type="application/xml" href="../../../sitemap.xml">
+<link rel="preload" href="../../../assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../../../assets/fonts/literata-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../../../style.css">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "Person",
+   "@id": "https://sideeffects69.github.io/NovelForge/#author",
+   "name": "Om Abhyankar",
+   "url": "https://github.com/sideeffects69"
+  },
+  {
+   "@type": "WebSite",
+   "@id": "https://sideeffects69.github.io/NovelForge/#website",
+   "url": "https://sideeffects69.github.io/NovelForge/",
+   "name": "NovelForge",
+   "description": "Free, open-source novel writing software for Windows.",
+   "inLanguage": "en",
+   "publisher": {
+    "@id": "https://sideeffects69.github.io/NovelForge/#author"
+   }
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "Home",
+     "item": "https://sideeffects69.github.io/NovelForge/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "Docs",
+     "item": "https://sideeffects69.github.io/NovelForge/docs/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "Getting started",
+     "item": "https://sideeffects69.github.io/NovelForge/docs/#getting-started"
+    },
+    {
+     "@type": "ListItem",
+     "position": 4,
+     "name": "Install and first launch",
+     "item": "https://sideeffects69.github.io/NovelForge/docs/getting-started/install-and-first-launch/"
+    }
+   ]
+  },
+  {
+   "@type": "TechArticle",
+   "@id": "https://sideeffects69.github.io/NovelForge/docs/getting-started/install-and-first-launch/#article",
+   "headline": "Install and first launch",
+   "proficiencyLevel": "Beginner",
+   "image": "https://sideeffects69.github.io/NovelForge/assets/brand/og-image.jpg",
+   "author": {
+    "@id": "https://sideeffects69.github.io/NovelForge/#author"
+   },
+   "publisher": {
+    "@id": "https://sideeffects69.github.io/NovelForge/#author"
+   },
+   "url": "https://sideeffects69.github.io/NovelForge/docs/getting-started/install-and-first-launch/",
+   "description": "Learn how to install NovelForge on Windows 10 or 11: get Python, download the release, double-click Write.bat, and create your first novel.",
+   "inLanguage": "en",
+   "datePublished": "2026-09-20",
+   "dateModified": "2026-09-20",
+   "isPartOf": {
+    "@id": "https://sideeffects69.github.io/NovelForge/#website"
+   },
+   "about": {
+    "@id": "https://sideeffects69.github.io/NovelForge/#software"
+   },
+   "dependencies": "Python 3.13 or newer; the python-docx and Pillow libraries"
+  }
+ ]
+}
+</script>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></symbol><symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></symbol><symbol id="i-book" viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/></symbol><symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5"/></symbol><symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol><symbol id="i-file" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h6"/></symbol><symbol id="i-map" viewBox="0 0 24 24"><path d="M9 5 3 7v12l6-2 6 2 6-2V5l-6 2z"/><path d="M9 5v12M15 7v12"/></symbol><symbol id="i-board" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></symbol><symbol id="i-graph" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="9" cy="18" r="2.5"/><path d="m8 7 8 1M7 8.5l1.5 7M16.5 10l-6 6.5"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></symbol><symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6z"/><path d="m9 12 2 2 4-4"/></symbol><symbol id="i-command" viewBox="0 0 24 24"><path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/></symbol><symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="m14 7 3 3"/></symbol><symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></symbol><symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></symbol><symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7"/></symbol><symbol id="i-github" viewBox="0 0 16 16"><path fill="currentColor" stroke="none" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></symbol></svg>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="bar wrap">
+    <a class="brand" href="../../../" aria-label="NovelForge home">
+      <img src="../../../assets/brand/icon-96.png" width="32" height="32" alt="" class="brand-logo">
+      <span>Novel<em>Forge</em></span>
+    </a>
+    <nav class="main-nav" aria-label="Main">
+      <a href="../../../features/">Features</a><a href="../../../docs/" aria-current="true">Docs</a><a href="../../../map-maker/">Map Maker</a><a href="../../../compare/">Compare</a><a href="../../../download/">Download</a><a class="gh" href="https://github.com/sideeffects69/NovelForge" rel="noopener"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-github"/></svg>GitHub</a>
+    </nav>
+    <div class="search" role="search"><a class="search-fallback" href="../../../docs/" title="Search the docs, or press /"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"/></svg><span>Search</span><kbd>/</kbd></a></div>
+  </div>
+</header>
+<main id="main">
+<div class="docs wrap">
+  <aside class="docs-side"><nav class="side" aria-label="Documentation"><a class="side-home" href="../../../docs/">All docs, A to Z</a><details class="side-group" open><summary>Getting started</summary><ul><li><a href="../../../docs/getting-started/install-and-first-launch/" aria-current="page">Install and first launch</a></li><li><a href="../../../docs/getting-started/tour-of-the-window/">Tour of the window</a></li></ul></details><details class="side-group"><summary>Writing</summary><ul><li><a href="../../../docs/writing/the-binder/">The binder</a></li></ul></details><details class="side-group"><summary>Your files</summary><ul><li><a href="../../../docs/your-files/backups-and-snapshots/">Backups and snapshots</a></li></ul></details><details class="side-group"><summary>Reference</summary><ul><li><a href="../../../docs/reference/keyboard-shortcuts/">Keyboard shortcuts</a></li></ul></details></nav></aside>
+  <article class="docs-main">
+    <nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="../../../">Home</a></li><li><a href="../../../docs/">Docs</a></li><li><a href="../../../docs/#getting-started">Getting started</a></li><li aria-current="page">Install and first launch</li></ol></nav>
+    <header class="doc-head">
+      <h1>Install and first launch</h1>
+      <p class="doc-meta">Updated <time datetime="2026-09-20">20 September 2026</time></p>
+    </header>
+    <details class="page-toc-fold"><summary>On this page</summary><ul><li><a href="#what-you-need">What you need</a></li><li><a href="#install-python">Install Python</a></li><li><a href="#download-novelforge">Download NovelForge</a></li><li><a href="#start-it-with-write-bat">Start it with Write.bat</a></li><li><a href="#the-first-screen">The first screen</a></li><li><a href="#create-your-first-novel">Create your first novel</a></li><li><a href="#where-things-live">Where things live</a></li><li><a href="#related">Related</a></li></ul></details>
+    <div class="prose">
+<p class="lead">Learn how to install NovelForge on Windows 10 or 11, start it for the first time and create your first novel. There is no installer: you install Python once, unzip a folder and double-click one file.</p>
+
+<h2 id="what-you-need">What you need</h2>
+<ul>
+  <li><strong>Windows 10 or 11.</strong> NovelForge has only been built and tested on Windows. macOS and Linux are not supported.</li>
+  <li><strong>Python 3.13 or newer.</strong> It is a free program from python.org that NovelForge runs on.</li>
+  <li><strong>Two small Python libraries,</strong> <code>python-docx</code> (it reads and writes the Word files) and <code>Pillow</code> (it draws the map images). <code>Write.bat</code> installs them for you the first time; that is the only time NovelForge needs the internet.</li>
+</ul>
+
+<h2 id="install-python">Install Python</h2>
+<p>Download Python from <a href="https://www.python.org/downloads/" rel="noopener">python.org</a>, choose version 3.13 or newer, and on the first screen of the installer tick <strong>Add python.exe to PATH</strong>. If you prefer a terminal, this command does the same job:</p>
+<pre><code>winget install Python.Python.3.13</code></pre>
+<div class="callout tip">
+  <p>If you forget to tick the box, run the Python installer again and choose <strong>Modify</strong>. <code>Write.bat</code> also looks for Python in its usual per-user folder, so it often works either way.</p>
+</div>
+
+<h2 id="download-novelforge">Download NovelForge</h2>
+<p>Open the <a href="https://github.com/sideeffects69/NovelForge/releases/latest" rel="noopener">latest release on GitHub</a>, scroll to <strong>Assets</strong> and download <strong>Source code (zip)</strong>. Unzip it anywhere you like: the Desktop or Documents is fine. The folder is the whole program; there is nothing to install into Windows.</p>
+
+<h2 id="start-it-with-write-bat">Start it with Write.bat</h2>
+<p>Double-click <code>Write.bat</code> in that folder. In order, it does the following:</p>
+<ol>
+  <li>Looks for Python (first in the usual per-user install folder, then on your PATH). If there is none, it explains how to get it and waits, instead of closing.</li>
+  <li>Checks for the two libraries. If they are missing it installs them with pip, which needs the internet once. If that fails it tells you to check your connection and try again.</li>
+  <li>Starts NovelForge through <code>pythonw.exe</code>, so there is no black console window behind the program.</li>
+</ol>
+<p>Windows may show a warning for a file downloaded from the internet. <code>Write.bat</code> is a short plain-text script, so you can open it in Notepad and read it before you run it. The <a href="../../../download/">download page</a> lists the common problems and their fixes.</p>
+
+<h2 id="the-first-screen">The first screen</h2>
+<p>On a fresh install there is no novel yet, so NovelForge shows a welcome screen with two buttons, <strong>Start a new novel</strong> and <strong>Open an existing novel</strong>, and a short reminder that <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> opens the command palette, where you can find any command by typing its name. Once you have written something, NovelForge reopens your last novel when it starts, and the welcome screen only comes back if there is nothing to open.</p>
+
+<h2 id="create-your-first-novel">Create your first novel</h2>
+<p>Choose <strong>File → New Novel</strong> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd>) or press <strong>Start a new novel</strong>. The form asks for:</p>
+<ul>
+  <li><strong>Title,</strong> plus an optional subtitle, your author name, an optional series name and a genre.</li>
+  <li><strong>Structure,</strong> one of the nine outline frameworks. Three-Act is the default, and you can switch later without losing anything you have written under another one.</li>
+  <li><strong>Target word count</strong> and <strong>daily word target,</strong> filled in from your preferences (90,000 and 1,000 words at first), and an optional <strong>deadline</strong> in the form <code>2027-03-01</code>.</li>
+  <li><strong>Extra template packs:</strong> Fantasy / Sci-Fi (ticked by default; the full world bible is always created), Mystery / Crime (adds a Clue Tracker) and Romance (adds a Relationship Arc Tracker).</li>
+  <li><strong>Location,</strong> which is the <code>Projects</code> folder next to <code>Write.bat</code> unless you choose another. NovelForge creates a folder there named after your title.</li>
+</ul>
+<p>Press OK and NovelForge builds the whole project: the numbered folders, a set of starter Word documents (a premise sheet, world-bible sheets, a query letter, a synopsis and more), an outline for the framework you chose, and a first chapter called <strong>Chapter One</strong> with a scene called <strong>Opening Scene</strong>. Choose that scene in the binder on the left and start typing. Your text saves itself after a pause.</p>
+
+<h2 id="where-things-live">Where things live</h2>
+<p>Your novels are in the <code>Projects</code> folder next to <code>Write.bat</code>, one sub-folder per book, and your preferences are in <code>novelforge-settings.json</code> beside it. <strong>File → Open Project Folder</strong> shows the current novel in Explorer. For a desktop shortcut with the NovelForge icon, double-click <code>Make Desktop Shortcut.bat</code> once.</p>
+
+<div class="callout warn">
+  <p>To upgrade, unzip the new release into a new folder and copy your <code>Projects</code> folder and <code>novelforge-settings.json</code> across before you start it. Deleting the old folder deletes the novels inside it, so copy them first.</p>
+</div>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="../../../docs/getting-started/tour-of-the-window/">Tour of the window</a></li>
+  <li><a href="../../../docs/your-files/backups-and-snapshots/">Backups and snapshots</a></li>
+  <li><a href="../../../download/">Download page and troubleshooting</a></li>
+</ul>
+
+    </div>
+    <footer class="doc-foot">
+      <section class="linked-from"><h2>Linked from</h2><ul><li><a href="../../.././">NovelForge: Free Novel Writing Software for Windows</a></li></ul></section>
+      <nav class="pager" aria-label="Previous and next"><a class="next" rel="next" href="../../../docs/getting-started/tour-of-the-window/"><small>Next</small><span>Tour of the window</span></a></nav>
+      <p class="edit"><a href="https://github.com/sideeffects69/NovelForge/edit/main/tools/site/pages/docs/getting-started/install-and-first-launch.html" rel="noopener"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pen"/></svg>Edit this page on GitHub</a></p>
+    </footer>
+  </article>
+  <aside class="docs-toc"><nav class="page-toc" aria-label="On this page"><h2>On this page</h2><ul><li><a href="#what-you-need">What you need</a></li><li><a href="#install-python">Install Python</a></li><li><a href="#download-novelforge">Download NovelForge</a></li><li><a href="#start-it-with-write-bat">Start it with Write.bat</a></li><li><a href="#the-first-screen">The first screen</a></li><li><a href="#create-your-first-novel">Create your first novel</a></li><li><a href="#where-things-live">Where things live</a></li><li><a href="#related">Related</a></li></ul></nav></aside>
+</div>
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-about">
+        <a class="brand" href="../../../"><img src="../../../assets/brand/icon-96.png" width="28" height="28" alt="" class="brand-logo"><span>Novel<em>Forge</em></span></a>
+        <p>Free, open-source novel writing software for Windows. Your book stays in real Word files on your own disk.</p>
+      </div>
+      <div><h2>Product</h2><a href="../../../features/">Features</a><a href="../../../map-maker/">Fantasy map maker</a><a href="../../../download/">Download</a><a href="../../../changelog/">Changelog</a></div>
+      <div><h2>Learn</h2><a href="../../../docs/">Documentation</a><a href="../../../compare/">Compare with Scrivener and others</a><a href="../../../faq/">Questions and answers</a><a href="../../../llms.txt">llms.txt</a></div>
+      <div><h2>Project</h2><a href="https://github.com/sideeffects69/NovelForge" rel="noopener">Source on GitHub</a><a href="https://github.com/sideeffects69/NovelForge/issues" rel="noopener">Report an issue</a><a href="https://github.com/sideeffects69/NovelForge/blob/main/CONTRIBUTING.md" rel="noopener">Contribute</a><a href="https://github.com/sideeffects69/NovelForge/blob/main/LICENSE" rel="noopener">MIT licence</a><a href="../../../support/">Support the project</a></div>
+    </div>
+    <p class="foot-fine">NovelForge 2.2.0 &middot; free and open source &middot; built by Om Abhyankar &middot; no cookies, no tracking, no third-party requests.</p>
+  </div>
+</footer>
+<script src="../../../app.js" defer></script>
+</body>
+</html>

@@ -181,6 +181,10 @@ class Scene:
     scene_type: str = "scene"       # scene (goal/conflict/disaster) or sequel
     label: str = ""
 
+    # Free-form labels, nested with a slash (clue/red-herring); a search for
+    # "clue" finds both. Edited in the inspector; see tags.py.
+    tags: List[str] = field(default_factory=list)
+
     # links
     pov_id: str = ""
     character_ids: List[str] = field(default_factory=list)

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NovelForge documentation: how every feature works</title>
+<meta name="description" content="Documentation for NovelForge, free novel writing software for Windows: install it, tour the window, learn the binder, protect your files and find every shortcut.">
+<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
+<link rel="canonical" href="https://sideeffects69.github.io/NovelForge/docs/">
+<meta name="author" content="Om Abhyankar">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f7f4ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#070d17" media="(prefers-color-scheme: dark)">
+<meta property="og:site_name" content="NovelForge">
+<meta property="og:type" content="article">
+<meta property="og:title" content="NovelForge documentation: how every feature works">
+<meta property="og:description" content="Documentation for NovelForge, free novel writing software for Windows: install it, tour the window, learn the binder, protect your files and find every shortcut.">
+<meta property="og:url" content="https://sideeffects69.github.io/NovelForge/docs/">
+<meta property="og:image" content="https://sideeffects69.github.io/NovelForge/assets/brand/og-image.jpg">
+<meta property="og:image:alt" content="NovelForge, free novel writing software for Windows">
+<meta property="og:locale" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="NovelForge documentation: how every feature works">
+<meta name="twitter:description" content="Documentation for NovelForge, free novel writing software for Windows: install it, tour the window, learn the binder, protect your files and find every shortcut.">
+<meta name="twitter:image" content="https://sideeffects69.github.io/NovelForge/assets/brand/og-image.jpg">
+<link rel="icon" href="../favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/brand/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../assets/brand/favicon-16.png">
+<link rel="apple-touch-icon" href="../assets/brand/apple-touch-icon.png">
+<link rel="manifest" href="../site.webmanifest">
+<link rel="alternate" type="text/plain" href="../llms.txt" title="Plain-text summary for language models">
+<link rel="sitemap" type="application/xml" href="../sitemap.xml">
+<link rel="preload" href="../assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/literata-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "Person",
+   "@id": "https://sideeffects69.github.io/NovelForge/#author",
+   "name": "Om Abhyankar",
+   "url": "https://github.com/sideeffects69"
+  },
+  {
+   "@type": "WebSite",
+   "@id": "https://sideeffects69.github.io/NovelForge/#website",
+   "url": "https://sideeffects69.github.io/NovelForge/",
+   "name": "NovelForge",
+   "description": "Free, open-source novel writing software for Windows.",
+   "inLanguage": "en",
+   "publisher": {
+    "@id": "https://sideeffects69.github.io/NovelForge/#author"
+   }
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "Home",
+     "item": "https://sideeffects69.github.io/NovelForge/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "Docs",
+     "item": "https://sideeffects69.github.io/NovelForge/docs/"
+    }
+   ]
+  },
+  {
+   "@type": "CollectionPage",
+   "@id": "https://sideeffects69.github.io/NovelForge/docs/#webpage",
+   "name": "NovelForge documentation",
+   "url": "https://sideeffects69.github.io/NovelForge/docs/",
+   "description": "Documentation for NovelForge, free novel writing software for Windows: install it, tour the window, learn the binder, protect your files and find every shortcut.",
+   "inLanguage": "en",
+   "datePublished": "2026-09-20",
+   "dateModified": "2026-09-20",
+   "isPartOf": {
+    "@id": "https://sideeffects69.github.io/NovelForge/#website"
+   },
+   "about": {
+    "@id": "https://sideeffects69.github.io/NovelForge/#software"
+   }
+  }
+ ]
+}
+</script>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></symbol><symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></symbol><symbol id="i-book" viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/></symbol><symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5"/></symbol><symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol><symbol id="i-file" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h6"/></symbol><symbol id="i-map" viewBox="0 0 24 24"><path d="M9 5 3 7v12l6-2 6 2 6-2V5l-6 2z"/><path d="M9 5v12M15 7v12"/></symbol><symbol id="i-board" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></symbol><symbol id="i-graph" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="9" cy="18" r="2.5"/><path d="m8 7 8 1M7 8.5l1.5 7M16.5 10l-6 6.5"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></symbol><symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6z"/><path d="m9 12 2 2 4-4"/></symbol><symbol id="i-command" viewBox="0 0 24 24"><path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/></symbol><symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="m14 7 3 3"/></symbol><symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></symbol><symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></symbol><symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7"/></symbol><symbol id="i-github" viewBox="0 0 16 16"><path fill="currentColor" stroke="none" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></symbol></svg>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="bar wrap">
+    <a class="brand" href="../" aria-label="NovelForge home">
+      <img src="../assets/brand/icon-96.png" width="32" height="32" alt="" class="brand-logo">
+      <span>Novel<em>Forge</em></span>
+    </a>
+    <nav class="main-nav" aria-label="Main">
+      <a href="../features/">Features</a><a href="../docs/" aria-current="page">Docs</a><a href="../map-maker/">Map Maker</a><a href="../compare/">Compare</a><a href="../download/">Download</a><a class="gh" href="https://github.com/sideeffects69/NovelForge" rel="noopener"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-github"/></svg>GitHub</a>
+    </nav>
+    <div class="search" role="search"><a class="search-fallback" href="../docs/" title="Search the docs, or press /"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"/></svg><span>Search</span><kbd>/</kbd></a></div>
+  </div>
+</header>
+<main id="main">
+<div class="docs wrap">
+  <aside class="docs-side"><nav class="side" aria-label="Documentation"><a class="side-home" href="../docs/" aria-current="page">All docs, A to Z</a><details class="side-group" open><summary>Getting started</summary><ul><li><a href="../docs/getting-started/install-and-first-launch/">Install and first launch</a></li><li><a href="../docs/getting-started/tour-of-the-window/">Tour of the window</a></li></ul></details><details class="side-group" open><summary>Writing</summary><ul><li><a href="../docs/writing/the-binder/">The binder</a></li></ul></details><details class="side-group" open><summary>Your files</summary><ul><li><a href="../docs/your-files/backups-and-snapshots/">Backups and snapshots</a></li></ul></details><details class="side-group" open><summary>Reference</summary><ul><li><a href="../docs/reference/keyboard-shortcuts/">Keyboard shortcuts</a></li></ul></details></nav></aside>
+  <article class="docs-main">
+    <nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="../">Home</a></li><li aria-current="page">Docs</li></ol></nav>
+    <header class="doc-head">
+      <h1>NovelForge documentation</h1>
+      <p class="doc-meta">Updated <time datetime="2026-09-20">20 September 2026</time></p>
+    </header>
+    
+    <div class="prose">
+<p class="lead">Learn how to install NovelForge, find your way around its window and keep your novel safe. These pages describe NovelForge 2.2.0, one task at a time.</p>
+
+<p>NovelForge is a free novel-writing studio for Windows. Every scene, character sheet and map it makes is an ordinary Word (<code>.docx</code>) file in a folder on your own disk, so these pages talk about files and folders as often as about buttons. If you have not installed it yet, start with <a href="../docs/getting-started/install-and-first-launch/">Install and first launch</a>; if you already write in it, <a href="../docs/reference/keyboard-shortcuts/">Keyboard shortcuts</a> is the page most people keep open.</p>
+
+<div class="callout note">
+  <p>Press <kbd>/</kbd> on any page to search the site. Without JavaScript the list below is the whole index: every page, by topic and then A to Z.</p>
+</div>
+
+<p>Each page says when it was last changed. If something here does not match what you see in the program, that is a bug in these pages, and <a href="https://github.com/sideeffects69/NovelForge/issues" rel="noopener">an issue on GitHub</a> is the quickest way to get it fixed. Every page also has an <strong>Edit this page on GitHub</strong> link at the bottom.</p>
+
+<p>The pages do not cover everything yet. The <a href="../features/">features page</a> gives the whole tour in one place, and <a href="../faq/">the FAQ</a> answers the questions people ask before they install.</p>
+
+<h2 id="by-topic">By topic</h2>
+<h3 id="getting-started">Getting started</h3><ul class="doc-list"><li><a href="../docs/getting-started/install-and-first-launch/">Install and first launch</a><span> Learn how to install NovelForge on Windows 10 or 11: get Python, download the release, double-click Write.bat, and create your first novel.</span></li><li><a href="../docs/getting-started/tour-of-the-window/">Tour of the window</a><span> Learn how to read NovelForge&#x27;s main window: the menus, the toolbar, the binder, the editor, the inspector, the status bar and the tools that open in their own windows.</span></li></ul>
+<h3 id="writing">Writing</h3><ul class="doc-list"><li><a href="../docs/writing/the-binder/">The binder</a><span> Learn how to use the binder, NovelForge&#x27;s tree of chapters, scenes, sheets and notes: adding, renaming, reordering, deleting safely, and what each row and dot means.</span></li></ul>
+<h3 id="your-files">Your files</h3><ul class="doc-list"><li><a href="../docs/your-files/backups-and-snapshots/">Backups and snapshots</a><span> Learn how NovelForge protects your novel: verified zip backups, per-document versions, safe saving and the recovery journal, and how to restore an older copy.</span></li></ul>
+<h3 id="reference">Reference</h3><ul class="doc-list"><li><a href="../docs/reference/keyboard-shortcuts/">Keyboard shortcuts</a><span> Every keyboard shortcut in NovelForge&#x27;s main window, listed by menu, generated from the program&#x27;s own source so it always matches what the menus show.</span></li></ul>
+<h2 id="a-to-z">All pages, A to Z</h2>
+<h3 id="letter-b">B</h3><ul class="doc-list"><li><a href="../docs/your-files/backups-and-snapshots/">Backups and snapshots</a><span> Your files</span></li></ul>
+<h3 id="letter-i">I</h3><ul class="doc-list"><li><a href="../docs/getting-started/install-and-first-launch/">Install and first launch</a><span> Getting started</span></li></ul>
+<h3 id="letter-k">K</h3><ul class="doc-list"><li><a href="../docs/reference/keyboard-shortcuts/">Keyboard shortcuts</a><span> Reference</span></li></ul>
+<h3 id="letter-t">T</h3><ul class="doc-list"><li><a href="../docs/writing/the-binder/">The binder</a><span> Writing</span></li><li><a href="../docs/getting-started/tour-of-the-window/">Tour of the window</a><span> Getting started</span></li></ul>
+    </div>
+    <footer class="doc-foot">
+      <section class="linked-from"><h2>Linked from</h2><ul><li><a href=".././">NovelForge: Free Novel Writing Software for Windows</a></li></ul></section>
+      
+      <p class="edit"><a href="https://github.com/sideeffects69/NovelForge/edit/main/tools/site/pages/docs/index.html" rel="noopener"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pen"/></svg>Edit this page on GitHub</a></p>
+    </footer>
+  </article>
+  <aside class="docs-toc"></aside>
+</div>
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-about">
+        <a class="brand" href="../"><img src="../assets/brand/icon-96.png" width="28" height="28" alt="" class="brand-logo"><span>Novel<em>Forge</em></span></a>
+        <p>Free, open-source novel writing software for Windows. Your book stays in real Word files on your own disk.</p>
+      </div>
+      <div><h2>Product</h2><a href="../features/">Features</a><a href="../map-maker/">Fantasy map maker</a><a href="../download/">Download</a><a href="../changelog/">Changelog</a></div>
+      <div><h2>Learn</h2><a href="../docs/">Documentation</a><a href="../compare/">Compare with Scrivener and others</a><a href="../faq/">Questions and answers</a><a href="../llms.txt">llms.txt</a></div>
+      <div><h2>Project</h2><a href="https://github.com/sideeffects69/NovelForge" rel="noopener">Source on GitHub</a><a href="https://github.com/sideeffects69/NovelForge/issues" rel="noopener">Report an issue</a><a href="https://github.com/sideeffects69/NovelForge/blob/main/CONTRIBUTING.md" rel="noopener">Contribute</a><a href="https://github.com/sideeffects69/NovelForge/blob/main/LICENSE" rel="noopener">MIT licence</a><a href="../support/">Support the project</a></div>
+    </div>
+    <p class="foot-fine">NovelForge 2.2.0 &middot; free and open source &middot; built by Om Abhyankar &middot; no cookies, no tracking, no third-party requests.</p>
+  </div>
+</footer>
+<script src="../app.js" defer></script>
+</body>
+</html>

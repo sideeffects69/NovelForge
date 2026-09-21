@@ -1,11 +1,22 @@
+<!--
+title: Free Fantasy Map Maker for Authors | NovelForge
+description: Build a whole fantasy world in one click: coastlines, mountain ranges, rivers, forests, roads and named towns. Edit it by hand, export PNG, SVG or Word.
+kind: marketing
+nav: Map Maker
+navorder: 40
+published: 2026-09-20
+updated: 2026-09-20
+since: 2.2.0
+image: assets/maps/map-classic.jpg
+-->
 <div class="page-hero">
   <div class="wrap">
-    <div class="crumbs"><a href="{{root}}">Home</a><span>/</span>Map maker</div>
+    <nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="{{root}}">Home</a></li><li aria-current="page">Map maker</li></ol></nav>
     <span class="kicker">Fantasy map maker</span>
     <h1>A free fantasy map maker for authors, built into your writing studio</h1>
     <p class="lead">Press one button and a whole world appears: ragged coastlines, mountain ranges, rivers that run from the highlands to the sea, forests and deserts, roads that follow the land, and dozens of named towns. Edit every part by hand, link places to your character and location sheets, and export a picture for your readers.</p>
     <div class="btn-row">
-      <a class="btn btn-primary" href="{{root}}download/"><span class="btn-icon">⬇</span> Download NovelForge</a>
+      <a class="btn btn-primary" href="{{root}}download/">{{icon:download}} Download NovelForge</a>
       <a class="btn" href="{{root}}features/">All features</a>
     </div>
   </div>
@@ -13,10 +24,10 @@
 
 <section>
   <div class="wrap">
-    <div class="gallery" data-reveal>
-      <figure><img src="{{root}}assets/maps/map-classic.jpg" width="1200" height="800" alt="A generated fantasy map called Highfield: two large landmasses with mountain ranges, forests, rivers, roads and named towns on aged parchment." loading="lazy"><figcaption><strong>Classic fantasy world</strong>Two large landmasses, lakes, rivers and roads. Seed 7.</figcaption></figure>
-      <figure><img src="{{root}}assets/maps/map-archipelago.jpg" width="1200" height="800" alt="A generated island archipelago map with several irregular islands, shallows around each coast, and named settlements." loading="lazy"><figcaption><strong>Island archipelago</strong>Chains of islands with pale shallows and ripples. Seed 3.</figcaption></figure>
-      <figure><img src="{{root}}assets/maps/map-inland-sea.jpg" width="1200" height="800" alt="A generated fantasy map of land wrapped around a large inland sea, with forests, mountains, rivers and cities." loading="lazy"><figcaption><strong>Inland sea</strong>Kingdoms around a central sea, with rivers draining into it. Seed 5.</figcaption></figure>
+    <div class="gallery">
+      <figure><a href="{{root}}assets/maps/map-classic.jpg"><img src="{{root}}assets/maps/map-classic.jpg" width="1200" height="800" alt="A generated fantasy map called Highfield: two large landmasses with mountain ranges, forests, rivers, roads and named towns on aged parchment." loading="lazy"></a><figcaption><strong>Classic fantasy world</strong>Two large landmasses, lakes, rivers and roads. Seed 7.</figcaption></figure>
+      <figure><a href="{{root}}assets/maps/map-archipelago.jpg"><img src="{{root}}assets/maps/map-archipelago.jpg" width="1200" height="800" alt="A generated island archipelago map with several irregular islands, shallows around each coast, and named settlements." loading="lazy"></a><figcaption><strong>Island archipelago</strong>Chains of islands with pale shallows and ripples. Seed 3.</figcaption></figure>
+      <figure><a href="{{root}}assets/maps/map-inland-sea.jpg"><img src="{{root}}assets/maps/map-inland-sea.jpg" width="1200" height="800" alt="A generated fantasy map of land wrapped around a large inland sea, with forests, mountains, rivers and cities." loading="lazy"></a><figcaption><strong>Inland sea</strong>Kingdoms around a central sea, with rivers draining into it. Seed 5.</figcaption></figure>
     </div>
     <p class="compat-note">Every map above was made by NovelForge with a single click and nothing edited by hand. The place names are generated too, and can be replaced with your own.</p>
   </div>
@@ -44,22 +55,22 @@
 
 <section>
   <div class="wrap">
-    <div class="section-head" data-reveal>
+    <div class="section-head">
       <span class="kicker">The editor</span>
       <h2>Then make it yours</h2>
       <p>Nothing is locked. Generated maps are made of the same shapes the drawing tools make, so every tool works on both.</p>
     </div>
-    <figure class="shot" data-reveal>
+    <figure class="shot">
       <div class="window-chrome"><div class="chrome-bar"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span><span class="chrome-title">Map Maker — Highfield</span></div>
       <img src="{{root}}assets/screenshots/map-maker.png" width="1340" height="680" loading="lazy" alt="The map maker window: tool rail, terrain and layer palettes, the map on a desk, and a properties panel."></div>
     </figure>
-    <div class="cards" style="margin-top: 34px;">
-      <div class="card" data-reveal><h3>Draw by hand</h3><p>Freehand coastlines, click-to-place shapes, an eraser and a pan tool. Thirteen terrain types: land, sea and lake, forest, mountain range, hills, desert, marsh, ice, region border, river, road, wall and route.</p></div>
-      <div class="card" data-reveal data-reveal-delay="1"><h3>Twenty kinds of pin</h3><p>Capitals, cities, towns, villages, castles, temples, ports, ruins, caves, dungeons, mines, camps, bridges, inns, battle sites, dangers, treasure, portals and more, each with its own icon and an automatic label placer that hides a name rather than print it on top of another.</p></div>
-      <div class="card" data-reveal data-reveal-delay="2"><h3>Linked to your story</h3><p>Pins link straight to your Location sheets: double-click a pin to open its sheet in Word. Layers show and hide independently, so you can keep a secret map of the villain's plans.</p></div>
-      <div class="card" data-reveal><h3>Four art styles</h3><p>Aged parchment, ink on white, dark atlas and treasure map. Same map, different mood; switch at any time.</p></div>
-      <div class="card" data-reveal data-reveal-delay="1"><h3>Names in your own voice</h3><p>Settlements, realms, regions, seas and rivers can each sound different. Edit the name lists in a plain JSON file, and the next world uses them.</p></div>
-      <div class="card" data-reveal data-reveal-delay="2"><h3>What you see is what you export</h3><p>One drawing list feeds the editor, the PNG and the SVG, so an export is never a different picture from the one you were looking at.</p></div>
+    <div class="cards">
+      <div class="card"><h3>Draw by hand</h3><p>Freehand coastlines, click-to-place shapes, an eraser and a pan tool. Thirteen terrain types: land, sea and lake, forest, mountain range, hills, desert, marsh, ice, region border, river, road, wall and route.</p></div>
+      <div class="card"><h3>Twenty kinds of pin</h3><p>Capitals, cities, towns, villages, castles, temples, ports, ruins, caves, dungeons, mines, camps, bridges, inns, battle sites, dangers, treasure, portals and more, each with its own icon and an automatic label placer that hides a name rather than print it on top of another.</p></div>
+      <div class="card"><h3>Linked to your story</h3><p>Pins link straight to your Location sheets: double-click a pin to open its sheet in Word. Layers show and hide independently, so you can keep a secret map of the villain's plans.</p></div>
+      <div class="card"><h3>Five art styles</h3><p>Aged parchment, ink on white, dark atlas, treasure map, and a black-and-white Print style for book interiors. Same map, different mood; switch at any time.</p></div>
+      <div class="card"><h3>Names in your own voice</h3><p>Settlements, realms, regions, seas and rivers can each sound different. Edit the name lists in a plain JSON file, and the next world uses them.</p></div>
+      <div class="card"><h3>What you see is what you export</h3><p>One drawing list feeds the editor, the PNG and the SVG, so an export is never a different picture from the one you were looking at.</p></div>
     </div>
   </div>
 </section>
@@ -83,11 +94,11 @@
 </section>
 
 <section class="big-cta">
-  <div class="wrap" data-reveal>
+  <div class="wrap">
     <h2>Build your world in one click.</h2>
     <p>The map maker is part of NovelForge, which is free for Windows 10 and 11.</p>
     <div class="btn-row btn-row-center">
-      <a class="btn btn-primary" href="{{root}}download/"><span class="btn-icon">⬇</span> Download NovelForge</a>
+      <a class="btn btn-primary" href="{{root}}download/">{{icon:download}} Download NovelForge</a>
       <a class="btn" href="{{root}}faq/">Read the FAQ</a>
     </div>
   </div>
