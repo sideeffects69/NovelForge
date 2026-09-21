@@ -1,0 +1,66 @@
+<!--
+title: Tour of the window | NovelForge docs
+description: Learn how to read NovelForge's main window: the menus, the toolbar, the binder, the editor, the inspector, the status bar and the tools that open in their own windows.
+kind: docs
+group: Getting started
+order: 20
+published: 2026-09-20
+updated: 2026-09-20
+since: 2.2.0
+level: Beginner
+-->
+<p class="lead">Learn where everything is in NovelForge's main window. Most of your time is spent in three panes side by side, with a menu and a toolbar above them and a status bar below.</p>
+
+<figure class="shot">
+  <div class="window-chrome"><div class="chrome-bar"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span><span class="chrome-title">The Ashfall Crown: NovelForge</span></div>
+  <img src="{{root}}assets/screenshots/main-editor.png" loading="lazy" alt="NovelForge's main writing window: a binder of chapters and scenes on the left, the scene editor in the middle, and a scene inspector with goal, conflict and disaster fields on the right."></div>
+  <figcaption>The main window with the demo novel <em>The Ashfall Crown</em> open: binder, editor and inspector.</figcaption>
+</figure>
+
+<h2>The menu bar</h2>
+<p>The menus run across the top: <strong>File, Add, Edit, Manuscript, Tools, Plan, View</strong> and <strong>Help</strong>. The program draws this bar itself so that it takes on the colours of the theme you have chosen. What is in each one:</p>
+<ul>
+  <li><strong>File:</strong> new and open, recent novels, save, reloading from Word, backups, the earlier versions of a document, project settings and preferences.</li>
+  <li><strong>Add:</strong> a chapter, a scene, a character, location, item, faction or plot thread sheet, a note, a research note or a timeline event.</li>
+  <li><strong>Edit:</strong> undo and redo, find in the whole project, find and replace, and the trash folder.</li>
+  <li><strong>Manuscript:</strong> compile to one Word document, export plain text or a treatment, write an outline or story bible, sweep <code>[Fix Later]</code> tags, and import loose <code>.docx</code> files.</li>
+  <li><strong>Tools:</strong> prose diagnostics, the scene craft check, the statistics dashboard, sprints, spelling and grammar, the project health check and the continuity check.</li>
+  <li><strong>Plan:</strong> the story graph, idea inbox, drafts of a scene, corkboard, character relationships, outline and beats, timeline, map maker and the nine story structures.</li>
+  <li><strong>View:</strong> focus mode, typewriter scrolling, ghost mode, distraction-free writing, text size and the four themes.</li>
+  <li><strong>Help:</strong> the command palette, a how-to, the shortcut list and reference documents.</li>
+</ul>
+<p>If you cannot remember which menu holds something, press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> and type a few letters of its name. The palette is built from the real menus each time it opens, so it always lists the same commands the menus do.</p>
+
+<h2>The toolbar</h2>
+<p>Under the menus are the commands people reach for most, in three groups:</p>
+<ul>
+  <li><strong>New Scene</strong> and <strong>Save.</strong></li>
+  <li><strong>Compile</strong> (the whole manuscript as one Word document), <strong>Diagnose</strong> (check this scene for prose problems) and <strong>Stats</strong> (word counts, pace and deadline).</li>
+  <li><strong>Sprint</strong> (a timed writing sprint), <strong>Find</strong> (search the whole novel) and <strong>Open in Word.</strong></li>
+</ul>
+<p>On the right are two small progress bars, <strong>Book</strong> (your total against the novel's target) and <strong>Today</strong> (the words you have added this session against your daily target), and a <strong>Commands</strong> button that opens the palette. When the window is too narrow for the labels, the buttons shrink to icons; hovering over one shows its name and shortcut.</p>
+
+<h2>The three panes</h2>
+<h3>The binder, on the left</h3>
+<p>The binder lists everything in the novel as a tree: the manuscript's chapters and scenes first, then the outline beats, your character, location, item, faction and plot-thread sheets, the world bible, maps, timeline, notes and publishing documents. Above it are the novel's title and a one-line pace summary. <a href="{{root}}docs/writing/the-binder/">The binder</a> explains it in full.</p>
+<h3>The editor, in the middle</h3>
+<p>When you choose a scene, the middle pane shows its chapter name, its title, and a line with the scene's word count (against its target, if you set one), its status and its reading time. Under that is the writing sheet itself, with the text set in a comfortably narrow column even on a wide window. When you choose a chapter, a character sheet or a note, the same pane shows a summary of it instead. When you open a novel, and when you select a group heading such as Characters, it shows the statistics dashboard (<kbd>F9</kbd> brings it back at any time).</p>
+<h3>The inspector, on the right</h3>
+<p>The inspector is a form for whatever you have selected. For a scene it holds the title and synopsis, the status, whether the scene is included when you compile, a word target, the characters and places linked to it, the scene's goal, conflict and disaster (or reaction, dilemma and decision for a sequel), what changes in the scene, and its date in the story. Edit a field and press <strong>Apply</strong>; changes are also applied when you select something else. For a chapter, character or note it shows the fields that belong to that kind of thing.</p>
+<p>The gaps between the panes are draggable, so you can give the editor more room. <kbd>F12</kbd> hides the binder, the inspector and the toolbar altogether for distraction-free writing, and <kbd>F12</kbd> again brings them back.</p>
+
+<h2>The status bar</h2>
+<p>The strip at the bottom answers the question every writer asks: <em>is what I just typed safe?</em> On the left it says <strong>Saved</strong>, <strong>Unsaved changes</strong> or <strong>Saving...</strong>, followed by short messages about what the program just did. On the right are live counters: your word total, how far you are toward the target, what you have added today, and your writing streak.</p>
+
+<h2>Tools that open in their own windows</h2>
+<p>The corkboard, the outline, the timeline, the story graph, the sprint timer and the map maker each open in a window of their own, so you can keep them beside the editor. Every window is sized to fit the screen it opens on.</p>
+
+<h2>Themes and text size</h2>
+<p><strong>View → Theme</strong> offers four themes: light, dark, warm (the default) and premium, a dark navy one. <kbd>Ctrl</kbd>+<kbd>=</kbd> and <kbd>Ctrl</kbd>+<kbd>-</kbd> make the editor's text bigger or smaller.</p>
+
+<h2>Related</h2>
+<ul>
+  <li><a href="{{root}}docs/writing/the-binder/">The binder</a></li>
+  <li><a href="{{root}}docs/reference/keyboard-shortcuts/">Keyboard shortcuts</a></li>
+  <li><a href="{{root}}features/">Everything NovelForge can do</a></li>
+</ul>
