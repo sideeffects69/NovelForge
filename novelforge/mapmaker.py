@@ -134,6 +134,13 @@ STYLES: Dict[str, Dict[str, Any]] = {
         "terrain": {
             "land": "#ffffff", "water": "#d3d3d3", "forest": "#919191",
             "desert": "#bdbdbd", "swamp": "#a7a7a7", "ice": "#e9e9e9",
+            # generator kinds: the same rule (a step apart wherever two can
+            # touch: district/land, building/district, floor/room/stairs...)
+            "ward": "#e9e9e9", "building": "#bdbdbd", "plaza": "#ffffff",
+            "floor": "#e9e9e9", "room": "#ffffff", "stairs": "#bdbdbd",
+            "cave": "#ffffff", "street": "#666666", "lane": "#808080",
+            "partition": "#000000", "door": "#000000", "window": "#4d4d4d",
+            "orbit": "#404040",
         },
     },
 }
@@ -172,6 +179,41 @@ TERRAIN: Dict[str, Dict[str, Any]] = {
                   "halo": False, "decor": "wall"},
     "route":     {"label": "Route / journey", "fill": None, "closed": False,
                   "halo": False, "decor": "route"},
+    # -- kinds only the generators make (towns, floor plans, dungeons, star
+    # maps). They are not in TERRAIN_ORDER, so the editor never offers them to a
+    # writer, but a map may hold them and every backend draws them. None has a
+    # `decor`, so each is a plain filled polygon with an outline (or a stroked
+    # line when it is not closed); the colour comes from the style's `terrain`
+    # palette, `fill` here being only the fallback. `smooth: False` keeps sharp
+    # corners (a wall, a room, a building must not be rounded off); `edge`
+    # "light" draws the outline in the softer ink; `dash` dashes it.
+    "building":  {"label": "Building", "fill": "#e0cfa6", "closed": True,
+                  "halo": False, "decor": None, "smooth": False},
+    "ward":      {"label": "District", "fill": "#ecdfbc", "closed": True,
+                  "halo": False, "decor": None, "smooth": False, "edge": "light"},
+    "plaza":     {"label": "Plaza", "fill": "#f6efd8", "closed": True,
+                  "halo": False, "decor": None, "smooth": False, "edge": "light"},
+    "street":    {"label": "Street", "fill": None, "closed": False,
+                  "halo": False, "decor": None, "smooth": False},
+    "lane":      {"label": "Lane", "fill": None, "closed": False,
+                  "halo": False, "decor": None, "smooth": False},
+    "room":      {"label": "Room", "fill": "#f4ecd6", "closed": True,
+                  "halo": False, "decor": None, "smooth": False},
+    "floor":     {"label": "Floor", "fill": "#ebe0c2", "closed": True,
+                  "halo": False, "decor": None, "smooth": False},
+    "partition": {"label": "Interior wall", "fill": None, "closed": False,
+                  "halo": False, "decor": None, "smooth": False},
+    "door":      {"label": "Door", "fill": None, "closed": False,
+                  "halo": False, "decor": None, "smooth": False},
+    "window":    {"label": "Window", "fill": None, "closed": False,
+                  "halo": False, "decor": None, "smooth": False},
+    "stairs":    {"label": "Stairs", "fill": "#d8c9a5", "closed": True,
+                  "halo": False, "decor": None, "smooth": False},
+    "cave":      {"label": "Cave", "fill": "#e2d5b4", "closed": True,
+                  "halo": False, "decor": None},
+    "orbit":     {"label": "Orbit", "fill": None, "closed": True,
+                  "halo": False, "decor": None, "smooth": False, "edge": "light",
+                  "dash": True},
 }
 
 TERRAIN_ORDER = [
@@ -179,14 +221,29 @@ TERRAIN_ORDER = [
     "ice", "region", "river", "road", "wall", "route",
 ]
 
+#: The kinds above that only generators make; not in TERRAIN_ORDER.
+GENERATOR_KINDS = (
+    "building", "ward", "plaza", "street", "lane", "room", "floor", "partition",
+    "door", "window", "stairs", "cave", "orbit",
+)
+
 # Draw order, low to high; shapes of equal rank keep the order they were made
 # in. Water and land share a rank on purpose: a sea drawn first lies under the
 # land drawn after it, and a lake drawn on the land lies on top of it. With
 # water always underneath, every lake a writer drew simply vanished.
+#
+# The generator kinds slot in between (ranks need not be whole numbers): floors
+# and caves just above the ground, districts and plazas above them, rooms and
+# stairs with the terrain, orbits with the borders, streets and lanes with the
+# rivers and roads, then buildings over the streets, and last the thin things
+# that sit on a wall: interior walls, doors, windows.
 PAINT_ORDER = {
     "water": 1, "land": 1, "ice": 2, "desert": 3, "swamp": 4, "forest": 5,
     "hills": 6, "mountains": 7, "region": 8, "river": 9, "road": 10,
     "wall": 11, "route": 12,
+    "floor": 1.5, "cave": 1.6, "ward": 2.5, "plaza": 2.6, "room": 5.5,
+    "stairs": 5.6, "orbit": 8.5, "street": 9.5, "lane": 9.6, "building": 10.2,
+    "partition": 10.5, "door": 10.6, "window": 10.7,
 }
 
 PIN_KINDS: Dict[str, str] = {
@@ -223,9 +280,47 @@ EXTRA_PIN_KINDS: Dict[str, str] = {
 }
 
 
+#: Every pin kind there is - the writer's twenty and the generators' extras.
+ALL_PIN_KINDS: Dict[str, str] = {**PIN_KINDS, **EXTRA_PIN_KINDS}
+
+
 def pin_kind_label(kind: str) -> str:
     """What a pin kind is called, whether the writer places it or a generator does."""
     return PIN_KINDS.get(kind) or EXTRA_PIN_KINDS.get(kind) or kind
+
+
+# Which pins make sense on which kind of map, most useful first. A town on a
+# floor plan or a star on a battle plan would only be noise in the picker.
+_PIN_KINDS_FOR: Dict[str, Tuple[str, ...]] = {
+    "city": ("castle", "tower", "temple", "inn", "port", "bridge", "gate",
+             "landmark", "ruin", "camp", "danger", "treasure", "portal"),
+    "castle": ("tower", "gate", "temple", "inn", "landmark", "treasure",
+               "danger", "camp", "bridge", "portal"),
+    "building": ("landmark", "treasure", "danger", "portal", "temple", "tower"),
+    "dungeon": ("treasure", "danger", "portal", "landmark", "cave", "dungeon",
+                "mine", "ruin", "battle", "camp", "gate"),
+    "treasure": ("treasure", "danger", "landmark", "camp", "cave", "ruin", "port",
+                 "tower", "bridge", "battle"),
+    "battle": ("battle", "camp", "danger", "tower", "castle", "bridge",
+               "landmark", "ruin", "gate"),
+    "sector": ("star", "planet", "station", "gate", "danger", "landmark",
+               "portal", "battle", "treasure"),
+    "system": ("star", "planet", "station", "gate", "landmark", "danger",
+               "treasure", "portal"),
+    "journey": ("capital", "city", "town", "village", "port", "camp", "inn",
+                "bridge", "battle", "danger", "landmark", "ruin", "castle",
+                "temple", "gate", "cave", "treasure"),
+}
+
+
+def pin_kinds_for(map_kind: str) -> List[str]:
+    """
+    The pin kinds worth offering on a map of this kind, as keys of
+    `ALL_PIN_KINDS`. Worlds, continents, regions and any kind not listed get the
+    writer's twenty; a city, a dungeon or a star map gets the ones that belong
+    there (and a star map, alone, gets stars and planets).
+    """
+    return list(_PIN_KINDS_FOR.get(map_kind, tuple(PIN_KINDS)))
 
 
 MAP_KINDS = {
@@ -511,6 +606,40 @@ def _mix(a: str, b: str, t: float) -> str:
     return "#%02x%02x%02x" % (
         int(ra + (rb - ra) * t), int(ga + (gb - ga) * t), int(ba + (bb - ba) * t)
     )
+
+
+def _fill_in_generator_colours() -> None:
+    """
+    Give every style a colour for each generator-only kind it lacks, worked out
+    from that style's own land, sea and ink so all of them stay in tune (a
+    building is a little further from the land toward the ink, a district a
+    little toward the sea, and so on - which reads in both a light palette and
+    a dark one). The Print style states its own greys and is left as written.
+    """
+    for style in STYLES.values():
+        terrain = style.setdefault("terrain", {})
+        ink, paper = style["ink"], style["paper"]
+        land = terrain.get("land") or paper
+        derived = {
+            "ward": _mix(land, paper, 0.22),
+            "building": _mix(land, ink, 0.20),
+            "plaza": _mix(land, ink, 0.06),
+            "floor": _mix(land, ink, 0.10),
+            "room": _mix(land, ink, 0.03),
+            "stairs": _mix(land, ink, 0.24),
+            "cave": _mix(land, ink, 0.12),
+            "street": _mix(land, ink, 0.45),
+            "lane": _mix(land, ink, 0.30),
+            "partition": ink,
+            "door": style.get("accent") or ink,
+            "window": style["water_deep"],
+            "orbit": style["ink_light"],
+        }
+        for kind, colour in derived.items():
+            terrain.setdefault(kind, colour)
+
+
+_fill_in_generator_colours()
 
 
 def _smooth(points: Sequence[Point], iterations: int = 2) -> List[Point]:
@@ -814,6 +943,39 @@ def pin_primitives(pin: Pin, ink: str, paper: str,
         ring(s * 1.1, "", 1.8)
         ring(s * 0.62, "", 1.3)
         ring(s * 0.2, ink, 1.0)
+    elif kind == "star":
+        # a four-pointed sparkle: long points north, east, south and west
+        spikes = []
+        for i in range(8):
+            a = -math.pi / 2 + i * math.pi / 4
+            r = s * (1.3 if i % 2 == 0 else 0.42)
+            spikes.append((x + math.cos(a) * r, y + math.sin(a) * r))
+        out.append(("polygon", spikes, ink, ink, 1.0, False))
+    elif kind == "planet":
+        # a ball with a ring round it: the ring's back, the ball, the ring's front
+        out.append(("ellipse", x - s * 1.55, y - s * 0.4, x + s * 1.55, y + s * 0.4,
+                    "", ink, 1.2))
+        ring(s * 0.78, paper, 1.6)
+        front = [(x + s * 1.55 * math.cos(math.pi * k / 10.0),
+                  y + s * 0.4 * math.sin(math.pi * k / 10.0)) for k in range(11)]
+        out.append(("line", front, ink, 1.4, False))
+    elif kind == "station":
+        # a hub with a solar panel either side
+        for side in (-1.0, 1.0):
+            near, far = x + side * s * 0.55, x + side * s * 1.55
+            out.append(("polygon",
+                        [(near, y - s * 0.5), (far, y - s * 0.5),
+                         (far, y + s * 0.5), (near, y + s * 0.5)],
+                        ink, ink, 1.0, False))
+        ring(s * 0.55, paper, 1.6)
+    elif kind == "gate":
+        # an arch: two posts and a lintel with the way through them
+        out.append(("polygon",
+                    [(x - s, y + s * 0.85), (x - s, y - s * 0.7),
+                     (x + s, y - s * 0.7), (x + s, y + s * 0.85),
+                     (x + s * 0.55, y + s * 0.85), (x + s * 0.55, y - s * 0.2),
+                     (x - s * 0.55, y - s * 0.2), (x - s * 0.55, y + s * 0.85)],
+                    paper, ink, 1.5, False))
     else:  # landmark
         out.append(("polygon",
                     [(x, y - s), (x + s * 0.32, y - s * 0.32),
@@ -862,6 +1024,8 @@ LABEL_PRIORITY = {
     "town": 5, "dungeon": 6, "ruin": 7, "portal": 8, "landmark": 9,
     "mine": 10, "battle": 11, "treasure": 12, "bridge": 13, "cave": 14,
     "tower": 15, "inn": 16, "camp": 17, "danger": 18, "village": 19,
+    # generator-only kinds: a star before its planets, a station before a gate
+    "star": 1, "planet": 2, "station": 5, "gate": 6,
 }
 
 # Order in which alternative positions are tried around a point.
@@ -1840,6 +2004,9 @@ def _legend_swatch(group: str, kind: str, x: float, y: float, w: float,
     elif kind == "route":
         out.append(("line", [(x, y), (right, y)], ink, 1.8, True))
         out.extend(_arrow_head([(x, y), (right, y)], ink, 1.8))
+    elif kind == "orbit":
+        out.append(("ellipse", x + w * 0.1, y - h * 0.4, right - w * 0.1, y + h * 0.4,
+                    "", terrain.get(kind) or light, 1.2))
     elif not spec["closed"]:
         # any other line: a stroke in the colour that kind is drawn with
         out.append(("line", [(x, y), (right, y)], terrain.get(kind) or ink, 2.2, False))
@@ -1962,14 +2129,24 @@ def _shape_body(gm: GameMap, shape: Shape, palette: Dict[str, Any]) -> List[tupl
     land_tone = terrain.get("land") or paper
     spec = TERRAIN.get(shape.kind, TERRAIN["land"])
     closed = shape.closed and spec["closed"] and len(shape.points) >= 3
-    pts = _smooth(shape.points, 2 if len(shape.points) < 240 else 1)
+    if spec.get("smooth", True):
+        pts = _smooth(shape.points, 2 if len(shape.points) < 240 else 1)
+    else:
+        pts = list(shape.points)          # a wall, a room, a building keeps its corners
     if closed and pts[0] != pts[-1]:
         pts = pts + [pts[0]]
 
     fill = shape.fill or terrain.get(shape.kind) or (spec["fill"] or "")
-    outline = shape.outline or ink
+    edge_tone = light if spec.get("edge") == "light" else ink
+    outline = shape.outline or edge_tone
     if shape.kind == "water" and not shape.outline:
         outline = _mix(ink, fill or paper, 0.5)         # a lake's edge is quieter than a coast
+    # What a line is drawn in when the shape names no colour. A generator kind
+    # takes the style's colour for that kind; an ordinary shape (a land or forest
+    # left open) keeps its inked outline exactly as before.
+    line_colour = outline
+    if shape.kind in GENERATOR_KINDS and not shape.outline:
+        line_colour = terrain.get(shape.kind) or outline
     width = float(shape.width or 2.0)
     decor = spec.get("decor")
     out: List[tuple] = []
@@ -1988,6 +2165,10 @@ def _shape_body(gm: GameMap, shape: Shape, palette: Dict[str, Any]) -> List[tupl
             elif shape.kind == "region":
                 out.append(("line", pts, shape.outline or light,
                             max(1.2, width), True))
+            elif not fill:
+                # Nothing to fill (an orbit): just its edge.
+                out.append(("line", pts, line_colour, width,
+                            bool(spec.get("dash"))))
     else:
         if decor == "river":
             # Rivers need to read at a glance against a busy land fill, so
@@ -2012,7 +2193,8 @@ def _shape_body(gm: GameMap, shape: Shape, palette: Dict[str, Any]) -> List[tupl
                 out.append(("line", [(px - nx, py - ny), (px + nx, py + ny)],
                             outline, 1.2, False))
         elif decor not in ("peaks", "hills"):
-            out.append(("line", pts, outline, width, False))
+            # No decoration: a plain stroked line.
+            out.append(("line", pts, line_colour, width, bool(spec.get("dash"))))
 
     seed = gm.seed ^ _stable_seed(shape)
     if decor == "peaks":
@@ -2558,6 +2740,10 @@ _SHAPE_NOUNS = {
     "mountains": "mountain ranges", "hills": "hills", "desert": "deserts",
     "swamp": "marshes", "ice": "ice and tundra", "region": "borders",
     "river": "rivers", "road": "roads", "wall": "walls", "route": "routes",
+    "building": "buildings", "ward": "districts", "plaza": "plazas",
+    "street": "streets", "lane": "lanes", "room": "rooms", "floor": "floors",
+    "partition": "interior walls", "door": "doors", "window": "windows",
+    "stairs": "stairs", "cave": "caves", "orbit": "orbits",
 }
 
 # How each kind of map is introduced in a description.
@@ -2566,6 +2752,8 @@ _MAP_PHRASE = {
     "region": "a regional map", "city": "a city plan",
     "building": "a building plan", "dungeon": "a dungeon map",
     "treasure": "a treasure map", "battle": "a battle plan",
+    "castle": "a castle plan", "sector": "a star sector map",
+    "system": "a star system diagram", "journey": "a map of a journey",
 }
 
 
