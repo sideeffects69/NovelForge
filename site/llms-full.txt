@@ -434,7 +434,9 @@ Learn how to install NovelForge on Windows 10 or 11, start it for the first time
 
 ## Install Python
 
-Download Python from [python.org](https://www.python.org/downloads/), choose version 3.13 or newer, and on the first screen of the installer tick Add python.exe to PATH. If you prefer a terminal, winget install Python.Python.3.13 does the same job.
+Download Python from [python.org](https://www.python.org/downloads/), choose version 3.13 or newer, and on the first screen of the installer tick Add python.exe to PATH. If you prefer a terminal, this command does the same job:
+
+winget install Python.Python.3.13
 
 If you forget to tick the box, run the Python installer again and choose Modify. Write.bat also looks for Python in its usual per-user folder, so it often works either way.
 
