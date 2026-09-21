@@ -2136,7 +2136,11 @@ def _shape_body(gm: GameMap, shape: Shape, palette: Dict[str, Any]) -> List[tupl
     if closed and pts[0] != pts[-1]:
         pts = pts + [pts[0]]
 
-    fill = shape.fill or terrain.get(shape.kind) or (spec["fill"] or "")
+    # A style's colour for a kind is a fill only when the kind has something to
+    # fill; for a line (a street, a door) or a bare ring (an orbit) it is the
+    # colour of the stroke.
+    fill = shape.fill or (terrain.get(shape.kind) if spec.get("fill") else "") \
+        or (spec["fill"] or "")
     edge_tone = light if spec.get("edge") == "light" else ink
     outline = shape.outline or edge_tone
     if shape.kind == "water" and not shape.outline:

@@ -1305,5 +1305,400 @@ class MapsInsideMaps(unittest.TestCase):
         self.assertEqual(len(names), 3)
 
 
+FILLED = ("building", "ward", "plaza", "room", "floor", "stairs", "cave")
+LINES = ("street", "lane", "partition", "door", "window")
+ORIGINAL_ORDER = ["land", "water", "forest", "mountains", "hills", "desert",
+                  "swamp", "ice", "region", "river", "road", "wall", "route"]
+
+
+def circle(cx, cy, r, n=48):
+    return [(cx + r * math.cos(2 * math.pi * i / n),
+             cy + r * math.sin(2 * math.pi * i / n)) for i in range(n)]
+
+
+def kinds_map(style="parchment"):
+    """
+    One shape of every generator-only kind, each in a cell of its own, and one
+    pin of every kind along the bottom. Lines are 10 wide so a pixel taken from
+    the middle of one is the line's colour and nothing else.
+    """
+    gm = mm.GameMap(name="Every kind", width=1200, height=1000, style=style,
+                    compass=False, border=False, title_on_map=False,
+                    layers=[mm.Layer(name="Base")])
+    for n, kind in enumerate(mm.GENERATOR_KINDS):
+        cx, cy = 190 + (n % 4) * 280, 150 + (n // 4) * 200
+        if kind in FILLED:
+            points, extra = square(cx - 50, cy - 50, 100), {"width": 2.0}
+            if kind == "cave":                       # organic: not a box
+                points = [(cx - 60, cy), (cx - 20, cy - 55), (cx + 30, cy - 50),
+                          (cx + 60, cy + 5), (cx + 15, cy + 55), (cx - 40, cy + 45)]
+        elif kind == "orbit":
+            points, extra = circle(cx, cy, 80), {"width": 6.0}
+        elif kind in ("door", "window"):
+            points, extra = [(cx - 40, cy), (cx + 40, cy)], {"width": 10.0}
+        else:
+            points, extra = [(cx - 90, cy), (cx, cy + 6), (cx + 90, cy)], {"width": 10.0}
+        gm.shapes.append(mm.Shape(id=f"kind_{kind}", kind=kind, layer="Base",
+                                  closed=kind in FILLED or kind == "orbit",
+                                  points=points, **extra))
+    for i, kind in enumerate(mm.ALL_PIN_KINDS):
+        gm.pins.append(mm.Pin(id=f"pin_{kind}", x=60 + i * 46, y=960, kind=kind,
+                              layer="Base"))
+    return gm
+
+
+def shape_prims(prims, shape):
+    """The primitives a shape drew, found by where its points are."""
+    xs = [p[0] for p in shape.points]
+    ys = [p[1] for p in shape.points]
+    box = (min(xs) - 40, min(ys) - 40, max(xs) + 40, max(ys) + 40)
+    found = []
+    for prim in prims:
+        if prim[0] in ("polygon", "line") and prim[1]:
+            inside = all(box[0] <= x <= box[2] and box[1] <= y <= box[3]
+                         for x, y in prim[1])
+            if inside:
+                found.append(prim)
+    return found
+
+
+class NewKindRegistry(unittest.TestCase):
+    """The kinds only the generators make: towns, floor plans, dungeons, star maps."""
+
+    def test_the_editors_own_lists_are_exactly_what_they_were(self):
+        # The editor lists TERRAIN_ORDER and PIN_KINDS to the writer, who should
+        # not be offered a "door" or a "planet"; the site also states both counts.
+        self.assertEqual(mm.TERRAIN_ORDER, ORIGINAL_ORDER)
+        self.assertEqual(len(mm.PIN_KINDS), 20)
+        self.assertEqual(set(mm.TERRAIN) - set(mm.TERRAIN_ORDER), set(mm.GENERATOR_KINDS))
+        self.assertEqual(len(mm.GENERATOR_KINDS), 13)
+        self.assertFalse(set(mm.EXTRA_PIN_KINDS) & set(mm.PIN_KINDS))
+        self.assertEqual(mm.ALL_PIN_KINDS, {**mm.PIN_KINDS, **mm.EXTRA_PIN_KINDS})
+        self.assertEqual(set(mm.EXTRA_PIN_KINDS), {"star", "planet", "station", "gate"})
+
+    def test_every_kind_is_registered_with_no_decoration(self):
+        for kind in mm.GENERATOR_KINDS:
+            spec = mm.TERRAIN[kind]
+            self.assertTrue(spec["label"], kind)
+            self.assertIsNone(spec["decor"], f"{kind} must be a plain fill or line")
+            self.assertIn(kind, mm.PAINT_ORDER, kind)
+            self.assertIsInstance(spec["closed"], bool)
+            self.assertFalse(spec["halo"], kind)
+            self.assertEqual(bool(spec["fill"]), kind in FILLED, kind)
+        self.assertEqual({k for k in mm.PAINT_ORDER if k not in ORIGINAL_ORDER},
+                         set(mm.GENERATOR_KINDS))
+
+    def test_things_are_painted_in_a_sensible_order(self):
+        order = mm.PAINT_ORDER
+        for lower, higher in (("land", "floor"), ("floor", "room"),
+                              ("room", "partition"), ("partition", "door"),
+                              ("door", "window"), ("land", "ward"), ("ward", "plaza"),
+                              ("plaza", "street"), ("street", "building"),
+                              ("road", "building"), ("building", "wall"),
+                              ("floor", "stairs"), ("land", "cave"),
+                              ("forest", "room")):
+            self.assertLess(order[lower], order[higher], f"{lower} under {higher}")
+        for kind in ORIGINAL_ORDER:                    # nothing old has moved
+            self.assertEqual(order[kind], dict(
+                water=1, land=1, ice=2, desert=3, swamp=4, forest=5, hills=6,
+                mountains=7, region=8, river=9, road=10, wall=11, route=12)[kind])
+
+    def test_every_style_has_a_colour_for_every_kind_and_an_accent(self):
+        for name, style in mm.STYLES.items():
+            for kind in mm.GENERATOR_KINDS:
+                if kind == "orbit" or kind in LINES or kind in FILLED:
+                    self.assertRegex(style["terrain"][kind], r"^#[0-9a-f]{6}$",
+                                     f"{name}/{kind}")
+            self.assertRegex(style["accent"], r"^#[0-9a-f]{6}$", name)
+        for name in ("parchment", "ink", "dark", "treasure"):
+            terrain = mm.STYLES[name]["terrain"]
+            for kind in ("building", "ward", "room", "floor", "stairs", "cave"):
+                self.assertNotEqual(terrain[kind], terrain["land"], f"{name}/{kind}")
+            self.assertNotEqual(terrain["building"], terrain["room"], name)
+        self.assertEqual(mm.STYLES["parchment"]["terrain"]["door"],
+                         mm.STYLES["parchment"]["accent"])        # doors take the accent
+
+    def test_in_the_print_style_neighbouring_kinds_are_a_step_apart_and_all_grey(self):
+        terrain = mm.STYLES["print"]["terrain"]
+        fills = {**terrain, "sea": mm.STYLES["print"]["paper"]}
+        touching = (("land", "ward"), ("ward", "building"), ("ward", "plaza"),
+                    ("plaza", "building"), ("land", "building"), ("sea", "building"),
+                    ("sea", "floor"), ("floor", "room"), ("floor", "stairs"),
+                    ("room", "stairs"), ("sea", "room"), ("sea", "stairs"),
+                    ("sea", "cave"), ("cave", "stairs"), ("floor", "cave"),
+                    ("sea", "ward"))
+        for a, b in touching:
+            gap = abs(luma(fills[a]) - luma(fills[b]))
+            self.assertGreaterEqual(gap, 0.08, f"{a} and {b} are {gap:.3f} apart")
+        for kind in mm.GENERATOR_KINDS:
+            r, g, b = hex_rgb(terrain[kind])
+            self.assertTrue(r == g == b, f"print {kind} {terrain[kind]} is not a grey")
+
+    def test_the_new_pins_are_drawn_and_are_not_the_default_diamond(self):
+        landmark = mm.pin_primitives(mm.Pin(x=50, y=50, kind="landmark", size=8),
+                                     "#000000", "#ffffff", "#ff0000")
+        seen = []
+        for kind in mm.ALL_PIN_KINDS:
+            prims = mm.pin_primitives(mm.Pin(x=50, y=50, kind=kind, size=8),
+                                      "#000000", "#ffffff", "#ff0000")
+            self.assertTrue(prims, kind)
+            coords = [v for p in prims if p[0] in ("polygon", "line")
+                      for point in p[1] for v in point]
+            coords += [v for p in prims if p[0] == "ellipse" for v in p[1:5]]
+            reach = max(abs(v - 50) for v in coords)
+            self.assertLess(reach, 8 * 3.0, f"{kind} sprawls")
+            if kind in mm.EXTRA_PIN_KINDS:
+                self.assertNotEqual(prims, landmark, f"{kind} fell back to the diamond")
+                seen.append(prims)
+        for i, a in enumerate(seen):
+            for b in seen[i + 1:]:
+                self.assertNotEqual(a, b, "two of the new pins look the same")
+        for kind in mm.EXTRA_PIN_KINDS:
+            self.assertIn(kind, mm.LABEL_PRIORITY)
+            self.assertEqual(mm.pin_kind_label(kind), mm.EXTRA_PIN_KINDS[kind])
+        self.assertEqual(mm.pin_kind_label("castle"), "Castle / keep")
+        self.assertEqual(mm.pin_kind_label("nonsense"), "nonsense")
+
+    def test_each_kind_of_map_is_offered_only_the_pins_that_belong_on_it(self):
+        for kind in list(mm.MAP_KINDS) + ["sector", "system", "castle", "journey"]:
+            offered = mm.pin_kinds_for(kind)
+            self.assertTrue(offered, kind)
+            self.assertEqual(len(offered), len(set(offered)), kind)
+            for pin in offered:
+                self.assertIn(pin, mm.ALL_PIN_KINDS, f"{kind}: {pin}")
+        for kind in ("world", "continent", "region", "unheard-of"):
+            self.assertEqual(mm.pin_kinds_for(kind), list(mm.PIN_KINDS), kind)
+        for kind in ("world", "continent", "region"):        # no stars over a kingdom
+            self.assertFalse(set(mm.pin_kinds_for(kind)) & set(mm.EXTRA_PIN_KINDS))
+        for kind in ("sector", "system"):
+            self.assertEqual(mm.pin_kinds_for(kind)[:2], ["star", "planet"])
+            self.assertNotIn("village", mm.pin_kinds_for(kind))
+            self.assertNotIn("capital", mm.pin_kinds_for(kind))
+        for kind in ("building", "dungeon", "battle", "treasure"):
+            self.assertNotIn("capital", mm.pin_kinds_for(kind))
+            self.assertNotIn("village", mm.pin_kinds_for(kind))
+            self.assertNotIn("star", mm.pin_kinds_for(kind))
+        self.assertIn("gate", mm.pin_kinds_for("city"))
+        self.assertIn("dungeon", mm.pin_kinds_for("dungeon"))
+        mm.pin_kinds_for("world").append("junk")               # a copy, not the table
+        self.assertNotIn("junk", mm.pin_kinds_for("world"))
+
+
+class NewKindsRender(unittest.TestCase):
+    """A map holding every new kind draws in the editor's canvas, the PNG and the SVG."""
+
+    STYLE_NAMES = ("parchment", "ink", "dark", "treasure", "print")
+
+    def test_every_shape_produces_primitives_in_the_styles_own_colours(self):
+        # Breaking it: drop a kind from the style palette, or draw a generator
+        # line in the ink instead of the palette's colour.
+        for style in self.STYLE_NAMES:
+            gm = kinds_map(style)
+            terrain = gm.palette()["terrain"]
+            prims = mm.build_primitives(gm)
+            for shape in gm.shapes:
+                mine = shape_prims(prims, shape)
+                self.assertTrue(mine, f"{style}/{shape.kind} drew nothing")
+                if shape.kind in FILLED:
+                    fills = [p for p in mine if p[0] == "polygon" and p[2]]
+                    self.assertTrue(fills, f"{style}/{shape.kind} has no filled polygon")
+                    self.assertEqual(fills[0][2], terrain[shape.kind],
+                                     f"{style}/{shape.kind}")
+                    self.assertTrue(any(p[0] == "line" for p in mine),
+                                    f"{style}/{shape.kind} has no outline")
+                else:
+                    lines = [p for p in mine if p[0] == "line"]
+                    self.assertTrue(lines, f"{style}/{shape.kind} has no line")
+                    self.assertEqual(lines[0][2], terrain[shape.kind],
+                                     f"{style}/{shape.kind}")
+                    self.assertEqual(lines[0][3], shape.width)
+                    self.assertEqual(bool(lines[0][4]), shape.kind == "orbit")
+
+    def test_walls_rooms_and_buildings_keep_their_corners(self):
+        # Breaking it: smooth every shape. Chaikin corner-cutting turns a
+        # rectangle into an octagon with rounded ends.
+        gm = kinds_map()
+        prims = mm.build_primitives(gm)
+        for kind in ("building", "room", "floor", "stairs", "ward", "plaza"):
+            shape = gm.shape(f"kind_{kind}")
+            polygon = next(p for p in shape_prims(prims, shape)
+                           if p[0] == "polygon" and p[2])
+            self.assertEqual(polygon[1], shape.points + [shape.points[0]], kind)
+        for kind in ("partition", "street"):
+            shape = gm.shape(f"kind_{kind}")
+            line = next(p for p in shape_prims(prims, shape) if p[0] == "line")
+            self.assertEqual(line[1], shape.points, kind)
+        cave = gm.shape("kind_cave")
+        rounded = next(p for p in shape_prims(prims, cave) if p[0] == "polygon" and p[2])
+        self.assertGreater(len(rounded[1]), len(cave.points) + 1)     # organic: smoothed
+
+    def test_an_orbit_is_a_dashed_ring_with_nothing_to_fill(self):
+        gm = kinds_map()
+        orbit = gm.shape("kind_orbit")
+        mine = shape_prims(mm.build_primitives(gm), orbit)
+        self.assertFalse([p for p in mine if p[0] == "polygon" and p[2]])
+        ring = next(p for p in mine if p[0] == "line")
+        self.assertTrue(ring[4])
+        self.assertEqual(ring[1][0], ring[1][-1])                     # closed
+
+    def test_an_ordinary_shape_left_open_keeps_its_inked_outline(self):
+        # The lines above are coloured from the palette; a plain land, water or
+        # forest shape left open must not pick that up.
+        gm = mm.GameMap(name="Open", width=1200, height=300, compass=False,
+                        border=False, title_on_map=False,
+                        layers=[mm.Layer(name="Base")])
+        for n, kind in enumerate(("land", "water", "forest")):
+            x = n * 400
+            gm.shapes.append(mm.Shape(id=kind, kind=kind, closed=False,
+                                      points=[(x + 20, 20), (x + 200, 40),
+                                              (x + 300, 200)]))
+        palette = gm.palette()
+        ink = palette["ink"]
+        by_kind = {}
+        for shape in gm.shapes:
+            lines = [p for p in shape_prims(mm.build_primitives(gm), shape)
+                     if p[0] == "line"]
+            by_kind[shape.kind] = max(lines, key=lambda p: len(p[1]))[2]
+        self.assertEqual(by_kind["land"], ink)
+        self.assertEqual(by_kind["forest"], ink)
+        self.assertEqual(by_kind["water"], mm._mix(ink, palette["terrain"]["water"], 0.5))
+
+    def test_the_svg_is_well_formed_and_holds_every_kind(self):
+        import xml.etree.ElementTree as ET
+
+        for style in ("parchment", "print"):
+            gm = kinds_map(style)
+            terrain = gm.palette()["terrain"]
+            with tempfile.TemporaryDirectory() as folder:
+                path = mm.render_svg(gm, Path(folder) / "k.svg")
+                root = ET.parse(path).getroot()
+                text = path.read_text(encoding="utf-8")
+            ns = "{http://www.w3.org/2000/svg}"
+            polygons = root.findall(f".//{ns}polygon")
+            lines = root.findall(f".//{ns}polyline")
+            self.assertGreater(len(polygons), len(FILLED))
+            self.assertGreater(len(lines), len(LINES))
+            for kind in FILLED:
+                self.assertIn(f'fill="{terrain[kind]}"', text, f"{style}/{kind}")
+            for kind in LINES + ("orbit",):
+                self.assertIn(f'stroke="{terrain[kind]}"', text, f"{style}/{kind}")
+            self.assertIn("stroke-dasharray", text)            # the orbit
+            shape = gm.shape("kind_building")
+            first = " ".join(f"{x:.2f},{y:.2f}" for x, y in shape.points)
+            self.assertIn(first, text)                          # sharp corners, as given
+
+    def test_the_picture_has_every_kind_where_it_was_drawn(self):
+        from PIL import Image
+
+        def close(a, b):
+            return all(abs(x - y) <= 3 for x, y in zip(a, b))
+
+        for style in ("parchment", "dark", "print"):
+            gm = kinds_map(style)
+            terrain = gm.palette()["terrain"]
+            with tempfile.TemporaryDirectory() as folder:
+                png = mm.render_png(gm, Path(folder) / "k.png")
+                with Image.open(png) as image:
+                    image = image.convert("RGB")
+                    for shape in gm.shapes:
+                        want = mm._rgb(terrain[shape.kind])
+                        if shape.kind in FILLED:
+                            cx = sum(p[0] for p in shape.points) / len(shape.points)
+                            cy = sum(p[1] for p in shape.points) / len(shape.points)
+                            got = image.getpixel((int(cx), int(cy)))
+                            self.assertTrue(close(got, want),
+                                            f"{style}/{shape.kind}: {got} != {want}")
+                        elif shape.kind == "orbit":
+                            hits = sum(1 for x, y in shape.points
+                                       if close(image.getpixel((int(x), int(y))), want))
+                            self.assertGreater(hits, len(shape.points) * 0.3,
+                                               f"{style}/orbit is not on the page")
+                        else:
+                            (x0, y0), (x1, y1) = shape.points[:2]     # first stretch
+                            got = image.getpixel((int((x0 + x1) / 2),
+                                                  int((y0 + y1) / 2)))
+                            self.assertTrue(close(got, want),
+                                            f"{style}/{shape.kind}: {got} != {want}")
+
+    def test_the_pins_and_the_new_shapes_are_saved_and_come_back_drawn_the_same(self):
+        gm = kinds_map()
+        again = mm.GameMap.from_json(gm.to_json())
+        self.assertEqual(mm.build_primitives(again), mm.build_primitives(gm))
+        self.assertEqual([p.kind for p in again.pins], list(mm.ALL_PIN_KINDS))
+
+    def test_the_legend_and_the_alt_text_know_the_new_kinds(self):
+        gm = kinds_map()
+        gm.legend = True
+        names = [e[2] for e in mm.legend_entries(gm)]
+        for shown in ("Building", "District", "Street", "Room", "Interior wall", "Stairs"):
+            self.assertIn(shown, names)
+        prims = mm.build_primitives(gm)                      # and it draws without a hitch
+        self.assertIn("LEGEND", texts(prims))
+        alt = mm.describe_map(gm)
+        self.assertIn("buildings", alt)
+        self.assertIn("streets", alt)
+
+    def test_a_city_of_a_thousand_buildings_is_still_quick(self):
+        import time
+
+        gm = mm.GameMap(name="Bigtown", width=2400, height=1650, compass=False,
+                        border=False, title_on_map=False,
+                        layers=[mm.Layer(name="Base")])
+        for i in range(1000):
+            x, y = 80 + (i % 40) * 56, 80 + (i // 40) * 60
+            gm.shapes.append(mm.Shape(id=f"b{i}", kind="building",
+                                      points=square(x, y, 40)))
+        started = time.perf_counter()
+        prims = mm.build_primitives(gm)
+        cold = time.perf_counter() - started
+        self.assertGreater(len(prims), 1000)
+        self.assertLess(cold, 1.5)
+        started = time.perf_counter()
+        mm.build_primitives(gm)
+        self.assertLess(time.perf_counter() - started, 0.25)     # remembered
+
+
+class NewKindsOnTheCanvas(unittest.TestCase):
+    """
+    The editor's own drawing code, run over a hidden canvas: every primitive a map
+    of new kinds produces must put something on it. (The editor swallows a Tk
+    error and draws nothing, so a bad colour would otherwise go unseen.)
+    """
+
+    def test_every_primitive_reaches_the_canvas(self):
+        import tkinter as tk
+        from types import SimpleNamespace
+
+        try:
+            root = tk.Tk()
+        except tk.TclError as error:
+            self.skipTest(f"no display: {error}")
+        try:
+            root.withdraw()
+            from novelforge.ui import mapeditor
+
+            for style in ("parchment", "dark", "print"):
+                canvas = tk.Canvas(root, width=1200, height=1000)
+                stub = SimpleNamespace(canvas=canvas, zoom=1.0,
+                                       to_screen=lambda x, y: (x, y))
+                prims = mm.build_primitives(kinds_map(style))
+                self.assertGreater(len(prims), 60)
+                for prim in prims:
+                    before = len(canvas.find_all())
+                    mapeditor.MapEditor._draw_primitive(stub, prim)
+                    drew = len(canvas.find_all()) - before
+                    if prim[0] == "polygon" and len(prim[1]) >= 3:
+                        self.assertGreaterEqual(drew, 1, f"{style}: {prim[:4]}")
+                    elif prim[0] == "line" and len(prim[1]) >= 2 and prim[2]:
+                        self.assertGreaterEqual(drew, 1, f"{style}: {prim[:3]}")
+                    elif prim[0] == "ellipse":
+                        self.assertGreaterEqual(drew, 1 if abs(prim[3] - prim[1]) >= 1
+                                                and abs(prim[4] - prim[2]) >= 1 else 0,
+                                                f"{style}: {prim[:5]}")
+                canvas.destroy()
+        finally:
+            root.destroy()
+
+
 if __name__ == "__main__":
     unittest.main()
