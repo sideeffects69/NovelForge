@@ -70,7 +70,7 @@ one tool that opens in about a second and never asks you to sign in.
 
 ### While you write
 
-- Real `.docx` files, one per scene — open and edit in Word or in-app, either direction, always in sync
+- Real `.docx` files, one per scene — open and edit in Word or in-app; after editing in Word, press F2 (File → Reload from Word) and NovelForge picks up the change
 - Focus mode, distraction-free mode, ghost mode (hides your text as you type, for perfectionists), typewriter scrolling, sprint timer
 - Live spelling/grammar marks and completion, tuned to *your* manuscript's names and invented words, not a generic dictionary
 
@@ -93,7 +93,7 @@ one tool that opens in about a second and never asks you to sign in.
 
 - One-press **"Surprise Me"** procedurally generated fantasy worlds — coastlines, kingdoms, regions, seas, rivers, roads, dozens of named settlements — reproducible by seed
 - Editable, per-culture name generation (settlements, realms, regions, seas and rivers can each sound different)
-- Hand-drawn tools too: freehand coastlines, 13 terrain types, 20 pin types, layers, 4 art styles
+- Hand-drawn tools too: freehand coastlines, 13 terrain types, 20 pin types, layers, 5 art styles
 - Pins link straight to your Location sheets; export to PNG, SVG, or Word with a legend
 
 ### Never losing your work
@@ -429,8 +429,9 @@ landmark, portal — each with its own drawn glyph, not a coloured dot.
 sheet*, then double-click the pin to open that sheet in Word. The map and the
 worldbuilding notes stay connected, which is the whole point.
 
-**Four styles:** Parchment (aged paper, sepia ink), Ink (clean black on white,
-prints well), Dark atlas, and Treasure map. Layers let you keep political
+**Five styles:** Parchment (aged paper, sepia ink), Ink (clean black on white,
+prints well), Dark atlas, Treasure map, and Print (black and white, made for book
+interiors). Layers let you keep political
 borders separate from terrain and hide them for a clean geography map.
 
 **Export** (the menu at the top right) to PNG, to SVG (scalable, stays sharp at

@@ -430,7 +430,7 @@ class EveryPage(unittest.TestCase):
             "outline frameworks": ("nine", len(structures.framework_names())),
             "terrain types": ("thirteen", len(mapmaker.TERRAIN_ORDER)),
             "kinds of pin": ("twenty", len(mapmaker.PIN_KINDS)),
-            "art styles": ("four", len(mapmaker.STYLES)),
+            "art styles": ("five", len(mapmaker.STYLES)),
         }
         numbers = {"nine": 9, "thirteen": 13, "twenty": 20, "four": 4, "ten": 10,
                    "twelve": 12, "eight": 8, "seven": 7, "six": 6, "five": 5,

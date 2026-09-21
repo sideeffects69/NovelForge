@@ -1020,7 +1020,7 @@ Press Ctrl+B. NovelForge zips the whole project into a _Backups folder, then reo
 
 Can I edit the scenes in Word as well?
 
-Yes. Open a scene in Word, edit and save, and NovelForge picks up the change; edit in NovelForge and Word sees it. The two stay in sync in either direction. Italics and bold are preserved; other formatting is normalised when you compile, which is the point of compiling.
+Yes. Open a scene in Word, edit and save, then press F2 (File → Reload from Word) in NovelForge, or simply reopen the novel, and it picks up the change. What you write in NovelForge is saved into the same file, so Word sees it. Italics and bold are preserved; other formatting is normalised when you compile, which is the point of compiling.
 
 Does it work with OneDrive or Dropbox?
 
@@ -1074,7 +1074,7 @@ A binder and corkboard, nine outline frameworks, a story graph that checks conti
 
 ## Writing: stay inside the story
 
-The editor is deliberately quiet. Every scene is its own real .docx file, which you can open and edit in Microsoft Word or in NovelForge, in either direction, and the two always stay in sync.
+The editor is deliberately quiet. Every scene is its own real .docx file, which you can open and edit in Microsoft Word or in NovelForge. What you write in NovelForge is saved into that same file; after editing in Word, press F2 (File → Reload from Word) and NovelForge picks up the change.
 
 - Focus mode, distraction-free mode and typewriter scrolling take the interface out of your way.
 
@@ -1288,9 +1288,9 @@ Capitals, cities, towns, villages, castles, temples, ports, ruins, caves, dungeo
 
 Pins link straight to your Location sheets: double-click a pin to open its sheet in Word. Layers show and hide independently, so you can keep a secret map of the villain's plans.
 
-### Four art styles
+### Five art styles
 
-Aged parchment, ink on white, dark atlas and treasure map. Same map, different mood; switch at any time.
+Aged parchment, ink on white, dark atlas, treasure map, and a black-and-white Print style for book interiors. Same map, different mood; switch at any time.
 
 ### Names in your own voice
 
