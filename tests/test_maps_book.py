@@ -1388,6 +1388,11 @@ class NewKindRegistry(unittest.TestCase):
         self.assertEqual({k for k in mm.PAINT_ORDER if k not in ORIGINAL_ORDER},
                          set(mm.GENERATOR_KINDS))
 
+    def test_the_legend_has_a_name_and_a_place_in_the_list_for_every_kind(self):
+        for kind in mm.GENERATOR_KINDS:
+            self.assertIn(kind, mm.LEGEND_NAMES, kind)
+            self.assertIn(kind, mm.LEGEND_ORDER, kind)
+
     def test_things_are_painted_in_a_sensible_order(self):
         order = mm.PAINT_ORDER
         for lower, higher in (("land", "floor"), ("floor", "room"),
